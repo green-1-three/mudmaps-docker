@@ -4,8 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="781d814b-6897-4d0d-8f84-a8ad56d33b6b" name="Changes" comment="First commit, reworked into Docker setup.">
-      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
+    <list default="true" id="781d814b-6897-4d0d-8f84-a8ad56d33b6b" name="Changes" comment=".env updated, tcp-listener small changes.">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tcp-listener/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/tcp-listener/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tcp-listener/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/tcp-listener/package.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tcp-listener/tcp-listener.js" beforeDir="false" afterPath="$PROJECT_DIR$/tcp-listener/tcp-listener.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -36,6 +39,10 @@
     "accountId": "b8f99b2c-10df-4430-afbb-15a8d57efb86"
   }
 }]]></component>
+  <component name="PackageJsonUpdateNotifier">
+    <dismissed value="$PROJECT_DIR$/backend/package.json" />
+    <dismissed value="$PROJECT_DIR$/frontend/package.json" />
+  </component>
   <component name="ProjectColorInfo"><![CDATA[{
   "associatedIndex": 5
 }]]></component>
@@ -78,7 +85,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1754619064618</updated>
-      <workItem from="1754619065632" duration="5879000" />
+      <workItem from="1754619065632" duration="9082000" />
     </task>
     <task id="LOCAL-00001" summary="First commit, reworked into Docker setup.">
       <option name="closed" value="true" />
@@ -88,7 +95,15 @@
       <option name="project" value="LOCAL" />
       <updated>1754622438970</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary=".env updated, tcp-listener small changes.">
+      <option name="closed" value="true" />
+      <created>1754625983339</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1754625983339</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -107,6 +122,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="First commit, reworked into Docker setup." />
-    <option name="LAST_COMMIT_MESSAGE" value="First commit, reworked into Docker setup." />
+    <MESSAGE value=".env updated, tcp-listener small changes." />
+    <option name="LAST_COMMIT_MESSAGE" value=".env updated, tcp-listener small changes." />
   </component>
 </project>

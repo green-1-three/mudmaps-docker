@@ -1,10 +1,25 @@
 {
-  "name": "Mudmaps-Docker",
+  "name": "mudmaps-docker",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "private": true
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/green-1-three/mudmaps-docker.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/green-1-three/mudmaps-docker/issues"
+  },
+  "homepage": "https://github.com/green-1-three/mudmaps-docker#readme",
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
 }
