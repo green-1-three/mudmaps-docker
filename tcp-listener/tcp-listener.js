@@ -1,94 +1,64 @@
 const net = require('net');
 const fs = require('fs');
 
-function decodeCodec8(buffer) {
-    let offset = 0;
+// TCP listener port from env or default
+const PORT = process.env.LISTENER_PORT || 5500;
 
-    // Skip preamble (4 bytes)
-    offset += 4;
+// Helper to log decoded records and errors
+const logDecoded = (msg) => fs.appendFileSync('decoded_records.log', msg + '\n');
+const logError = (msg) => fs.appendFileSync('decode_errors.log', msg + '\n');
 
-    const dataLength = buffer.readUInt32BE(offset);
-    offset += 4;
+const server = net.createServer((socket) => {
+    console.log('📡 Incoming TCP connection from', socket.remoteAddress);
 
-    const codecId = buffer.readUInt8(offset);
-    offset += 1;
+    let imei = null;
+    let buffer = Buffer.alloc(0);
 
-    const recordCount = buffer.readUInt8(offset);
-    offset += 1;
+    socket.on('data', (data) => {
+        buffer = Buffer.concat([buffer, data]);
 
-    if (codecId !== 0x08) {
-        throw new Error(`Unsupported codec: ${codecId}`);
-    }
+        // If IMEI not set, first packet is IMEI handshake
+        if (!imei && buffer.length >= 2) {
+            const imeiLength = buffer.readUInt16BE(0);
+            if (buffer.length >= imeiLength + 2) {
+                imei = buffer.slice(2, imeiLength + 2).toString();
+                console.log('📍 IMEI received:', imei);
 
-    const records = [];
-
-    for (let i = 0; i < recordCount; i++) {
-        const timestamp = buffer.readBigUInt64BE(offset); offset += 8;
-        const priority  = buffer.readUInt8(offset);       offset += 1;
-        const lon       = buffer.readInt32BE(offset) / 10 ** 7; offset += 4;
-        const lat       = buffer.readInt32BE(offset) / 10 ** 7; offset += 4;
-        const altitude  = buffer.readUInt16BE(offset);    offset += 2;
-        const angle     = buffer.readUInt16BE(offset);    offset += 2;
-        const satellites= buffer.readUInt8(offset);       offset += 1;
-        const speed     = buffer.readUInt16BE(offset);    offset += 2;
-
-        const eventIOId = buffer.readUInt8(offset);       offset += 1;
-        const totalIO   = buffer.readUInt8(offset);       offset += 1;
-
-        const io = {};
-        for (let size of [1, 2, 4, 8]) {
-            const count = buffer.readUInt8(offset); offset += 1;
-            for (let j = 0; j < count; j++) {
-                const id = buffer.readUInt8(offset); offset += 1;
-                let value;
-                if (size === 1) value = buffer.readUInt8(offset);
-                else if (size === 2) value = buffer.readUInt16BE(offset);
-                else if (size === 4) value = buffer.readUInt32BE(offset);
-                else if (size === 8) value = buffer.readBigUInt64BE(offset);
-                offset += size;
-                io[id] = value;
+                // Send confirmation: 0x01 for Teltonika
+                socket.write(Buffer.from([0x01]));
+                buffer = buffer.slice(imeiLength + 2);
+            } else {
+                return; // wait for full IMEI packet
             }
         }
 
-        records.push({
-            timestamp: new Date(Number(timestamp)),
-            priority, lat, lon, altitude, angle, satellites, speed, eventIOId, io
-        });
-    }
+        // Now handle AVL data packets
+        while (buffer.length >= 4) {
+            const avlLen = buffer.readUInt32BE(0);
+            if (buffer.length < avlLen + 8) {
+                return; // wait for more data
+            }
 
-    return records;
-}
+            const avlData = buffer.slice(4, 4 + avlLen);
+            buffer = buffer.slice(4 + avlLen + 4); // Skip CRC too
 
-const PORT = Number(process.env.LISTENER_PORT) || 5500;
-
-const server = net.createServer(socket => {
-    console.log(`📡 New connection from ${socket.remoteAddress}:${socket.remotePort}`);
-
-    socket.on('data', buffer => {
-        try {
-            const records = decodeCodec8(buffer);
-            records.forEach(record => {
-                const line = JSON.stringify(record);
-                console.log('✅ Decoded Record:', line);
-                fs.appendFileSync('decoded_records.log', line + '\n');
-            });
-
-            // Acknowledge per Teltonika spec (number of records)
-            const ack = Buffer.alloc(4);
-            ack.writeUInt32BE(records.length);
-            socket.write(ack);
-        } catch (err) {
-            console.error('❌ Decode Error:', err.message);
-            fs.appendFileSync('decode_errors.log', err.stack + '\n');
+            try {
+                // For now, just log the raw length and hex preview
+                logDecoded(`IMEI: ${imei}, AVL length: ${avlLen}, Raw hex: ${avlData.toString('hex').slice(0, 50)}...`);
+                console.log(`✅ Decoded AVL from ${imei} — length ${avlLen}`);
+            } catch (err) {
+                logError(`Error decoding from ${imei}: ${err.message}`);
+                console.error(`❌ Error decoding from ${imei}:`, err);
+            }
         }
     });
 
-    socket.on('end', () => {
-        console.log(`🔌 Connection from ${socket.remoteAddress}:${socket.remotePort} closed`);
+    socket.on('error', (err) => {
+        console.error('Socket error:', err);
     });
 
-    socket.on('error', err => {
-        console.error(`❌ Socket error from ${socket.remoteAddress}:${socket.remotePort}:`, err.message);
+    socket.on('close', () => {
+        console.log(`🔌 Connection closed for ${imei || socket.remoteAddress}`);
     });
 });
 
