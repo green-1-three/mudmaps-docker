@@ -1,0 +1,11 @@
+{
+  "name": "mudmaps-tcp-listener",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "tcp-listener.js",
+  "scripts": {
+    "start": "node tcp-listener.js"
+  },
+  "dependencies": {}
+}
