@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,7 +12,7 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
 
   backend:
     build:
@@ -28,8 +30,8 @@ services:
     depends_on:
       - postgres
     ports:
-      - "3001:3000"
-
+      - "${HOST_PORT}:3000"
+    restart: unless-stopped
 
   tcp-listener:
     build:
@@ -45,7 +47,8 @@ services:
     depends_on:
       - postgres
     ports:
-      - "5500:${LISTENER_PORT}"
+      - "${LISTENER_PORT}:${LISTENER_PORT}"
+    restart: unless-stopped
 
   frontend:
     build:
@@ -58,6 +61,7 @@ services:
       - "8080:80"
     depends_on:
       - backend
+    restart: unless-stopped
 
 volumes:
   db-data:

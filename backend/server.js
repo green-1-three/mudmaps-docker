@@ -25,7 +25,6 @@ app.get('/markers', async (req, res) => {
             SELECT username, ARRAY[coords] AS coords
             FROM markers
             ORDER BY created_at DESC
-                LIMIT 500
         `);
         res.json(result.rows);
     } catch (err) {
