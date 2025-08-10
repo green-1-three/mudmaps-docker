@@ -1,0 +1,14 @@
+services:
+  backend:
+    ports:
+      - target: 3000
+        published: 3001
+        protocol: tcp
+        host_ip: 127.0.0.1
+
+  postgres:
+    ports:
+      - target: 5432
+        published: 5432
+        protocol: tcp
+        host_ip: 127.0.0.1

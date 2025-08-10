@@ -10,26 +10,18 @@ import { Vector as VectorSource } from 'ol/source';
 import { Style, Icon, Stroke } from 'ol/style';
 
 // 1) Prefer .env values if set
-let API_BASE = import.meta.env.VITE_API_BASE;
-let OSRM_BASE = import.meta.env.VITE_OSRM_BASE;
+let API_BASE = import.meta.env.VITE_API_BASE;     // e.g., "/api" in production
+let OSRM_BASE = import.meta.env.VITE_OSRM_BASE;   // leave as-is unless you proxy OSRM too
 
 // 2) Auto-detect environment if not set
+const IS_LOCAL = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
 if (!API_BASE) {
-    if (window.location.hostname === 'localhost') {
-        API_BASE = 'http://localhost:3001';
-    } else {
-        // Replace with your droplet's domain or IP
-        API_BASE = `http://${window.location.hostname}:3001`;
-    }
+    API_BASE = IS_LOCAL ? 'http://localhost:3001' : '/api';
 }
 
 if (!OSRM_BASE) {
-    if (window.location.hostname === 'localhost') {
-        OSRM_BASE = 'http://localhost:5010';
-    } else {
-        // Replace with your OSRM service host if different in production
-        OSRM_BASE = `http://${window.location.hostname}:5010`;
-    }
+    OSRM_BASE = IS_LOCAL ? 'http://localhost:5010' : `http://${window.location.hostname}:5010`;
 }
 
 // Log for debugging
@@ -97,7 +89,7 @@ if ('geolocation' in navigator) {
     });
 }
 
-// Fetch markers from database
+// Fetch markers from database (now via Nginx proxy in prod)
 fetch(`${API_BASE}/markers`)
     .then(res => res.json())
     .then(users => {
