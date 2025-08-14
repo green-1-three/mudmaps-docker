@@ -1,16 +1,17 @@
+version: "3.9"
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: mudmaps-postgres
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  frontend:
+    build:
+      context: ./frontend
+    container_name: mudmaps-frontend
+    depends_on:
+      - backend
+    # Single public entry-point
     ports:
-      - "127.0.0.1:${POSTGRES_PORT}:5432"
+      - "80:80"
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
 
   backend:
@@ -24,58 +25,33 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PORT: 3000
-      CORS_ORIGIN: ${CORS_ORIGIN}
-      HOST_PORT: ${HOST_PORT}
+      # Same-origin in front of Nginx, but backend may still check this:
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+    expose:
+      - "3000"
     depends_on:
       - postgres
-    ports:
-      - "127.0.0.1:${HOST_PORT}:3000"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: mudmaps-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
     restart: unless-stopped
 
   tcp-listener:
     build:
       context: ./tcp-listener
     container_name: mudmaps-tcp-listener
-    environment:
-      LISTENER_PORT: ${LISTENER_PORT}
-      PGHOST: postgres
-      PGPORT: 5432
-      PGDATABASE: ${POSTGRES_DB}
-      PGUSER: ${POSTGRES_USER}
-      PGPASSWORD: ${POSTGRES_PASSWORD}
-    depends_on:
-      - postgres
-    ports:
-      - "${LISTENER_PORT}:${LISTENER_PORT}"
+    # not published here; choose in overrides
     restart: unless-stopped
-
-  frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_API_BASE: ${VITE_API_BASE}
-        VITE_OSRM_BASE: ${VITE_OSRM_BASE}
-    container_name: mudmaps-frontend
-    ports:
-      - "8080:80"
-    depends_on:
-      - backend
-    restart: unless-stopped
-
-  nginx:
-    image: nginx:alpine
-    container_name: mudmaps-nginx
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - frontend
-      - backend
-    restart: unless-stopped
-
-
-
 
 volumes:
   db-data:
