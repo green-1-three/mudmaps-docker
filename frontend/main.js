@@ -48,6 +48,50 @@ const markerStyle = new Style({
     image: new Icon({ anchor: [0.5, 1], src: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png', scale: 1 })
 });
 
+function addMarker(vectorSource, lon, lat) {
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+    const f = new Feature({ geometry: new Point(fromLonLat([lon, lat])) });
+    f.setStyle(markerStyle);
+    vectorSource.addFeature(f);
+}
+
+// Accepts many shapes and normalizes to [[lon,lat], ...]
+function normalizeMarkersPayload(payload) {
+    const out = [];
+    const list =
+        Array.isArray(payload) ? payload :
+            Array.isArray(payload.users) ? payload.users :
+                Array.isArray(payload.markers) ? payload.markers :
+                    [];
+
+    const isPair = (v) => Array.isArray(v) && v.length === 2 && v.every(Number.isFinite);
+
+    list.forEach(item => {
+        if (isPair(item)) { out.push(item); return; }               // [[lon,lat],...]
+        if (item && typeof item === 'object') {
+            const c = item.coords;
+
+            if (isPair(c)) { out.push(c); return; }                   // { coords:[lon,lat] }
+            if (Array.isArray(c) && c.length && isPair(c[0])) {       // { coords:[[lon,lat],...] }
+                c.forEach(p => isPair(p) && out.push(p)); return;
+            }
+            if (Array.isArray(c) && c.length >= 2 && c.every(Number.isFinite)) {
+                for (let i = 0; i + 1 < c.length; i += 2) {             // { coords:[lon,lat,lon,lat,...] }
+                    const lon = c[i], lat = c[i+1];
+                    if (Number.isFinite(lon) && Number.isFinite(lat)) out.push([lon, lat]);
+                }
+                return;
+            }
+            if (Number.isFinite(item.lon) && Number.isFinite(item.lat)) { // { lon, lat }
+                out.push([item.lon, item.lat]); return;
+            }
+        }
+        console.warn('Unrecognized marker item shape:', item);
+    });
+
+    return out;
+}
+
 // Geolocation
 if ('geolocation' in navigator) {
     navigator.geolocation.watchPosition((pos) => {
@@ -64,16 +108,16 @@ if ('geolocation' in navigator) {
 
 // Fetch markers
 fetch(`${API_BASE}/markers`)
-    .then(res => res.json())
-    .then(users => {
-        users.forEach(user => {
-            user.coords.forEach(([lon, lat]) => {
-                const pt = fromLonLat([lon, lat]);
-                const feature = new Feature({ geometry: new Point(pt) });
-                feature.setStyle(markerStyle);
-                vectorSource.addFeature(feature);
-            });
-        });
+    .then(async (res) => {
+        const ct = res.headers.get('content-type') || '';
+        const body = await res.text();
+        if (!ct.includes('application/json')) {
+            throw new Error(`Markers endpoint did not return JSON. First bytes: ${body.slice(0, 120)}`);
+        }
+        const data = JSON.parse(body);
+        const pairs = normalizeMarkersPayload(data);
+        pairs.forEach(([lon, lat]) => addMarker(vectorSource, lon, lat));
+        console.log(`Plotted ${pairs.length} markers`);
     })
     .catch(err => console.error('Markers fetch error:', err));
 
