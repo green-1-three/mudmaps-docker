@@ -10,8 +10,8 @@ import { Vector as VectorSource } from 'ol/source';
 import { Style, Icon, Stroke } from 'ol/style';
 
 // 1) Prefer .env values if set
-let API_BASE = import.meta.env.VITE_API_BASE;     // e.g., "/api" in production
-let OSRM_BASE = import.meta.env.VITE_OSRM_BASE;   // leave as-is unless you proxy OSRM too
+let API_BASE = import.meta.env.VITE_API_BASE || '/api';
+let OSRM_BASE = import.meta.env.VITE_OSRM_BASE || '/osrm';
 
 // 2) Auto-detect environment if not set
 const IS_LOCAL = ['localhost', '127.0.0.1'].includes(window.location.hostname);
