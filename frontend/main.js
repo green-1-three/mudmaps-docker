@@ -10,11 +10,24 @@ import { Vector as VectorSource } from 'ol/source';
 import { Style, Icon, Stroke } from 'ol/style';
 
 // Prefer build-time values; fall back to same-origin proxy paths
-let API_BASE = import.meta.env.VITE_API_BASE || `${window.location.origin}/api`;
-let OSRM_BASE = import.meta.env.VITE_OSRM_BASE || `${window.location.origin}/osrm`;
+let API_BASE = import.meta.env.VITE_API_BASE;
+let OSRM_BASE = import.meta.env.VITE_OSRM_BASE;
 
-console.log("Using API_BASE:", API_BASE);
-console.log("Using OSRM_BASE:", OSRM_BASE);
+// 2) Better defaults
+if (!API_BASE) {
+    API_BASE = (window.location.hostname === 'localhost')
+        ? 'http://localhost:3001'
+        : '/api';              // <— KEY CHANGE (use the proxy path)
+}
+
+if (!OSRM_BASE) {
+    OSRM_BASE = (window.location.hostname === 'localhost')
+        ? 'http://localhost:5010'
+        : `http://${window.location.hostname}:5010`; // or proxy it later too
+}
+
+console.log('Using API_BASE:', API_BASE);
+console.log('Using OSRM_BASE:', OSRM_BASE);
 
 // Map
 const map = new Map({
