@@ -29,6 +29,16 @@ if (!OSRM_BASE) {
 console.log('Using API_BASE:', API_BASE);
 console.log('Using OSRM_BASE:', OSRM_BASE);
 
+async function fetchJSON(url) {
+    const r = await fetch(url);
+    const ct = (r.headers.get('content-type') || '').toLowerCase();
+    if (!r.ok || !ct.includes('application/json')) {
+        const head = await r.text().then(t => t.slice(0, 120)).catch(() => '');
+        throw new Error(`Non-JSON from ${url} (${r.status}): ${head}`);
+    }
+    return r.json();
+}
+
 // Map
 const map = new Map({
     target: 'map',
@@ -121,27 +131,38 @@ fetch(`${API_BASE}/markers`)
     })
     .catch(err => console.error('Markers fetch error:', err));
 
-// Fetch polylines and OSRM match (optional /osrm)
-fetch(`${API_BASE}/polylines`)
-    .then(res => res.json())
-    .then(users => {
-        users.forEach(user => {
+// Fetch polylines, then (optionally) OSRM match
+fetchJSON(`${API_BASE}/polylines`)
+    .then(async (users) => {
+        // Quick probe: if OSRM isn't JSON, skip the whole matching step
+        let osrmHealthy = false;
+        try {
+            // a very cheap OSRM endpoint; any valid one is fine
+            await fetchJSON(`${OSRM_BASE}/nearest/v1/driving/0,0`);
+            osrmHealthy = true;
+        } catch (e) {
+            console.warn('OSRM not available; skipping road snapping:', e.message);
+        }
+
+        if (!osrmHealthy) return; // stop here, leave markers only
+
+        for (const user of users) {
             const coordString = user.coords.map(([lon, lat]) => `${lon},${lat}`).join(';');
             const osrmUrl = `${OSRM_BASE}/match/v1/driving/${coordString}?geometries=geojson&overview=full`;
 
-            fetch(osrmUrl)
-                .then(r => r.json())
-                .then(data => {
-                    if (data.matchings && data.matchings.length > 0) {
-                        const snapped = data.matchings[0].geometry.coordinates.map(c => fromLonLat(c));
-                        const line = new Feature({ geometry: new LineString(snapped) });
-                        line.setStyle(new Style({ stroke: new Stroke({ color: 'blue', width: 3 }) }));
-                        vectorSource.addFeature(line);
-                    } else {
-                        console.warn('No match found for:', user.username);
-                    }
-                })
-                .catch(err => console.error('Map matching error:', err));
-        });
+            try {
+                const data = await fetchJSON(osrmUrl);
+                if (data.matchings && data.matchings.length > 0) {
+                    const snapped = data.matchings[0].geometry.coordinates.map(c => fromLonLat(c));
+                    const line = new Feature({ geometry: new LineString(snapped) });
+                    line.setStyle(new Style({ stroke: new Stroke({ color: 'blue', width: 3 }) }));
+                    vectorSource.addFeature(line);
+                } else {
+                    console.warn('No OSRM match for:', user.username);
+                }
+            } catch (err) {
+                console.warn('OSRM request failed; continuing without snapping:', err.message);
+            }
+        }
     })
     .catch(err => console.error('Polylines fetch error:', err));
