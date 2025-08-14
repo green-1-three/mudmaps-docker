@@ -1,17 +1,21 @@
-version: "3.9"
-
 services:
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: mudmaps-proxy
+    depends_on:
+      - frontend
+      - backend
+    volumes:
+      - ./proxy/reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
     container_name: mudmaps-frontend
-    depends_on:
-      - backend
-    # Single public entry-point
-    ports:
-      - "80:80"
-    volumes:
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    # not published to host; reached by proxy as http://frontend:80
     restart: unless-stopped
 
   backend:
@@ -25,12 +29,10 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PORT: 3000
-      # Same-origin in front of Nginx, but backend may still check this:
-      CORS_ORIGIN: ${CORS_ORIGIN:-*}
-    expose:
-      - "3000"
+      CORS_ORIGIN: ${CORS_ORIGIN}
     depends_on:
       - postgres
+    # not published to host; reached by proxy as http://backend:3000
     restart: unless-stopped
 
   postgres:
@@ -42,15 +44,17 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - db-data:/var/lib/postgresql/data
-    expose:
-      - "5432"
+    # not published to host (internal only)
     restart: unless-stopped
 
   tcp-listener:
     build:
       context: ./tcp-listener
     container_name: mudmaps-tcp-listener
-    # not published here; choose in overrides
+    environment:
+      LISTENER_PORT: ${LISTENER_PORT}
+    ports:
+      - "5500:5500"   # keep public (or remove if you decide to lock it)
     restart: unless-stopped
 
 volumes:
