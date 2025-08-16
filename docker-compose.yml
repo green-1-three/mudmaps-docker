@@ -1,22 +1,18 @@
-services:
-  proxy:
-    image: nginx:1.27-alpine
-    container_name: mudmaps-proxy
-    depends_on:
-      - frontend
-      - backend
-    volumes:
-      - ./proxy/reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
-    ports:
-      - "80:80"
-    restart: unless-stopped
+version: "3.9"
 
-  frontend:
-    build:
-      context: ./frontend
-    container_name: mudmaps-frontend
-    # not published to host; reached by proxy as http://frontend:80
-    restart: unless-stopped
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mudmaps-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
   backend:
     build:
@@ -30,22 +26,11 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PORT: 3000
       CORS_ORIGIN: ${CORS_ORIGIN}
+      HOST_PORT: ${HOST_PORT}
     depends_on:
       - postgres
-    # not published to host; reached by proxy as http://backend:3000
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: mudmaps-postgres
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - db-data:/var/lib/postgresql/data
-    # not published to host (internal only)
-    restart: unless-stopped
+    ports:
+      - "3001:3000"
 
   tcp-listener:
     build:
@@ -53,9 +38,27 @@ services:
     container_name: mudmaps-tcp-listener
     environment:
       LISTENER_PORT: ${LISTENER_PORT}
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - postgres
     ports:
-      - "5500:5500"   # keep public (or remove if you decide to lock it)
-    restart: unless-stopped
+      - "5500:${LISTENER_PORT}"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: mudmaps-frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
 
 volumes:
   db-data:
