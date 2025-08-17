@@ -9,6 +9,35 @@ import { Vector as VectorLayer } from 'ol/layer';
 import { Vector as VectorSource } from 'ol/source';
 import { Style, Icon, Stroke, Fill, Text } from 'ol/style';
 
+// Simple polyline decoder (Google's algorithm)
+function decodePolyline(str, precision = 5) {
+    let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null;
+    const factor = Math.pow(10, precision);
+
+    while (index < str.length) {
+        // Decode latitude
+        byte = null; shift = 0; result = 0;
+        do {
+            byte = str.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+        lat += ((result & 1) ? ~(result >> 1) : (result >> 1));
+
+        // Decode longitude
+        byte = null; shift = 0; result = 0;
+        do {
+            byte = str.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+        lng += ((result & 1) ? ~(result >> 1) : (result >> 1));
+
+        coordinates.push([lng / factor, lat / factor]);
+    }
+    return coordinates;
+}
+
 // Configuration
 let API_BASE = import.meta.env.VITE_API_BASE;
 
