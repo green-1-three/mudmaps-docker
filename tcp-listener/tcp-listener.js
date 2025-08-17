@@ -10,11 +10,11 @@ const logError = (msg) => fs.appendFileSync('decode_errors.log', msg + '\n');
 
 // Postgres connection
 const pool = new Pool({
-    user: process.env.POSTGRES_USER || 'mudmaps',
+    user: process.env.PGUSER || 'mudmaps',           // Changed from POSTGRES_USER
     host: process.env.PGHOST || 'postgres',
-    database: process.env.POSTGRES_DB || 'mudmapsdb',
-    password: process.env.POSTGRES_PASSWORD || 'mudmaps',
-    port: Number(process.env.POSTGRES_PORT) || 5432,
+    database: process.env.PGDATABASE || 'mudmapsdb', // Changed from POSTGRES_DB
+    password: process.env.PGPASSWORD || 'mudmaps',   // Changed from POSTGRES_PASSWORD
+    port: Number(process.env.PGPORT) || 5432,        // Changed from POSTGRES_PORT
 });
 
 // Codec 8 decoder
