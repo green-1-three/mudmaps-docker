@@ -231,8 +231,8 @@ async function loadAndDisplayPaths() {
     try {
         console.log('Loading path data...');
 
-        // Get path data from our new endpoint
-        const data = await fetchJSON(`${API_BASE}/paths/encoded?hours=24`);
+        // Get path data from our new endpoint using current time range
+        const data = await fetchJSON(`${API_BASE}/paths/encoded?hours=${currentTimeHours}`);
 
         console.log('Received data:', data);
 
@@ -326,6 +326,9 @@ async function loadAndDisplayPaths() {
     }
 }
 
+// Global variable to store current time range
+let currentTimeHours = 24;
+
 // Create simple UI
 function createUI() {
     const controlsDiv = document.createElement('div');
@@ -335,8 +338,23 @@ function createUI() {
             <h3>MudMaps - Path View</h3>
             
             <div class="control-group">
-                <button onclick="window.refreshPaths()">Refresh Paths</button>
+                <button onclick="window.refreshPaths()">Refresh Now</button>
                 <button onclick="window.fitAllPaths()">Fit All Paths</button>
+            </div>
+            
+            <div class="control-group">
+                <label for="timeRange">Time Range:</label>
+                <input type="range" id="timeRange" min="1" max="168" value="24" step="1">
+                <div class="time-display">
+                    <span id="timeValue">Last 24 hours</span>
+                </div>
+                <div class="time-presets">
+                    <button onclick="setTimeRange(1)">1h</button>
+                    <button onclick="setTimeRange(6)">6h</button>
+                    <button onclick="setTimeRange(24)">1d</button>
+                    <button onclick="setTimeRange(72)">3d</button>
+                    <button onclick="setTimeRange(168)">1w</button>
+                </div>
             </div>
             
             <div class="legend">
@@ -356,6 +374,49 @@ function createUI() {
     `;
 
     document.body.appendChild(controlsDiv);
+
+    // Set up slider event listeners
+    setupTimeSlider();
+}
+
+function setupTimeSlider() {
+    const slider = document.getElementById('timeRange');
+    const timeValue = document.getElementById('timeValue');
+
+    // Update display when slider moves
+    slider.addEventListener('input', (e) => {
+        const hours = parseInt(e.target.value);
+        updateTimeDisplay(hours);
+    });
+
+    // Load new data when slider is released
+    slider.addEventListener('change', (e) => {
+        const hours = parseInt(e.target.value);
+        currentTimeHours = hours;
+        loadAndDisplayPaths();
+    });
+}
+
+function updateTimeDisplay(hours) {
+    const timeValue = document.getElementById('timeValue');
+
+    if (hours < 24) {
+        timeValue.textContent = `Last ${hours} hour${hours !== 1 ? 's' : ''}`;
+    } else if (hours < 168) {
+        const days = Math.round(hours / 24 * 10) / 10;
+        timeValue.textContent = `Last ${days} day${days !== 1 ? 's' : ''}`;
+    } else {
+        const weeks = Math.round(hours / 168 * 10) / 10;
+        timeValue.textContent = `Last ${weeks} week${weeks !== 1 ? 's' : ''}`;
+    }
+}
+
+function setTimeRange(hours) {
+    const slider = document.getElementById('timeRange');
+    slider.value = hours;
+    updateTimeDisplay(hours);
+    currentTimeHours = hours;
+    loadAndDisplayPaths();
 }
 
 function showStatus(message) {
@@ -380,6 +441,7 @@ function fitAllPaths() {
 // Make functions available globally for button clicks
 window.refreshPaths = loadAndDisplayPaths;
 window.fitAllPaths = fitAllPaths;
+window.setTimeRange = setTimeRange;
 
 // User geolocation (optional)
 if ('geolocation' in navigator) {
