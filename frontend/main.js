@@ -9,6 +9,17 @@ import { Vector as VectorLayer } from 'ol/layer';
 import { Vector as VectorSource } from 'ol/source';
 import { Style, Icon, Stroke, Fill, Text } from 'ol/style';
 
+// Configuration
+let API_BASE = import.meta.env.VITE_API_BASE;
+
+if (!API_BASE) {
+    API_BASE = (window.location.hostname === 'localhost')
+        ? 'http://localhost:3001'
+        : '/api';
+}
+
+console.log('Using API_BASE:', API_BASE);
+
 // Simple polyline decoder (Google's algorithm)
 function decodePolyline(str, precision = 5) {
     let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null;
@@ -37,17 +48,6 @@ function decodePolyline(str, precision = 5) {
     }
     return coordinates;
 }
-
-// Configuration
-let API_BASE = import.meta.env.VITE_API_BASE;
-
-if (!API_BASE) {
-    API_BASE = (window.location.hostname === 'localhost')
-        ? 'http://localhost:3001'
-        : '/api';
-}
-
-console.log('Using API_BASE:', API_BASE);
 
 async function fetchJSON(url) {
     const r = await fetch(url);
@@ -252,11 +252,31 @@ async function loadAndDisplayPaths() {
             console.log(`Processing device: ${device.device}`);
             console.log(`Coordinate count: ${device.coordinate_count}`);
             console.log(`Minute markers: ${device.minute_markers.length}`);
+            console.log(`Has encoded_path: ${!!device.encoded_path}`);
+            console.log(`Has raw_coordinates: ${!!device.raw_coordinates}`);
 
-            if (device.raw_coordinates) {
-                // Simplify coordinates to reduce clutter
-                const simplified = simplifyCoordinates(device.raw_coordinates, 0.00001);
-                console.log(`Simplified from ${device.raw_coordinates.length} to ${simplified.length} coordinates`);
+            let coordinates = null;
+
+            // Try to use encoded_path first (from OSRM), then fall back to raw_coordinates
+            if (device.encoded_path) {
+                try {
+                    coordinates = decodePolyline(device.encoded_path);
+                    console.log(`✅ Decoded polyline: ${coordinates.length} points`);
+                } catch (err) {
+                    console.error('Failed to decode polyline:', err);
+                }
+            }
+
+            // Fall back to raw coordinates if no encoded path or decoding failed
+            if (!coordinates && device.raw_coordinates) {
+                coordinates = device.raw_coordinates;
+                console.log(`📍 Using raw coordinates: ${coordinates.length} points`);
+            }
+
+            if (coordinates && coordinates.length > 0) {
+                // Simplify coordinates to reduce clutter (less aggressive for short trips)
+                const simplified = simplifyCoordinates(coordinates, 0.000001); // More sensitive
+                console.log(`Simplified from ${coordinates.length} to ${simplified.length} coordinates`);
 
                 // Create path segments
                 const segments = createPathSegments(simplified, device.minute_markers, device.device);
@@ -270,7 +290,7 @@ async function loadAndDisplayPaths() {
                 totalSegments += segments.length;
 
                 // Add current position marker (last coordinate)
-                const lastCoord = device.raw_coordinates[device.raw_coordinates.length - 1];
+                const lastCoord = coordinates[coordinates.length - 1];
                 if (lastCoord && lastCoord.length === 2) {
                     const currentPosFeature = new Feature({
                         geometry: new Point(fromLonLat(lastCoord)),
@@ -281,6 +301,8 @@ async function loadAndDisplayPaths() {
 
                     currentPositionsSource.addFeature(currentPosFeature);
                 }
+            } else {
+                console.log(`❌ No usable coordinates for device ${device.device}`);
             }
         });
 
