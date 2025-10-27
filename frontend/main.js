@@ -18,6 +18,7 @@ if (!API_BASE) {
         : '/api';
 }
 
+console.log("Test1")
 console.log('Using API_BASE:', API_BASE);
 
 // Simple polyline decoder (Google's algorithm)
