@@ -13,6 +13,25 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./db/migrations:/docker-entrypoint-initdb.d/migrations:ro
+
+  # NEW: Self-hosted OSRM routing engine
+  osrm:
+    image: osrm/osrm-backend
+    container_name: mudmaps-osrm
+    volumes:
+      - ./osrm-data:/data:ro
+    command: osrm-routed --algorithm mld /data/region.osrm --max-table-size 10000
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    # Resource limits - OSRM needs memory
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
 
   backend:
     build:
@@ -27,8 +46,10 @@ services:
       PORT: 3000
       CORS_ORIGIN: ${CORS_ORIGIN}
       HOST_PORT: ${HOST_PORT}
+      OSRM_BASE: http://osrm:5000  # Point to local OSRM
     depends_on:
       - postgres
+      - osrm
     ports:
       - "3001:3000"
 
