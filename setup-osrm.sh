@@ -54,14 +54,13 @@ echo "🔗 CREATING COMBINED VT+NH REGION"
 echo "=================================="
 echo "Merging Vermont and New Hampshire into single routing data..."
 
-# Combine VT and NH using osmium (via Docker)
+# Combine VT and NH using osmium-tool container
 if [ ! -f "$DATA_DIR/vt-nh-combined.osm.pbf" ]; then
     echo "🔧 Merging VT + NH map data..."
     docker run -t --rm \
         -v "$(pwd)/$DATA_DIR:/data" \
-        --entrypoint osmium \
-        osrm/osrm-backend \
-        merge /data/vermont-latest.osm.pbf /data/new-hampshire-latest.osm.pbf \
+        ghcr.io/osmcode/osmium-tool:latest \
+        osmium merge /data/vermont-latest.osm.pbf /data/new-hampshire-latest.osm.pbf \
         -o /data/vt-nh-combined.osm.pbf
     echo "✅ Merge complete"
 else
@@ -165,7 +164,7 @@ echo "💡 Other regions:"
 if [ -f "$DATA_DIR/new-york-latest.osrm" ]; then
     echo "   ✅ Processed and ready to use"
 else
-    echo "   ⏭️  Available but not processed (saves RAM)"
+    echo "   ⏭️  Downloaded but not processed (saves time/RAM)"
     echo "   Run this script again and choose 'y' to process them"
 fi
 echo ""
