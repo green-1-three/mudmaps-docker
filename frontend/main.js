@@ -68,6 +68,7 @@ const map = new Map({
 
 // Vector sources for different layers
 const pathsSource = new VectorSource();
+const unmatchedPathsSource = new VectorSource();  // NEW: Separate layer for unmatched segments
 const currentPositionsSource = new VectorSource();
 const userLocationSource = new VectorSource();
 
@@ -76,6 +77,13 @@ map.addLayer(new VectorLayer({
     source: pathsSource,
     zIndex: 1,
     style: createPathStyle
+}));
+
+// NEW: Unmatched paths layer with different styling
+map.addLayer(new VectorLayer({
+    source: unmatchedPathsSource,
+    zIndex: 0,
+    style: createUnmatchedPathStyle
 }));
 
 map.addLayer(new VectorLayer({
@@ -123,6 +131,23 @@ function createPathStyle(feature) {
     });
 }
 
+// NEW: Style for unmatched path segments (dashed, thinner, more transparent)
+function createUnmatchedPathStyle(feature) {
+    const timestamp = feature.get('timestamp');
+    const baseColor = timestamp ? getColorByAge(timestamp) : '#0066cc';
+
+    // Make it semi-transparent
+    const colorWithAlpha = baseColor + '80'; // Add 50% opacity
+
+    return new Style({
+        stroke: new Stroke({
+            color: colorWithAlpha,
+            width: 2,
+            lineDash: [5, 5]  // Dashed line to indicate unmatched
+        })
+    });
+}
+
 // Style for current position markers
 function createCurrentPositionStyle(feature) {
     const device = feature.get('device');
@@ -148,7 +173,7 @@ function createCurrentPositionStyle(feature) {
 }
 
 // Function to create path segments from coordinate array
-function createPathSegments(coordinates, minuteMarkers, deviceName) {
+function createPathSegments(coordinates, minuteMarkers, deviceName, isMatched = true) {
     const segments = [];
 
     if (coordinates.length < 2) return segments;
@@ -160,6 +185,21 @@ function createPathSegments(coordinates, minuteMarkers, deviceName) {
 
         // Skip if coordinates are invalid
         if (!start || !end || start.length !== 2 || end.length !== 2) continue;
+
+        // NEW: For unmatched segments, filter out large gaps (likely GPS jumps)
+        if (!isMatched) {
+            const distance = Math.sqrt(
+                Math.pow(end[0] - start[0], 2) +
+                Math.pow(end[1] - start[1], 2)
+            );
+
+            // Skip segments longer than ~0.01 degrees (~1km)
+            // These are likely GPS jumps, not actual travel
+            if (distance > 0.01) {
+                console.log(`Skipping large gap: ${distance.toFixed(4)} degrees`);
+                continue;
+            }
+        }
 
         // Find the timestamp for this segment (from minute markers)
         let segmentTimestamp = null;
@@ -180,7 +220,8 @@ function createPathSegments(coordinates, minuteMarkers, deviceName) {
             geometry: new LineString(segmentCoords),
             device: deviceName,
             timestamp: segmentTimestamp,
-            segmentIndex: i
+            segmentIndex: i,
+            isMatched: isMatched
         });
 
         segments.push(segmentFeature);
@@ -226,90 +267,159 @@ function isDirectionChange(prev, curr, next, threshold = 0.0001) {
     return Math.abs(cross) > threshold;
 }
 
-// Function to load and display paths
+// IMPROVED: Function to load and display paths with batch support
 async function loadAndDisplayPaths() {
     try {
         console.log('Loading path data...');
 
+        // Clear existing features
+        pathsSource.clear();
+        unmatchedPathsSource.clear();
+        currentPositionsSource.clear();
+
         // Get path data from our new endpoint using current time range
         const data = await fetchJSON(`${API_BASE}/paths/encoded?hours=${currentTimeHours}`);
 
-        console.log('Received data:', data);
-
         if (!data.devices || data.devices.length === 0) {
-            console.log('No devices found');
-            showStatus('No recent tracking data found');
+            showStatus('No devices found in selected time range');
             return;
         }
 
-        // Clear existing features
-        pathsSource.clear();
-        currentPositionsSource.clear();
+        console.log(`Received data for ${data.devices.length} device(s)`);
 
-        let totalSegments = 0;
+        let totalMatchedSegments = 0;
+        let totalUnmatchedSegments = 0;
 
         data.devices.forEach(device => {
-            console.log(`Processing device: ${device.device}`);
-            console.log(`Coordinate count: ${device.coordinate_count}`);
-            console.log(`Minute markers: ${device.minute_markers.length}`);
-            console.log(`Has encoded_path: ${!!device.encoded_path}`);
-            console.log(`Has raw_coordinates: ${!!device.raw_coordinates}`);
+            console.log(`\n=== Processing device: ${device.device} ===`);
+            console.log(`Coordinates: ${device.coordinate_count}, Time: ${device.start_time} to ${device.end_time}`);
 
-            let coordinates = null;
+            // NEW: Handle batched results
+            if (device.batches) {
+                console.log(`Device has ${device.total_batches} batches (${device.matched_batches} matched, ${device.coverage} coverage)`);
 
-            // Try to use encoded_path first (from OSRM), then fall back to raw_coordinates
-            if (device.encoded_path) {
+                device.batches.forEach((batch, batchIndex) => {
+                    let coordinates = null;
+                    let isMatched = batch.success;
+
+                    if (batch.success && batch.encoded_polyline) {
+                        // Successfully matched batch
+                        try {
+                            coordinates = decodePolyline(batch.encoded_polyline);
+                            console.log(`✅ Batch ${batchIndex + 1}: Decoded ${coordinates.length} matched points`);
+                        } catch (err) {
+                            console.error(`Failed to decode batch ${batchIndex + 1}:`, err);
+                            coordinates = batch.raw_coordinates;
+                            isMatched = false;
+                        }
+                    } else if (batch.raw_coordinates) {
+                        // Unmatched batch - use raw coordinates
+                        coordinates = batch.raw_coordinates;
+                        console.log(`⚠️  Batch ${batchIndex + 1}: Using ${coordinates.length} raw points (unmatched)`);
+                    }
+
+                    if (coordinates && coordinates.length > 0) {
+                        // Create segments for this batch
+                        const segments = createPathSegments(
+                            coordinates,
+                            device.minute_markers,
+                            device.device,
+                            isMatched
+                        );
+
+                        // Add to appropriate layer
+                        const targetSource = isMatched ? pathsSource : unmatchedPathsSource;
+                        segments.forEach(segment => targetSource.addFeature(segment));
+
+                        if (isMatched) {
+                            totalMatchedSegments += segments.length;
+                        } else {
+                            totalUnmatchedSegments += segments.length;
+                        }
+
+                        console.log(`Added ${segments.length} ${isMatched ? 'matched' : 'unmatched'} segments from batch ${batchIndex + 1}`);
+                    }
+                });
+            }
+            // Handle single encoded path (legacy support)
+            else if (device.encoded_path) {
                 try {
-                    coordinates = decodePolyline(device.encoded_path);
+                    const coordinates = decodePolyline(device.encoded_path);
                     console.log(`✅ Decoded polyline: ${coordinates.length} points`);
+
+                    const simplified = simplifyCoordinates(coordinates, 0.000001);
+                    const segments = createPathSegments(simplified, device.minute_markers, device.device, true);
+
+                    segments.forEach(segment => pathsSource.addFeature(segment));
+                    totalMatchedSegments += segments.length;
+
+                    console.log(`Added ${segments.length} matched segments`);
                 } catch (err) {
                     console.error('Failed to decode polyline:', err);
                 }
             }
+            // Handle raw coordinates fallback
+            else if (device.raw_coordinates) {
+                console.log(`⚠️  Using ${device.raw_coordinates.length} raw coordinates (OSRM failed: ${device.osrm_error})`);
 
-            // Fall back to raw coordinates if no encoded path or decoding failed
-            if (!coordinates && device.raw_coordinates) {
-                coordinates = device.raw_coordinates;
-                console.log(`📍 Using raw coordinates: ${coordinates.length} points`);
+                const segments = createPathSegments(
+                    device.raw_coordinates,
+                    device.minute_markers,
+                    device.device,
+                    false  // Mark as unmatched
+                );
+
+                segments.forEach(segment => unmatchedPathsSource.addFeature(segment));
+                totalUnmatchedSegments += segments.length;
+
+                console.log(`Added ${segments.length} unmatched segments`);
             }
 
-            if (coordinates && coordinates.length > 0) {
-                // Simplify coordinates to reduce clutter (less aggressive for short trips)
-                const simplified = simplifyCoordinates(coordinates, 0.000001); // More sensitive
-                console.log(`Simplified from ${coordinates.length} to ${simplified.length} coordinates`);
+            // Add current position marker (using last coordinate from any available source)
+            let lastCoord = null;
+            if (device.batches) {
+                // Find last coordinate from last successful batch
+                for (let i = device.batches.length - 1; i >= 0; i--) {
+                    const batch = device.batches[i];
+                    if (batch.encoded_polyline) {
+                        const coords = decodePolyline(batch.encoded_polyline);
+                        lastCoord = coords[coords.length - 1];
+                        break;
+                    } else if (batch.raw_coordinates) {
+                        lastCoord = batch.raw_coordinates[batch.raw_coordinates.length - 1];
+                        break;
+                    }
+                }
+            } else if (device.encoded_path) {
+                const coords = decodePolyline(device.encoded_path);
+                lastCoord = coords[coords.length - 1];
+            } else if (device.raw_coordinates) {
+                lastCoord = device.raw_coordinates[device.raw_coordinates.length - 1];
+            }
 
-                // Create path segments
-                const segments = createPathSegments(simplified, device.minute_markers, device.device);
-                console.log(`Created ${segments.length} path segments`);
-
-                // Add segments to map
-                segments.forEach(segment => {
-                    pathsSource.addFeature(segment);
+            if (lastCoord && lastCoord.length === 2) {
+                const currentPosFeature = new Feature({
+                    geometry: new Point(fromLonLat(lastCoord)),
+                    device: device.device,
+                    timestamp: device.end_time,
+                    type: 'current_position'
                 });
 
-                totalSegments += segments.length;
-
-                // Add current position marker (last coordinate)
-                const lastCoord = coordinates[coordinates.length - 1];
-                if (lastCoord && lastCoord.length === 2) {
-                    const currentPosFeature = new Feature({
-                        geometry: new Point(fromLonLat(lastCoord)),
-                        device: device.device,
-                        timestamp: device.end_time,
-                        type: 'current_position'
-                    });
-
-                    currentPositionsSource.addFeature(currentPosFeature);
-                }
-            } else {
-                console.log(`❌ No usable coordinates for device ${device.device}`);
+                currentPositionsSource.addFeature(currentPosFeature);
             }
         });
 
-        console.log(`Total segments added to map: ${totalSegments}`);
+        const totalSegments = totalMatchedSegments + totalUnmatchedSegments;
+        console.log(`\n=== Summary ===`);
+        console.log(`Total segments: ${totalSegments} (${totalMatchedSegments} matched, ${totalUnmatchedSegments} unmatched)`);
 
         // Fit map to show all paths
-        if (pathsSource.getFeatures().length > 0) {
+        const allFeatures = [
+            ...pathsSource.getFeatures(),
+            ...unmatchedPathsSource.getFeatures()
+        ];
+
+        if (allFeatures.length > 0) {
             const extent = pathsSource.getExtent();
             map.getView().fit(extent, {
                 padding: [50, 50, 50, 50],
@@ -318,7 +428,7 @@ async function loadAndDisplayPaths() {
             });
         }
 
-        showStatus(`Loaded ${data.devices.length} device(s) with ${totalSegments} path segments`);
+        showStatus(`Loaded ${data.devices.length} device(s): ${totalMatchedSegments} matched, ${totalUnmatchedSegments} unmatched segments`);
 
     } catch (err) {
         console.error('Failed to load paths:', err);
@@ -365,6 +475,9 @@ function createUI() {
                 <div class="legend-item"><span class="color-box" style="background: #ffff00;"></span> < 2 hours</div>
                 <div class="legend-item"><span class="color-box" style="background: #90ee90;"></span> < 6 hours</div>
                 <div class="legend-item"><span class="color-box" style="background: #808080;"></span> > 6 hours</div>
+                <div class="legend-separator"></div>
+                <div class="legend-item"><span class="line-solid"></span> Road-matched</div>
+                <div class="legend-item"><span class="line-dashed"></span> GPS direct (gaps filtered)</div>
             </div>
             
             <div class="status" id="status">
@@ -428,7 +541,12 @@ function showStatus(message) {
 }
 
 function fitAllPaths() {
-    if (pathsSource.getFeatures().length > 0) {
+    const allFeatures = [
+        ...pathsSource.getFeatures(),
+        ...unmatchedPathsSource.getFeatures()
+    ];
+
+    if (allFeatures.length > 0) {
         const extent = pathsSource.getExtent();
         map.getView().fit(extent, {
             padding: [50, 50, 50, 50],
@@ -471,16 +589,19 @@ map.on('click', (event) => {
         const device = feature.get('device');
         const timestamp = feature.get('timestamp');
         const segmentIndex = feature.get('segmentIndex');
+        const isMatched = feature.get('isMatched');
 
         console.log('Clicked feature:', {
             device,
             timestamp,
             segmentIndex,
+            isMatched,
             type: feature.get('type')
         });
 
         if (device) {
-            showStatus(`Device: ${device}, Time: ${timestamp ? new Date(timestamp).toLocaleString() : 'Unknown'}`);
+            const matchStatus = isMatched !== undefined ? (isMatched ? ' (matched)' : ' (unmatched)') : '';
+            showStatus(`Device: ${device}${matchStatus}, Time: ${timestamp ? new Date(timestamp).toLocaleString() : 'Unknown'}`);
         }
     }
 });

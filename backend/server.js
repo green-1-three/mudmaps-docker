@@ -20,13 +20,27 @@ const pool = new Pool({
     max: 10
 });
 
-// Utility function to call OSRM
-async function callOSRM(coordinates) {
+// IMPROVED: Utility function to call OSRM with better parameters
+async function callOSRM(coordinates, options = {}) {
     try {
         const coordString = coordinates.map(([lon, lat]) => `${lon},${lat}`).join(';');
-        const url = `${OSRM_BASE}/match/v1/driving/${coordString}?geometries=polyline&overview=full`;
 
-        console.log(`Calling OSRM: ${url.substring(0, 100)}...`);
+        // Add radiuses parameter - allows OSRM to search further from each point
+        // Default to 50 meters per point, but allow larger gaps (up to 500m)
+        const radiuses = coordinates.map(() => '50').join(';');
+
+        // Build URL with improved parameters
+        const params = new URLSearchParams({
+            geometries: 'polyline',
+            overview: 'full',
+            radiuses: radiuses,
+            gaps: 'ignore',  // Continue matching even if some points can't be matched
+            tidy: 'true'     // Clean up the geometry
+        });
+
+        const url = `${OSRM_BASE}/match/v1/driving/${coordString}?${params}`;
+
+        console.log(`Calling OSRM with ${coordinates.length} points...`);
 
         const response = await fetch(url);
         if (!response.ok) {
@@ -39,15 +53,81 @@ async function callOSRM(coordinates) {
             return {
                 success: true,
                 encoded_polyline: data.matchings[0].geometry,
-                confidence: data.matchings[0].confidence || 1.0
+                confidence: data.matchings[0].confidence || 1.0,
+                matched_points: coordinates.length
             };
         } else {
-            return { success: false, error: 'No matching found' };
+            return { success: false, error: 'No matching found', code: data.code };
         }
     } catch (error) {
         console.error('OSRM error:', error.message);
         return { success: false, error: error.message };
     }
+}
+
+// NEW: Batch OSRM calls for large coordinate arrays
+async function callOSRMBatched(coordinates, batchSize = 50) {
+    if (coordinates.length <= batchSize) {
+        // Small enough for single call
+        return await callOSRM(coordinates);
+    }
+
+    console.log(`Batching ${coordinates.length} coordinates into chunks of ${batchSize}`);
+
+    const batches = [];
+    for (let i = 0; i < coordinates.length; i += batchSize) {
+        batches.push(coordinates.slice(i, i + batchSize));
+    }
+
+    console.log(`Created ${batches.length} batches`);
+
+    const results = [];
+    let totalMatched = 0;
+
+    for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        console.log(`Processing batch ${i + 1}/${batches.length} (${batch.length} points)`);
+
+        const result = await callOSRM(batch);
+
+        if (result.success) {
+            results.push(result);
+            totalMatched += batch.length;
+            console.log(`✅ Batch ${i + 1} successful`);
+        } else {
+            console.log(`❌ Batch ${i + 1} failed: ${result.error}`);
+            // Add the raw coordinates as fallback for this batch
+            results.push({
+                success: false,
+                raw_coordinates: batch,
+                error: result.error
+            });
+        }
+
+        // Small delay between requests to be nice to public OSRM
+        if (i < batches.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    }
+
+    // Combine results
+    const successfulBatches = results.filter(r => r.success);
+
+    if (successfulBatches.length === 0) {
+        return {
+            success: false,
+            error: 'All batches failed',
+            raw_coordinates: coordinates
+        };
+    }
+
+    return {
+        success: true,
+        batches: results,
+        matched_batches: successfulBatches.length,
+        total_batches: batches.length,
+        coverage: (totalMatched / coordinates.length * 100).toFixed(1) + '%'
+    };
 }
 
 // Function to group markers by device and create minute markers
@@ -110,7 +190,7 @@ app.get('/polylines', async (_req, res) => {
     }
 });
 
-// NEW: Enhanced markers endpoint with temporal filtering
+// Enhanced markers endpoint with temporal filtering
 app.get('/markers/enhanced', async (req, res) => {
     try {
         const {
@@ -153,7 +233,7 @@ app.get('/markers/enhanced', async (req, res) => {
     }
 });
 
-// NEW: Generate encoded paths from markers
+// IMPROVED: Generate encoded paths from markers with batching
 app.get('/paths/encoded', async (req, res) => {
     try {
         const { username, hours = 24 } = req.query;
@@ -199,8 +279,8 @@ app.get('/paths/encoded', async (req, res) => {
                 continue;
             }
 
-            // Try to get OSRM encoded polyline
-            const osrmResult = await callOSRM(pathData.coordinates);
+            // Try to get OSRM encoded polyline with batching
+            const osrmResult = await callOSRMBatched(pathData.coordinates);
 
             const deviceResult = {
                 device: device,
@@ -210,13 +290,21 @@ app.get('/paths/encoded', async (req, res) => {
                 coordinate_count: pathData.coordinates.length
             };
 
-            if (osrmResult.success) {
+            if (osrmResult.success && osrmResult.batches) {
+                // Multiple batches - return them separately so frontend can handle each
+                deviceResult.batches = osrmResult.batches;
+                deviceResult.matched_batches = osrmResult.matched_batches;
+                deviceResult.total_batches = osrmResult.total_batches;
+                deviceResult.coverage = osrmResult.coverage;
+                console.log(`✅ OSRM batching success for ${device}: ${osrmResult.matched_batches}/${osrmResult.total_batches} batches matched (${osrmResult.coverage} coverage)`);
+            } else if (osrmResult.success) {
+                // Single successful call
                 deviceResult.encoded_path = osrmResult.encoded_polyline;
                 deviceResult.osrm_confidence = osrmResult.confidence;
                 console.log(`✅ OSRM success for ${device}: ${osrmResult.encoded_polyline.length} chars`);
             } else {
-                // Fallback: encode the raw coordinates ourselves (simplified)
-                deviceResult.raw_coordinates = pathData.coordinates;
+                // Complete failure - provide raw coordinates
+                deviceResult.raw_coordinates = osrmResult.raw_coordinates || pathData.coordinates;
                 deviceResult.osrm_error = osrmResult.error;
                 console.log(`❌ OSRM failed for ${device}: ${osrmResult.error}`);
             }
@@ -233,7 +321,7 @@ app.get('/paths/encoded', async (req, res) => {
     }
 });
 
-// NEW: Health check endpoint
+// Health check endpoint
 app.get('/health', async (req, res) => {
     try {
         await pool.query('SELECT 1');

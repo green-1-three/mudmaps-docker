@@ -179,3 +179,25 @@ html, body {
         margin-right: 2%;
     }
 }
+
+.legend-separator {
+    height: 1px;
+    background: #ddd;
+    margin: 8px 0;
+}
+
+/* Line style indicators in legend */
+.line-solid, .line-dashed {
+    display: inline-block;
+    width: 30px;
+    height: 3px;
+    background: #666;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+.line-dashed {
+    background: linear-gradient(to right, #666 50%, transparent 50%);
+    background-size: 10px 100%;
+    opacity: 0.6;
+}
