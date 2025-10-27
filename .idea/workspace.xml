@@ -5,10 +5,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="781d814b-6897-4d0d-8f84-a8ad56d33b6b" name="Changes" comment="Ports blocked from public">
-      <change afterPath="$PROJECT_DIR$/db/migrations/001_add_matched_paths.sql" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/setup-osrm.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/server.js" beforeDir="false" afterPath="$PROJECT_DIR$/backend/server.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -94,7 +90,7 @@
       <workItem from="1755022448708" duration="4014000" />
       <workItem from="1755132931680" duration="6109000" />
       <workItem from="1755352945538" duration="13639000" />
-      <workItem from="1761579154538" duration="7376000" />
+      <workItem from="1761579154538" duration="7718000" />
     </task>
     <task id="LOCAL-00001" summary="First commit, reworked into Docker setup.">
       <option name="closed" value="true" />
