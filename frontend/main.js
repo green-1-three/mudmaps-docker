@@ -21,13 +21,14 @@ if (!API_BASE) {
 console.log('Using API_BASE:', API_BASE);
 
 // ✨ OPTIMIZED: Polyline cache to avoid re-decoding
-const polylineCache = new Map();
+// Using a plain object instead of Map to avoid potential issues
+const polylineCache = {};
 
 // ✨ OPTIMIZED: Simple polyline decoder with caching
 function decodePolyline(str, precision = 5) {
     // Check cache first
-    if (polylineCache.has(str)) {
-        return polylineCache.get(str);
+    if (polylineCache[str]) {
+        return polylineCache[str];
     }
 
     let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null;
@@ -56,9 +57,16 @@ function decodePolyline(str, precision = 5) {
     }
 
     // Cache the result
-    polylineCache.set(str, coordinates);
+    polylineCache[str] = coordinates;
 
     return coordinates;
+}
+
+function clearPolylineCache() {
+    // Clear all cache entries
+    for (const key in polylineCache) {
+        delete polylineCache[key];
+    }
 }
 
 async function fetchJSON(url) {
@@ -460,7 +468,7 @@ function setupTimeSlider() {
 
     slider.addEventListener('change', (e) => {
         currentTimeHours = parseInt(e.target.value);
-        polylineCache.clear();
+        clearPolylineCache();
         loadAndDisplayPaths();
     });
 }
@@ -484,7 +492,7 @@ function setTimeRange(hours) {
     slider.value = hours;
     updateTimeDisplay(hours);
     currentTimeHours = hours;
-    polylineCache.clear();
+    clearPolylineCache();
     loadAndDisplayPaths();
 }
 
