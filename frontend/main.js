@@ -295,7 +295,115 @@ async function processBatchesInChunks(batches, minuteMarkers, deviceName) {
     return allSegments;
 }
 
-// ✨ OPTIMIZED: Main path loading function
+// ✨ OPTIMIZED: Load all data once on startup (7 days)
+async function loadAllData() {
+    try {
+        showStatus('Loading all paths (7 days)...');
+        const startTime = performance.now();
+
+        // Load 7 days of data (168 hours)
+        const url = `${API_BASE}/paths/encoded?hours=168`;
+        const data = await fetchJSON(url);
+        const fetchTime = performance.now() - startTime;
+        console.log(`✅ Preloaded 7 days in ${fetchTime.toFixed(0)}ms`);
+        console.log('📦 Response data:', JSON.stringify(data, null, 2));
+
+        if (!data.devices || data.devices.length === 0) {
+            showStatus('No devices found');
+            console.log('⚠️ No devices in response');
+            return;
+        }
+
+        console.log(`📱 Processing ${data.devices.length} device(s)`);
+        for (const device of data.devices) {
+            if (device.polylines) {
+                console.log(`  Device ${device.device}: ${device.polylines.length} polylines, ${device.total_points} points`);
+                console.log(`  Time range: ${device.start_time} to ${device.end_time}`);
+            }
+        }
+
+        // Clear existing features
+        pathsSource.clear();
+        unmatchedPathsSource.clear();
+        currentPositionsSource.clear();
+
+        let totalMatchedSegments = 0;
+        let totalUnmatchedSegments = 0;
+
+        // Process each device and create ALL features (7 days worth)
+        for (const device of data.devices) {
+            const minuteMarkers = device.minute_markers || [];
+
+            // Handle polylines array from cached_polylines table
+            if (device.polylines && device.polylines.length > 0) {
+                for (const polyline of device.polylines) {
+                    if (polyline.encoded_polyline) {
+                        const coords = decodePolyline(polyline.encoded_polyline);
+                        const simplified = simplifyCoordinates(coords, 0.0001);
+                        const polylineEndTime = new Date(polyline.end_time).getTime();
+                        const segments = createPathSegments(simplified, minuteMarkers, device.device, polylineEndTime, true);
+                        pathsSource.addFeatures(segments);
+                        totalMatchedSegments += segments.length;
+                    }
+                }
+            }
+
+            // Add current position marker
+            if (device.polylines && device.polylines.length > 0) {
+                const lastPolyline = device.polylines[device.polylines.length - 1];
+                if (lastPolyline.encoded_polyline) {
+                    const coords = decodePolyline(lastPolyline.encoded_polyline);
+                    const lastCoord = coords[coords.length - 1];
+                    const lastPolylineEndTime = new Date(lastPolyline.end_time).getTime();
+                    
+                    if (lastCoord && lastCoord.length === 2) {
+                        const currentPosFeature = new Feature({
+                            geometry: new Point(fromLonLat(lastCoord)),
+                            device: device.device,
+                            timestamp: device.end_time,
+                            polylineEndTime: lastPolylineEndTime,
+                            type: 'current_position'
+                        });
+                        currentPositionsSource.addFeature(currentPosFeature);
+                    }
+                }
+            }
+        }
+
+        const totalTime = performance.now() - startTime;
+        console.log(`⚡ Total load time: ${totalTime.toFixed(0)}ms`);
+
+        // Fit map to show paths from initial time range (24 hours)
+        // The style filter will hide older features
+        isSliderDragging = true; // Enable filtering
+        pathsSource.changed();
+        unmatchedPathsSource.changed();
+        currentPositionsSource.changed();
+        isSliderDragging = false; // Disable filtering (features are already filtered)
+
+        const allFeatures = [
+            ...pathsSource.getFeatures(),
+            ...unmatchedPathsSource.getFeatures()
+        ];
+
+        if (allFeatures.length > 0) {
+            const extent = pathsSource.getExtent();
+            map.getView().fit(extent, {
+                padding: [50, 50, 50, 50],
+                maxZoom: 16,
+                duration: 1000
+            });
+        }
+
+        showStatus(`Loaded 7 days: ${data.devices.length} device(s), ${totalMatchedSegments} segments`);
+
+    } catch (err) {
+        console.error('Failed to load paths:', err);
+        showStatus(`Error: ${err.message}`);
+    }
+}
+
+// Load and display paths for a specific time range (used after slider change)
 async function loadAndDisplayPaths() {
     try {
         showStatus('Loading paths...');
@@ -660,7 +768,7 @@ function fitAllPaths() {
 }
 
 // Make functions available globally
-window.refreshPaths = loadAndDisplayPaths;
+window.refreshPaths = loadAllData;
 window.fitAllPaths = fitAllPaths;
 window.setTimeRange = setTimeRange;
 
@@ -690,9 +798,6 @@ map.on('click', (event) => {
 });
 
 // Initialize
-console.log('🗺️ Initializing MudMaps (OPTIMIZED)...');
+console.log('🗺️ Initializing MudMaps (OPTIMIZED with 7-day preload)...');
 createUI();
-loadAndDisplayPaths();
-
-// Auto-refresh every 2 minutes
-setInterval(loadAndDisplayPaths, 120000);
+loadAllData();
