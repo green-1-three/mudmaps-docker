@@ -294,17 +294,45 @@ async function processBatchesInChunks(batches, minuteMarkers, deviceName) {
     return allSegments;
 }
 
-// ✨ OPTIMIZED: Main path loading function
-async function loadAndDisplayPaths() {
+// Store all loaded polyline data
+let allPolylinesData = null;
+
+// ✨ OPTIMIZED: Load all data once (7 days worth)
+async function loadAllPolylines() {
     try {
-        showStatus('Loading paths...');
+        showStatus('Loading all paths (7 days)...');
         const startTime = performance.now();
 
-        const url = `${API_BASE}/paths/encoded?hours=${currentTimeHours}`;
+        // Load ALL data (default 7 days) - no hours parameter for full preload
+        const url = `${API_BASE}/paths/encoded`;
         const data = await fetchJSON(url);
         const fetchTime = performance.now() - startTime;
-        console.log(`✅ API response in ${fetchTime.toFixed(0)}ms`);
+        console.log(`✅ Preloaded all data in ${fetchTime.toFixed(0)}ms`);
         console.log('📦 Response data:', JSON.stringify(data, null, 2));
+        
+        // Store data in memory
+        allPolylinesData = data;
+        return data;
+    } catch (err) {
+        console.error('Failed to load polylines:', err);
+        showStatus(`Error: ${err.message}`);
+        throw err;
+    }
+}
+
+// ✨ NEW: Display paths from cached data based on time filter
+async function displayFilteredPaths() {
+    try {
+        if (!allPolylinesData) {
+            showStatus('No data loaded yet');
+            return;
+        }
+
+        showStatus('Filtering paths...');
+        const startTime = performance.now();
+        
+        const data = allPolylinesData;
+        console.log('📦 Filtering from cached data:', JSON.stringify(data, null, 2));
 
         if (!data.devices || data.devices.length === 0) {
             showStatus('No devices found');
@@ -312,7 +340,12 @@ async function loadAndDisplayPaths() {
             return;
         }
 
+        // Calculate cutoff time based on current slider value
+        const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+        
         console.log(`📱 Processing ${data.devices.length} device(s)`);
+        console.log(`🕒 Filter: Show polylines newer than ${new Date(cutoffTime).toISOString()}`);
+        
         for (const device of data.devices) {
             if (device.polylines) {
                 console.log(`  Device ${device.device}: ${device.polylines.length} polylines, ${device.total_points} points`);
@@ -335,6 +368,12 @@ async function loadAndDisplayPaths() {
             // NEW: Handle polylines array from cached_polylines table
             if (device.polylines && device.polylines.length > 0) {
                 for (const polyline of device.polylines) {
+                    // Filter: only show polylines within the selected time range
+                    const polylineEndTime = new Date(polyline.end_time).getTime();
+                    if (polylineEndTime < cutoffTime) {
+                        continue; // Skip polylines older than cutoff
+                    }
+                    
                     if (polyline.encoded_polyline) {
                         const coords = decodePolyline(polyline.encoded_polyline);
                         const simplified = simplifyCoordinates(coords, 0.0001);
@@ -498,8 +537,8 @@ function setupTimeSlider() {
 
     slider.addEventListener('change', (e) => {
         currentTimeHours = parseInt(e.target.value);
-        clearPolylineCache();
-        loadAndDisplayPaths();
+        // No need to clear cache - we're filtering client-side now
+        displayFilteredPaths();
     });
 }
 
@@ -522,8 +561,8 @@ function setTimeRange(hours) {
     slider.value = hours;
     updateTimeDisplay(hours);
     currentTimeHours = hours;
-    clearPolylineCache();
-    loadAndDisplayPaths();
+    // Filter client-side, no reload needed
+    displayFilteredPaths();
 }
 
 function showStatus(message) {
@@ -547,8 +586,14 @@ function fitAllPaths() {
     }
 }
 
+// Refresh function - reload all data from server
+async function refreshPaths() {
+    await loadAllPolylines();
+    await displayFilteredPaths();
+}
+
 // Make functions available globally
-window.refreshPaths = loadAndDisplayPaths;
+window.refreshPaths = refreshPaths;
 window.fitAllPaths = fitAllPaths;
 window.setTimeRange = setTimeRange;
 
@@ -578,9 +623,17 @@ map.on('click', (event) => {
 });
 
 // Initialize
-console.log('🗺️ Initializing MudMaps (OPTIMIZED)...');
+console.log('🗺️ Initializing MudMaps (OPTIMIZED with preload)...');
 createUI();
-loadAndDisplayPaths();
 
-// Auto-refresh every 2 minutes
-setInterval(loadAndDisplayPaths, 120000);
+// Load all data on startup, then display with initial filter
+(async () => {
+    await loadAllPolylines();
+    await displayFilteredPaths();
+})();
+
+// Auto-refresh every 2 minutes - reload all data from server
+setInterval(async () => {
+    await loadAllPolylines();
+    await displayFilteredPaths();
+}, 120000);

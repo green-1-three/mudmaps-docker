@@ -209,11 +209,12 @@ docker compose logs backend --tail 50  # Shows last 50 lines
 
 **After each feature implementation:**
 1. User tests and verifies feature works
-2. **Prompt user:** "Feature working? Check it off in PROJECT_GOALS.md"
-3. User manually checks off the item in this file
-4. Move to next item
+2. **Claude prompts user:** "Feature working? Should I check it off in PROJECT_CHECKLIST.md?"
+3. User confirms
+4. **Claude checks off the item** in this file
+5. Move to next item
 
-**Do NOT automatically check off items** - user maintains the checklist themselves.
+**Claude can edit the checklist** - but must always prompt for user confirmation before checking off items.
 
 ### Communication Style
 
