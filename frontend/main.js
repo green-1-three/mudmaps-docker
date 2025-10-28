@@ -304,6 +304,7 @@ async function loadAndDisplayPaths() {
         const data = await fetchJSON(url);
         const fetchTime = performance.now() - startTime;
         console.log(`✅ API response in ${fetchTime.toFixed(0)}ms`);
+        console.log('📦 Response data:', JSON.stringify(data, null, 2));
 
         if (!data.devices || data.devices.length === 0) {
             showStatus('No devices found');
