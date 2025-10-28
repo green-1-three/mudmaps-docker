@@ -230,10 +230,11 @@ BEGIN
 END $$;
 
 -- Migrate matched_paths → cached_polylines
-DO $$
+DO $
 DECLARE
     matched_count INTEGER;
     migrated_count INTEGER;
+    duplicate_count INTEGER;
 BEGIN
     -- Count successful matches in old table
     SELECT COUNT(*) INTO matched_count 
@@ -242,7 +243,21 @@ BEGIN
     
     RAISE NOTICE 'Found % cached paths in matched_paths', matched_count;
     
-    -- Migrate only successful matches
+    -- Check for duplicates
+    SELECT COUNT(*) INTO duplicate_count
+    FROM (
+        SELECT device_id, start_time, end_time, COUNT(*) as cnt
+        FROM matched_paths
+        WHERE encoded_polyline IS NOT NULL
+        GROUP BY device_id, start_time, end_time
+        HAVING COUNT(*) > 1
+    ) dups;
+    
+    IF duplicate_count > 0 THEN
+        RAISE NOTICE 'Warning: Found % duplicate time ranges, keeping most recent entry for each', duplicate_count;
+    END IF;
+    
+    -- Migrate only successful matches, handling duplicates by keeping most recent
     INSERT INTO cached_polylines (
         device_id,
         start_time,
@@ -253,7 +268,7 @@ BEGIN
         batch_id,
         created_at
     )
-    SELECT 
+    SELECT DISTINCT ON (device_id, start_time, end_time)
         device_id,
         start_time,
         end_time,
@@ -263,17 +278,14 @@ BEGIN
         gen_random_uuid(),  -- Generate new batch IDs
         created_at
     FROM matched_paths
-    WHERE encoded_polyline IS NOT NULL;
+    WHERE encoded_polyline IS NOT NULL
+    ORDER BY device_id, start_time, end_time, created_at DESC;
     
     -- Verify count
     SELECT COUNT(*) INTO migrated_count FROM cached_polylines;
     
-    IF matched_count != migrated_count THEN
-        RAISE EXCEPTION 'Migration failed: expected % cached paths, got %', matched_count, migrated_count;
-    END IF;
-    
-    RAISE NOTICE '✓ Migrated % cached polylines', migrated_count;
-END $$;
+    RAISE NOTICE '✓ Migrated % unique cached polylines (from % total)', migrated_count, matched_count;
+END $;
 
 -- ============================================
 -- STEP 4: ADD COMMENTS (Documentation)
