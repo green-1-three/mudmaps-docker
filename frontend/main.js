@@ -294,43 +294,17 @@ async function processBatchesInChunks(batches, minuteMarkers, deviceName) {
     return allSegments;
 }
 
-// Store all loaded polyline data
-let allPolylinesData = null;
-
-// ✨ OPTIMIZED: Load all data once (7 days worth)
-async function loadAllPolylines() {
+// ✨ OPTIMIZED: Main path loading function
+async function loadAndDisplayPaths() {
     try {
-        showStatus('Loading all paths (7 days)...');
+        showStatus('Loading paths...');
         const startTime = performance.now();
 
-        // Load ALL data (default 7 days) - no hours parameter for full preload
-        const url = `${API_BASE}/paths/encoded`;
+        const url = `${API_BASE}/paths/encoded?hours=${currentTimeHours}`;
         const data = await fetchJSON(url);
         const fetchTime = performance.now() - startTime;
-        console.log(`✅ Preloaded all data in ${fetchTime.toFixed(0)}ms`);
+        console.log(`✅ API response in ${fetchTime.toFixed(0)}ms`);
         console.log('📦 Response data:', JSON.stringify(data, null, 2));
-        
-        // Store data in memory
-        allPolylinesData = data;
-        return data;
-    } catch (err) {
-        console.error('Failed to load polylines:', err);
-        showStatus(`Error: ${err.message}`);
-        throw err;
-    }
-}
-
-// ✨ NEW: Display paths from cached data based on time filter (synchronous for instant updates)
-function displayFilteredPaths() {
-    try {
-        if (!allPolylinesData) {
-            showStatus('No data loaded yet');
-            return;
-        }
-
-        const startTime = performance.now();
-        
-        const data = allPolylinesData;
 
         if (!data.devices || data.devices.length === 0) {
             showStatus('No devices found');
@@ -338,12 +312,7 @@ function displayFilteredPaths() {
             return;
         }
 
-        // Calculate cutoff time based on current slider value
-        const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-        
         console.log(`📱 Processing ${data.devices.length} device(s)`);
-        console.log(`🕒 Filter: Show polylines newer than ${new Date(cutoffTime).toISOString()}`);
-        
         for (const device of data.devices) {
             if (device.polylines) {
                 console.log(`  Device ${device.device}: ${device.polylines.length} polylines, ${device.total_points} points`);
@@ -355,9 +324,6 @@ function displayFilteredPaths() {
         pathsSource.clear();
         unmatchedPathsSource.clear();
         currentPositionsSource.clear();
-        
-        // Force immediate synchronous render after clearing
-        map.renderSync();
 
         let totalMatchedSegments = 0;
         let totalUnmatchedSegments = 0;
@@ -369,12 +335,6 @@ function displayFilteredPaths() {
             // NEW: Handle polylines array from cached_polylines table
             if (device.polylines && device.polylines.length > 0) {
                 for (const polyline of device.polylines) {
-                    // Filter: only show polylines within the selected time range
-                    const polylineEndTime = new Date(polyline.end_time).getTime();
-                    if (polylineEndTime < cutoffTime) {
-                        continue; // Skip polylines older than cutoff
-                    }
-                    
                     if (polyline.encoded_polyline) {
                         const coords = decodePolyline(polyline.encoded_polyline);
                         const simplified = simplifyCoordinates(coords, 0.0001);
@@ -458,9 +418,21 @@ function displayFilteredPaths() {
 
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total render time: ${totalTime.toFixed(0)}ms`);
-        
-        // Force map to render synchronously (immediate update)
-        map.renderSync();
+
+        // Fit map to show all paths
+        const allFeatures = [
+            ...pathsSource.getFeatures(),
+            ...unmatchedPathsSource.getFeatures()
+        ];
+
+        if (allFeatures.length > 0) {
+            const extent = pathsSource.getExtent();
+            map.getView().fit(extent, {
+                padding: [50, 50, 50, 50],
+                maxZoom: 16,
+                duration: 1000
+            });
+        }
 
         showStatus(`Loaded ${data.devices.length} device(s): ${totalMatchedSegments} matched, ${totalUnmatchedSegments} unmatched segments`);
 
@@ -528,16 +500,13 @@ function setupTimeSlider() {
     const slider = document.getElementById('timeRange');
 
     slider.addEventListener('input', (e) => {
-        const hours = parseInt(e.target.value);
-        updateTimeDisplay(hours);
-        currentTimeHours = hours;
-        // Filter instantly as user drags slider
-        displayFilteredPaths();
+        updateTimeDisplay(parseInt(e.target.value));
     });
-    
+
     slider.addEventListener('change', (e) => {
-        // Auto-center map when slider is released
-        fitAllPaths();
+        currentTimeHours = parseInt(e.target.value);
+        clearPolylineCache();
+        loadAndDisplayPaths();
     });
 }
 
@@ -560,8 +529,8 @@ function setTimeRange(hours) {
     slider.value = hours;
     updateTimeDisplay(hours);
     currentTimeHours = hours;
-    // Filter client-side, no reload needed
-    displayFilteredPaths();
+    clearPolylineCache();
+    loadAndDisplayPaths();
 }
 
 function showStatus(message) {
@@ -576,29 +545,17 @@ function fitAllPaths() {
     ];
 
     if (allFeatures.length > 0) {
-        // Calculate combined extent from all features
-        const combinedSource = new VectorSource({ features: allFeatures });
-        const extent = combinedSource.getExtent();
-        
-        // Give the map a moment to render the features before fitting
-        setTimeout(() => {
-            map.getView().fit(extent, {
-                padding: [50, 50, 50, 50],
-                maxZoom: 16,
-                duration: 1000
-            });
-        }, 50);
+        const extent = pathsSource.getExtent();
+        map.getView().fit(extent, {
+            padding: [50, 50, 50, 50],
+            maxZoom: 16,
+            duration: 1000
+        });
     }
 }
 
-// Refresh function - reload all data from server
-async function refreshPaths() {
-    await loadAllPolylines();
-    await displayFilteredPaths();
-}
-
 // Make functions available globally
-window.refreshPaths = refreshPaths;
+window.refreshPaths = loadAndDisplayPaths;
 window.fitAllPaths = fitAllPaths;
 window.setTimeRange = setTimeRange;
 
@@ -628,32 +585,9 @@ map.on('click', (event) => {
 });
 
 // Initialize
-console.log('🗺️ Initializing MudMaps (OPTIMIZED with preload)...');
+console.log('🗺️ Initializing MudMaps (OPTIMIZED)...');
 createUI();
+loadAndDisplayPaths();
 
-// Load all data on startup, then display with initial filter
-(async () => {
-    await loadAllPolylines();
-    await displayFilteredPaths();
-    
-    // Auto-center map only on initial load
-    const allFeatures = [
-        ...pathsSource.getFeatures(),
-        ...unmatchedPathsSource.getFeatures()
-    ];
-    
-    if (allFeatures.length > 0) {
-        const extent = pathsSource.getExtent();
-        map.getView().fit(extent, {
-            padding: [50, 50, 50, 50],
-            maxZoom: 16,
-            duration: 1000
-        });
-    }
-})();
-
-// Auto-refresh every 2 minutes - reload all data from server
-setInterval(async () => {
-    await loadAllPolylines();
-    await displayFilteredPaths();
-}, 120000);
+// Auto-refresh every 2 minutes
+setInterval(loadAndDisplayPaths, 120000);

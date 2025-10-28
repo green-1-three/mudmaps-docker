@@ -87,7 +87,7 @@ app.get('/markers/enhanced', async (req, res) => {
 // NEW: Fast path retrieval from cached_polylines (no OSRM calls!)
 app.get('/paths/encoded', async (req, res) => {
     try {
-        const { username, hours = 168 } = req.query; // Default to 7 days (168 hours)
+        const { username, hours = 24 } = req.query;
 
         console.log(`\n🗺️  Fetching cached paths for: ${username || 'all devices'}, timeframe: ${hours}h`);
 
