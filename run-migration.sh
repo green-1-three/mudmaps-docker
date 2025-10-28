@@ -10,11 +10,14 @@ echo "=============================="
 echo ""
 
 # Load environment variables
-if [ -f .env.production ]; then
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+    echo "✅ Loaded environment variables from .env"
+elif [ -f .env.production ]; then
     export $(cat .env.production | grep -v '^#' | xargs)
     echo "✅ Loaded environment variables from .env.production"
 else
-    echo "❌ ERROR: .env.production not found"
+    echo "❌ ERROR: .env or .env.production not found"
     exit 1
 fi
 
