@@ -10,6 +10,15 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
 const logDecoded = (msg) => fs.appendFileSync('decoded_records.log', msg + '\n');
 const logError = (msg) => fs.appendFileSync('decode_errors.log', msg + '\n');
 
+// Helper functions for logging with timestamp
+function timestamp() {
+    return new Date().toISOString();
+}
+
+function log(message) {
+    console.log(`[${timestamp()}] ${message}`);
+}
+
 // Postgres connection
 const pool = new Pool({
     user: process.env.PGUSER || 'mudmaps',           // Changed from POSTGRES_USER
@@ -86,7 +95,7 @@ function decodeCodec8(buffer) {
 
 // TCP Server
 const server = net.createServer((socket) => {
-    console.log(`📡 New connection from ${socket.remoteAddress}:${socket.remotePort}`);
+    log(`📡 New connection from ${socket.remoteAddress}:${socket.remotePort}`);
 
     let imei = null;
     let buffer = Buffer.alloc(0);
@@ -99,7 +108,7 @@ const server = net.createServer((socket) => {
             const imeiLength = buffer.readUInt16BE(0);
             if (buffer.length >= imeiLength + 2) {
                 imei = buffer.slice(2, imeiLength + 2).toString();
-                console.log('📍 IMEI received:', imei);
+                log(`📍 IMEI received: ${imei}`);
                 socket.write(Buffer.from([0x01])); // ACK
                 buffer = buffer.slice(imeiLength + 2);
             } else {
@@ -121,7 +130,7 @@ const server = net.createServer((socket) => {
                 const records = decodeCodec8(avlPacket);
                 for (const record of records) {
                     const line = JSON.stringify({ imei, ...record });
-                    console.log('✅ Decoded Record:', line);
+                    log(`✅ Decoded Record: ${line}`);
                     logDecoded(line);
 
                     // Insert into DB
@@ -139,11 +148,17 @@ const server = net.createServer((socket) => {
                         
                         const unprocessedCount = parseInt(countResult.rows[0].count);
                         
-                        // Only publish to queue if we have 25+ unprocessed points
-                        if (unprocessedCount >= 25) {
+                        // Only queue if we have 4+ unprocessed points AND device isn't already queued
+                        if (unprocessedCount >= 4) {
                             try {
-                                await redis.lPush('gps:queue', imei);
-                                console.log(`📤 Queued ${imei} for processing (${unprocessedCount} points)`);
+                                // Use Redis SET to prevent duplicate queueing
+                                const added = await redis.sAdd('gps:devices_queued', imei);
+                                if (added) {
+                                    await redis.lPush('gps:queue', imei);
+                                    log(`📤 Queued ${imei} for processing (${unprocessedCount} points)`);
+                                } else {
+                                    log(`⏭️  ${imei} already queued (${unprocessedCount} points)`);
+                                }
                             } catch (redisErr) {
                                 logError(`Redis publish error for ${imei}: ${redisErr.message}`);
                             }
@@ -153,21 +168,21 @@ const server = net.createServer((socket) => {
                     }
                 }
             } catch (err) {
-                console.error('❌ Decode Error:', err.message);
+                log(`❌ Decode Error: ${err.message}`);
                 logError(`Decode error for ${imei}: ${err.stack}`);
             }
         }
     });
 
     socket.on('end', () => {
-        console.log(`🔌 Connection from ${socket.remoteAddress}:${socket.remotePort} closed`);
+        log(`🔌 Connection from ${socket.remoteAddress}:${socket.remotePort} closed`);
     });
 
     socket.on('error', (err) => {
-        console.error(`❌ Socket error from ${socket.remoteAddress}:${socket.remotePort}:`, err.message);
+        log(`❌ Socket error from ${socket.remoteAddress}:${socket.remotePort}: ${err.message}`);
     });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Teltonika TCP listener running on 0.0.0.0:${PORT}`);
+    log(`🚀 Teltonika TCP listener running on 0.0.0.0:${PORT}`);
 });

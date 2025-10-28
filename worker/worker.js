@@ -27,6 +27,16 @@ redis.on('error', (err) => console.error('❌ Redis Error:', err));
 console.log('🚀 Background Worker Starting...');
 console.log(`📊 Config: OSRM=${OSRM_BASE}, BatchSize=${BATCH_SIZE}, TimeWindow=${TIME_WINDOW_MINUTES}min, MinMovement=${MIN_MOVEMENT_METERS}m, Redis=${REDIS_URL}`);
 
+// Helper function to get timestamp for logs
+function timestamp() {
+    return new Date().toISOString();
+}
+
+// Helper function for logging with timestamp
+function log(message) {
+    console.log(`[${timestamp()}] ${message}`);
+}
+
 // Calculate distance between two GPS points in meters
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371e3; // Earth's radius in meters
@@ -68,13 +78,20 @@ async function processDevice(device_id) {
         console.error(`❌ Error processing device ${device_id}:`, error);
     } finally {
         client.release();
+        
+        // Remove device from queued set so it can be queued again if needed
+        try {
+            await redis.sRem('gps:devices_queued', device_id);
+        } catch (redisErr) {
+            console.error(`❌ Redis error removing ${device_id} from queued set:`, redisErr);
+        }
     }
 }
 
 // Process data for a single device
 async function processDeviceData(client, device_id) {
     try {
-        console.log(`\n📍 Processing device: ${device_id}`);
+        log(`📍 Processing device: ${device_id}`);
         
         // Get the last processed point for this device (for seamless connection)
         const lastProcessedResult = await client.query(`
@@ -91,27 +108,26 @@ async function processDeviceData(client, device_id) {
             FROM gps_raw_data
             WHERE device_id = $1 AND processed = FALSE
             ORDER BY recorded_at ASC
-            LIMIT $2
-        `, [device_id, BATCH_SIZE]);
+        `, [device_id]);
         
         // Combine last processed point (if exists) with new unprocessed points
         let allPoints = [];
         if (lastProcessedResult.rows.length > 0) {
             allPoints.push(lastProcessedResult.rows[0]);
-            console.log(`   🔗 Including last processed point for seamless connection`);
+            log(`   🔗 Including last processed point for seamless connection`);
         }
         allPoints = allPoints.concat(gpsResult.rows);
         
         if (allPoints.length < 2) {
-            console.log(`   ⚠️  Not enough points (need at least 2, have ${allPoints.length})`);
+            log(`   ⚠️  Not enough points (need at least 2, have ${allPoints.length})`);
             return;
         }
         
-        console.log(`   📊 Found ${gpsResult.rows.length} unprocessed GPS points (${allPoints.length} total with overlap)`);
+        log(`   📊 Found ${gpsResult.rows.length} unprocessed GPS points (${allPoints.length} total with overlap)`);
         
         // Group points into time windows
         const batches = groupIntoTimeWindows(allPoints);
-        console.log(`   📦 Grouped into ${batches.length} time window(s)`);
+        log(`   📦 Grouped into ${batches.length} time window(s)`);
         
         for (const batch of batches) {
             // Only mark the NEW points as processed (not the overlapping first point)
@@ -166,7 +182,7 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
     const endTime = batch[batch.length - 1].recorded_at;
     const pointIds = newPointsInBatch.map(p => p.id); // Only IDs of NEW points
     
-    console.log(`   🔄 Processing batch: ${batch.length} points (${newPointsInBatch.length} new) from ${startTime} to ${endTime}`);
+    log(`   🔄 Processing batch: ${batch.length} points (${newPointsInBatch.length} new) from ${startTime} to ${endTime}`);
     
     // Check if batch has significant movement
     if (!hasSignificantMovement(batch)) {
@@ -174,7 +190,7 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
             batch[0].latitude, batch[0].longitude,
             batch[batch.length - 1].latitude, batch[batch.length - 1].longitude
         );
-        console.log(`   ⏭️  Skipping stationary batch (movement: ${distance.toFixed(1)}m < ${MIN_MOVEMENT_METERS}m)`);
+        log(`   ⏭️  Skipping stationary batch (movement: ${distance.toFixed(1)}m < ${MIN_MOVEMENT_METERS}m)`);
         
         // Still mark points as processed so they don't get reprocessed
         if (pointIds.length > 0) {
@@ -250,10 +266,10 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
             WHERE batch_id = $1
         `, [batchId]);
         
-        console.log(`   ✅ Batch processed successfully (${osrmDuration}ms)`);
+        log(`   ✅ Batch processed successfully (${osrmDuration}ms)`);
         
     } catch (error) {
-        console.error(`   ❌ Error processing batch:`, error.message);
+        log(`   ❌ Error processing batch: ${error.message}`);
         
         // Update processing log - failure
         await client.query(`
@@ -293,7 +309,7 @@ async function callOSRMMatch(coordinates) {
         };
         
     } catch (error) {
-        console.error('❌ OSRM API Error:', error.message);
+        log(`❌ OSRM API Error: ${error.message}`);
         return null;
     }
 }
@@ -330,11 +346,11 @@ async function logStatistics() {
 
 // Main loop
 async function main() {
-    console.log('✅ Worker ready. Connecting to Redis and waiting for jobs...\n');
+    log('✅ Worker ready. Connecting to Redis and waiting for jobs...');
     
     // Connect to Redis
     await redis.connect();
-    console.log('✅ Connected to Redis queue\n');
+    log('✅ Connected to Redis queue');
     
     // Log initial statistics
     await logStatistics();
@@ -345,7 +361,7 @@ async function main() {
     }, 5 * 60 * 1000);
     
     // Main queue processing loop - blocks waiting for jobs
-    console.log('👂 Listening for jobs on gps:queue...');
+    log('👂 Listening for jobs on gps:queue...');
     while (true) {
         try {
             // BRPOP blocks until a job is available (timeout after 5 seconds to allow graceful shutdown)
@@ -353,7 +369,7 @@ async function main() {
             
             if (result) {
                 const device_id = result.element;
-                console.log(`\n📦 Received job for device: ${device_id}`);
+                log(`📦 Received job for device: ${device_id}`);
                 await processDevice(device_id);
             }
         } catch (error) {
