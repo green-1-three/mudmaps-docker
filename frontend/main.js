@@ -356,8 +356,8 @@ function displayFilteredPaths() {
         unmatchedPathsSource.clear();
         currentPositionsSource.clear();
         
-        // Force immediate render after clearing
-        map.render();
+        // Force immediate synchronous render after clearing
+        map.renderSync();
 
         let totalMatchedSegments = 0;
         let totalUnmatchedSegments = 0;
@@ -459,8 +459,8 @@ function displayFilteredPaths() {
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total render time: ${totalTime.toFixed(0)}ms`);
         
-        // Force map to render immediately
-        map.render();
+        // Force map to render synchronously (immediate update)
+        map.renderSync();
 
         showStatus(`Loaded ${data.devices.length} device(s): ${totalMatchedSegments} matched, ${totalUnmatchedSegments} unmatched segments`);
 
