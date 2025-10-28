@@ -69,6 +69,23 @@ services:
     ports:
       - "5500:${LISTENER_PORT}"
 
+  worker:
+    build:
+      context: ./worker
+    container_name: mudmaps-worker
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSRM_BASE: http://osrm:5000
+      WORKER_INTERVAL: 60000
+    depends_on:
+      - postgres
+      - osrm
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
