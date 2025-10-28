@@ -96,19 +96,19 @@ const userLocationSource = new VectorSource();
 map.addLayer(new VectorLayer({
     source: pathsSource,
     zIndex: 1,
-    style: createPathStyle
+    style: createPathStyleWithFilter
 }));
 
 map.addLayer(new VectorLayer({
     source: unmatchedPathsSource,
     zIndex: 0,
-    style: createUnmatchedPathStyle
+    style: createUnmatchedPathStyleWithFilter
 }));
 
 map.addLayer(new VectorLayer({
     source: currentPositionsSource,
     zIndex: 2,
-    style: createCurrentPositionStyle
+    style: createCurrentPositionStyleWithFilter
 }));
 
 map.addLayer(new VectorLayer({
@@ -190,7 +190,7 @@ function createCurrentPositionStyle(feature) {
 }
 
 // Function to create path segments from coordinate array
-function createPathSegments(coordinates, minuteMarkers, deviceName, isMatched = true) {
+function createPathSegments(coordinates, minuteMarkers, deviceName, polylineEndTime, isMatched = true) {
     const segments = [];
 
     if (coordinates.length < 2) return segments;
@@ -229,6 +229,7 @@ function createPathSegments(coordinates, minuteMarkers, deviceName, isMatched = 
             geometry: new LineString(segmentCoords),
             device: deviceName,
             timestamp: segmentTimestamp,
+            polylineEndTime: polylineEndTime, // Store for filtering
             segmentIndex: i,
             isMatched: isMatched
         });
@@ -332,13 +333,14 @@ async function loadAndDisplayPaths() {
         for (const device of data.devices) {
             const minuteMarkers = device.minute_markers || [];
 
-            // NEW: Handle polylines array from cached_polylines table
+            // Handle polylines array from cached_polylines table
             if (device.polylines && device.polylines.length > 0) {
                 for (const polyline of device.polylines) {
                     if (polyline.encoded_polyline) {
                         const coords = decodePolyline(polyline.encoded_polyline);
                         const simplified = simplifyCoordinates(coords, 0.0001);
-                        const segments = createPathSegments(simplified, minuteMarkers, device.device, true);
+                        const polylineEndTime = new Date(polyline.end_time).getTime();
+                        const segments = createPathSegments(simplified, minuteMarkers, device.device, polylineEndTime, true);
                         pathsSource.addFeatures(segments);
                         totalMatchedSegments += segments.length;
                     }
@@ -351,12 +353,12 @@ async function loadAndDisplayPaths() {
                     if (batch.encoded_polyline) {
                         const coords = decodePolyline(batch.encoded_polyline);
                         const simplified = simplifyCoordinates(coords, 0.0001);
-                        const segments = createPathSegments(simplified, minuteMarkers, device.device, true);
+                        const segments = createPathSegments(simplified, minuteMarkers, device.device, Date.now(), true);
                         pathsSource.addFeatures(segments);
                         totalMatchedSegments += segments.length;
                     } else if (batch.raw_coordinates) {
                         const simplified = simplifyCoordinates(batch.raw_coordinates, 0.0001);
-                        const segments = createPathSegments(simplified, minuteMarkers, device.device, false);
+                        const segments = createPathSegments(simplified, minuteMarkers, device.device, Date.now(), false);
                         unmatchedPathsSource.addFeatures(segments);
                         totalUnmatchedSegments += segments.length;
                     }
@@ -364,13 +366,13 @@ async function loadAndDisplayPaths() {
             } else if (device.encoded_path) {
                 const coords = decodePolyline(device.encoded_path);
                 const simplified = simplifyCoordinates(coords, 0.0001);
-                const segments = createPathSegments(simplified, minuteMarkers, device.device, true);
+                const segments = createPathSegments(simplified, minuteMarkers, device.device, Date.now(), true);
 
                 pathsSource.addFeatures(segments);
                 totalMatchedSegments += segments.length;
             } else if (device.raw_coordinates) {
                 const simplified = simplifyCoordinates(device.raw_coordinates, 0.0001);
-                const segments = createPathSegments(simplified, minuteMarkers, device.device, false);
+                const segments = createPathSegments(simplified, minuteMarkers, device.device, Date.now(), false);
 
                 unmatchedPathsSource.addFeatures(segments);
                 totalUnmatchedSegments += segments.length;
@@ -378,12 +380,14 @@ async function loadAndDisplayPaths() {
 
             // Add current position marker
             let lastCoord = null;
+            let lastPolylineEndTime = null;
             if (device.polylines && device.polylines.length > 0) {
                 // Get last coordinate from last polyline
                 const lastPolyline = device.polylines[device.polylines.length - 1];
                 if (lastPolyline.encoded_polyline) {
                     const coords = decodePolyline(lastPolyline.encoded_polyline);
                     lastCoord = coords[coords.length - 1];
+                    lastPolylineEndTime = new Date(lastPolyline.end_time).getTime();
                 }
             } else if (device.batches && device.batches.length > 0) {
                 for (let j = device.batches.length - 1; j >= 0; j--) {
@@ -391,17 +395,21 @@ async function loadAndDisplayPaths() {
                     if (batch.encoded_polyline) {
                         const coords = decodePolyline(batch.encoded_polyline);
                         lastCoord = coords[coords.length - 1];
+                        lastPolylineEndTime = Date.now();
                         break;
                     } else if (batch.raw_coordinates) {
                         lastCoord = batch.raw_coordinates[batch.raw_coordinates.length - 1];
+                        lastPolylineEndTime = Date.now();
                         break;
                     }
                 }
             } else if (device.encoded_path) {
                 const coords = decodePolyline(device.encoded_path);
                 lastCoord = coords[coords.length - 1];
+                lastPolylineEndTime = Date.now();
             } else if (device.raw_coordinates) {
                 lastCoord = device.raw_coordinates[device.raw_coordinates.length - 1];
+                lastPolylineEndTime = Date.now();
             }
 
             if (lastCoord && lastCoord.length === 2) {
@@ -409,6 +417,7 @@ async function loadAndDisplayPaths() {
                     geometry: new Point(fromLonLat(lastCoord)),
                     device: device.device,
                     timestamp: device.end_time,
+                    polylineEndTime: lastPolylineEndTime,
                     type: 'current_position'
                 });
 
@@ -444,6 +453,90 @@ async function loadAndDisplayPaths() {
 
 // Global variable to store current time range
 let currentTimeHours = 24;
+let isSliderDragging = false; // Track if slider is being dragged
+
+// Enhanced style functions that can filter based on time while dragging
+function createPathStyleWithFilter(feature) {
+    // If dragging, check if feature should be visible based on time
+    if (isSliderDragging) {
+        const polylineEndTime = feature.get('polylineEndTime');
+        if (polylineEndTime) {
+            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+            if (polylineEndTime < cutoffTime) {
+                return null; // Hide feature
+            }
+        }
+    }
+    
+    // Normal style
+    const timestamp = feature.get('timestamp');
+    const color = timestamp ? getColorByAge(timestamp) : '#0066cc';
+    return new Style({
+        stroke: new Stroke({
+            color: color,
+            width: 3
+        })
+    });
+}
+
+function createUnmatchedPathStyleWithFilter(feature) {
+    // If dragging, check if feature should be visible based on time
+    if (isSliderDragging) {
+        const polylineEndTime = feature.get('polylineEndTime');
+        if (polylineEndTime) {
+            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+            if (polylineEndTime < cutoffTime) {
+                return null; // Hide feature
+            }
+        }
+    }
+    
+    // Normal style
+    const timestamp = feature.get('timestamp');
+    const baseColor = timestamp ? getColorByAge(timestamp) : '#0066cc';
+    const colorWithAlpha = baseColor + '80';
+    return new Style({
+        stroke: new Stroke({
+            color: colorWithAlpha,
+            width: 2,
+            lineDash: [5, 5]
+        })
+    });
+}
+
+function createCurrentPositionStyleWithFilter(feature) {
+    // If dragging, check if feature should be visible based on time
+    if (isSliderDragging) {
+        const polylineEndTime = feature.get('polylineEndTime');
+        if (polylineEndTime) {
+            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+            if (polylineEndTime < cutoffTime) {
+                return null; // Hide feature
+            }
+        }
+    }
+    
+    // Normal style
+    const device = feature.get('device');
+    const timestamp = feature.get('timestamp');
+    const isVeryRecent = timestamp && (Date.now() - new Date(timestamp).getTime()) < 300000;
+    return new Style({
+        image: new Icon({
+            anchor: [0.5, 1],
+            src: isVeryRecent
+                ? 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+                : 'https://maps.google.com/mapfiles/ms/icons/orange-dot.png',
+            scale: 1.0
+        }),
+        text: new Text({
+            text: device ? device.substring(0, 8) + '...' : 'Device',
+            offsetY: -40,
+            fill: new Fill({ color: 'black' }),
+            stroke: new Stroke({ color: 'white', width: 2 }),
+            font: '12px Arial'
+        })
+    });
+}
 
 // Create simple UI
 function createUI() {
@@ -500,10 +593,22 @@ function setupTimeSlider() {
     const slider = document.getElementById('timeRange');
 
     slider.addEventListener('input', (e) => {
-        updateTimeDisplay(parseInt(e.target.value));
+        const hours = parseInt(e.target.value);
+        updateTimeDisplay(hours);
+        currentTimeHours = hours;
+        
+        // Set dragging flag and force style recalculation for instant visual feedback
+        isSliderDragging = true;
+        pathsSource.changed();
+        unmatchedPathsSource.changed();
+        currentPositionsSource.changed();
     });
 
     slider.addEventListener('change', (e) => {
+        // Clear dragging flag
+        isSliderDragging = false;
+        
+        // Actually rebuild features with correct time range
         currentTimeHours = parseInt(e.target.value);
         clearPolylineCache();
         loadAndDisplayPaths();
