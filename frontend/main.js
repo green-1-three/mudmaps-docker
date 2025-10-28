@@ -308,7 +308,16 @@ async function loadAndDisplayPaths() {
 
         if (!data.devices || data.devices.length === 0) {
             showStatus('No devices found');
+            console.log('⚠️ No devices in response');
             return;
+        }
+
+        console.log(`📱 Processing ${data.devices.length} device(s)`);
+        for (const device of data.devices) {
+            if (device.polylines) {
+                console.log(`  Device ${device.device}: ${device.polylines.length} polylines, ${device.total_points} points`);
+                console.log(`  Time range: ${device.start_time} to ${device.end_time}`);
+            }
         }
 
         // Clear existing features

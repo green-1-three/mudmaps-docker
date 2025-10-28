@@ -101,7 +101,7 @@ app.get('/paths/encoded', async (req, res) => {
                 point_count,
                 osrm_confidence
             FROM cached_polylines
-            WHERE created_at > $1
+            WHERE start_time > $1
         `;
         let params = [new Date(Date.now() - hours * 60 * 60 * 1000)];
 
