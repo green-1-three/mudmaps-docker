@@ -126,6 +126,9 @@ function groupIntoTimeWindows(points) {
 
 // Process a single batch of GPS points
 async function processBatch(client, device_id, batch, newPointsInBatch) {
+    // Sort batch by recorded_at to ensure correct time order
+    batch.sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at));
+    
     const batchId = generateUUID();
     const startTime = batch[0].recorded_at;
     const endTime = batch[batch.length - 1].recorded_at;
