@@ -320,19 +320,17 @@ async function loadAllPolylines() {
     }
 }
 
-// ✨ NEW: Display paths from cached data based on time filter
-async function displayFilteredPaths() {
+// ✨ NEW: Display paths from cached data based on time filter (synchronous for instant updates)
+function displayFilteredPaths() {
     try {
         if (!allPolylinesData) {
             showStatus('No data loaded yet');
             return;
         }
 
-        showStatus('Filtering paths...');
         const startTime = performance.now();
         
         const data = allPolylinesData;
-        console.log('📦 Filtering from cached data:', JSON.stringify(data, null, 2));
 
         if (!data.devices || data.devices.length === 0) {
             showStatus('No devices found');
@@ -385,14 +383,21 @@ async function displayFilteredPaths() {
             }
             // OLD: Keep backwards compatibility with batches format
             else if (device.batches && device.batches.length > 0) {
-                const segments = await processBatchesInChunks(device.batches, minuteMarkers, device.device);
-
-                pathsSource.addFeatures(segments.matched);
-                unmatchedPathsSource.addFeatures(segments.unmatched);
-
-                totalMatchedSegments += segments.matched.length;
-                totalUnmatchedSegments += segments.unmatched.length;
-
+                // For batches, we need to process them (this path shouldn't be hit with cached_polylines)
+                for (const batch of device.batches) {
+                    if (batch.encoded_polyline) {
+                        const coords = decodePolyline(batch.encoded_polyline);
+                        const simplified = simplifyCoordinates(coords, 0.0001);
+                        const segments = createPathSegments(simplified, minuteMarkers, device.device, true);
+                        pathsSource.addFeatures(segments);
+                        totalMatchedSegments += segments.length;
+                    } else if (batch.raw_coordinates) {
+                        const simplified = simplifyCoordinates(batch.raw_coordinates, 0.0001);
+                        const segments = createPathSegments(simplified, minuteMarkers, device.device, false);
+                        unmatchedPathsSource.addFeatures(segments);
+                        totalUnmatchedSegments += segments.length;
+                    }
+                }
             } else if (device.encoded_path) {
                 const coords = decodePolyline(device.encoded_path);
                 const simplified = simplifyCoordinates(coords, 0.0001);
@@ -565,12 +570,18 @@ function fitAllPaths() {
     ];
 
     if (allFeatures.length > 0) {
-        const extent = pathsSource.getExtent();
-        map.getView().fit(extent, {
-            padding: [50, 50, 50, 50],
-            maxZoom: 16,
-            duration: 1000
-        });
+        // Calculate combined extent from all features
+        const combinedSource = new VectorSource({ features: allFeatures });
+        const extent = combinedSource.getExtent();
+        
+        // Give the map a moment to render the features before fitting
+        setTimeout(() => {
+            map.getView().fit(extent, {
+                padding: [50, 50, 50, 50],
+                maxZoom: 16,
+                duration: 1000
+            });
+        }, 50);
     }
 }
 
