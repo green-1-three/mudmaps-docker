@@ -160,7 +160,8 @@ function groupIntoTimeWindows(points) {
             if (currentBatch.length >= 2) {
                 batches.push(currentBatch);
             }
-            currentBatch = [points[i]];
+            // Start new batch with the last point from previous batch for continuity
+            currentBatch = [currentBatch[currentBatch.length - 1], points[i]];
         }
     }
     
