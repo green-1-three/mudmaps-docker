@@ -80,7 +80,7 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
-      WORKER_INTERVAL: 60000
+      WORKER_INTERVAL: 5000
     depends_on:
       - postgres
       - osrm

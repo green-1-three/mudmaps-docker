@@ -6,7 +6,7 @@ require('dotenv').config();
 // Configuration
 const WORKER_INTERVAL = parseInt(process.env.WORKER_INTERVAL) || 60000; // 60 seconds default
 const OSRM_BASE = process.env.OSRM_BASE || 'http://osrm:5000';
-const BATCH_SIZE = 50; // Process up to 50 coordinates per batch
+const BATCH_SIZE = 100; // Process up to 100 coordinates per batch
 const TIME_WINDOW_MINUTES = 60; // Group coordinates within 60-minute windows
 
 // PostgreSQL connection
