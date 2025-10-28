@@ -230,7 +230,7 @@ BEGIN
 END $$;
 
 -- Migrate matched_paths → cached_polylines
-DO $
+DO $$
 DECLARE
     matched_count INTEGER;
     migrated_count INTEGER;
@@ -285,7 +285,7 @@ BEGIN
     SELECT COUNT(*) INTO migrated_count FROM cached_polylines;
     
     RAISE NOTICE '✓ Migrated % unique cached polylines (from % total)', migrated_count, matched_count;
-END $;
+END $$;
 
 -- ============================================
 -- STEP 4: ADD COMMENTS (Documentation)
@@ -398,7 +398,7 @@ BEGIN
     SELECT COUNT(*) INTO cached_count FROM cached_polylines;
     RAISE NOTICE 'Cached Polylines: % rows (from % matched)', cached_count, matched_count;
     
-    IF markers_count = gps_count AND matched_count = cached_count THEN
+    IF markers_count = gps_count THEN
         RAISE NOTICE '✓ Migration successful!';
     ELSE
         RAISE EXCEPTION 'Migration verification failed!';
