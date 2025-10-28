@@ -137,13 +137,14 @@ app.get('/paths/encoded', async (req, res) => {
             const deviceResult = {
                 device: device,
                 polylines: polylines.map(p => ({
-                    encoded_path: p.encoded_polyline,
+                    encoded_polyline: p.encoded_polyline,
                     start_time: p.start_time,
                     end_time: p.end_time,
                     point_count: p.point_count,
                     osrm_confidence: p.osrm_confidence
                 })),
-                total_segments: polylines.length,
+                start_time: polylines[0].start_time,
+                end_time: polylines[polylines.length - 1].end_time,
                 total_points: polylines.reduce((sum, p) => sum + p.point_count, 0)
             };
 

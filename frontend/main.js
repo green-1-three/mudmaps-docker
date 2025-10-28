@@ -322,7 +322,20 @@ async function loadAndDisplayPaths() {
         for (const device of data.devices) {
             const minuteMarkers = device.minute_markers || [];
 
-            if (device.batches && device.batches.length > 0) {
+            // NEW: Handle polylines array from cached_polylines table
+            if (device.polylines && device.polylines.length > 0) {
+                for (const polyline of device.polylines) {
+                    if (polyline.encoded_polyline) {
+                        const coords = decodePolyline(polyline.encoded_polyline);
+                        const simplified = simplifyCoordinates(coords, 0.0001);
+                        const segments = createPathSegments(simplified, minuteMarkers, device.device, true);
+                        pathsSource.addFeatures(segments);
+                        totalMatchedSegments += segments.length;
+                    }
+                }
+            }
+            // OLD: Keep backwards compatibility with batches format
+            else if (device.batches && device.batches.length > 0) {
                 const segments = await processBatchesInChunks(device.batches, minuteMarkers, device.device);
 
                 pathsSource.addFeatures(segments.matched);
@@ -348,7 +361,14 @@ async function loadAndDisplayPaths() {
 
             // Add current position marker
             let lastCoord = null;
-            if (device.batches && device.batches.length > 0) {
+            if (device.polylines && device.polylines.length > 0) {
+                // Get last coordinate from last polyline
+                const lastPolyline = device.polylines[device.polylines.length - 1];
+                if (lastPolyline.encoded_polyline) {
+                    const coords = decodePolyline(lastPolyline.encoded_polyline);
+                    lastCoord = coords[coords.length - 1];
+                }
+            } else if (device.batches && device.batches.length > 0) {
                 for (let j = device.batches.length - 1; j >= 0; j--) {
                     const batch = device.batches[j];
                     if (batch.encoded_polyline) {
