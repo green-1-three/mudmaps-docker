@@ -451,21 +451,6 @@ async function displayFilteredPaths() {
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total render time: ${totalTime.toFixed(0)}ms`);
 
-        // Fit map to show all paths
-        const allFeatures = [
-            ...pathsSource.getFeatures(),
-            ...unmatchedPathsSource.getFeatures()
-        ];
-
-        if (allFeatures.length > 0) {
-            const extent = pathsSource.getExtent();
-            map.getView().fit(extent, {
-                padding: [50, 50, 50, 50],
-                maxZoom: 16,
-                duration: 1000
-            });
-        }
-
         showStatus(`Loaded ${data.devices.length} device(s): ${totalMatchedSegments} matched, ${totalUnmatchedSegments} unmatched segments`);
 
     } catch (err) {
@@ -532,13 +517,16 @@ function setupTimeSlider() {
     const slider = document.getElementById('timeRange');
 
     slider.addEventListener('input', (e) => {
-        updateTimeDisplay(parseInt(e.target.value));
-    });
-
-    slider.addEventListener('change', (e) => {
-        currentTimeHours = parseInt(e.target.value);
-        // No need to clear cache - we're filtering client-side now
+        const hours = parseInt(e.target.value);
+        updateTimeDisplay(hours);
+        currentTimeHours = hours;
+        // Filter instantly as user drags slider
         displayFilteredPaths();
+    });
+    
+    slider.addEventListener('change', (e) => {
+        // Auto-center map when slider is released
+        fitAllPaths();
     });
 }
 
@@ -630,6 +618,21 @@ createUI();
 (async () => {
     await loadAllPolylines();
     await displayFilteredPaths();
+    
+    // Auto-center map only on initial load
+    const allFeatures = [
+        ...pathsSource.getFeatures(),
+        ...unmatchedPathsSource.getFeatures()
+    ];
+    
+    if (allFeatures.length > 0) {
+        const extent = pathsSource.getExtent();
+        map.getView().fit(extent, {
+            padding: [50, 50, 50, 50],
+            maxZoom: 16,
+            duration: 1000
+        });
+    }
 })();
 
 // Auto-refresh every 2 minutes - reload all data from server
