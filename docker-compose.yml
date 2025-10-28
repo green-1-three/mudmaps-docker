@@ -15,6 +15,14 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./db/migrations:/docker-entrypoint-initdb.d/migrations:ro
 
+  redis:
+    image: redis:7-alpine
+    container_name: mudmaps-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+
   # NEW: Self-hosted OSRM routing engine
   osrm:
     image: osrm/osrm-backend
@@ -64,15 +72,17 @@ services:
       PGDATABASE: ${POSTGRES_DB}
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_URL: redis://redis:6379
     depends_on:
       - postgres
+      - redis
     ports:
       - "5500:${LISTENER_PORT}"
 
   worker:
     build:
       context: ./worker
-    container_name: mudmaps-worker
+    container_name: mudmaps-worker-1
     environment:
       PGHOST: postgres
       PGPORT: 5432
@@ -80,10 +90,173 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
-      WORKER_INTERVAL: 5000
+      REDIS_URL: redis://redis:6379
     depends_on:
       - postgres
       - osrm
+      - redis
+    restart: unless-stopped
+
+  worker-2:
+    build:
+      context: ./worker
+    container_name: mudmaps-worker-2
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSRM_BASE: http://osrm:5000
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - osrm
+      - redis
+    restart: unless-stopped
+
+  worker-3:
+    build:
+      context: ./worker
+    container_name: mudmaps-worker-3
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSRM_BASE: http://osrm:5000
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - osrm
+      - redis
+    restart: unless-stopped
+
+  worker-4:
+    build:
+      context: ./worker
+    container_name: mudmaps-worker-4
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSRM_BASE: http://osrm:5000
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - osrm
+      - redis
+    restart: unless-stopped
+
+  worker-5:
+    build:
+      context: ./worker
+    container_name: mudmaps-worker-5
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSRM_BASE: http://osrm:5000
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - osrm
+      - redis
+    restart: unless-stopped
+
+  worker-6:
+    build:
+      context: ./worker
+    container_name: mudmaps-worker-6
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSRM_BASE: http://osrm:5000
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - osrm
+      - redis
+    restart: unless-stopped
+
+  worker-7:
+    build:
+      context: ./worker
+    container_name: mudmaps-worker-7
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSRM_BASE: http://osrm:5000
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - osrm
+      - redis
+    restart: unless-stopped
+
+  worker-8:
+    build:
+      context: ./worker
+    container_name: mudmaps-worker-8
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSRM_BASE: http://osrm:5000
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - osrm
+      - redis
+    restart: unless-stopped
+
+  worker-9:
+    build:
+      context: ./worker
+    container_name: mudmaps-worker-9
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSRM_BASE: http://osrm:5000
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - osrm
+      - redis
+    restart: unless-stopped
+
+  worker-10:
+    build:
+      context: ./worker
+    container_name: mudmaps-worker-10
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSRM_BASE: http://osrm:5000
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - osrm
+      - redis
     restart: unless-stopped
 
   frontend:

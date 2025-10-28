@@ -1,10 +1,12 @@
 const net = require('net');
 const fs = require('fs');
 const { Pool } = require('pg');
+const { createClient } = require('redis');
 require('dotenv').config();
 
 // Config
 const PORT = process.env.LISTENER_PORT || 5500;
+const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
 const logDecoded = (msg) => fs.appendFileSync('decoded_records.log', msg + '\n');
 const logError = (msg) => fs.appendFileSync('decode_errors.log', msg + '\n');
 
@@ -15,6 +17,15 @@ const pool = new Pool({
     database: process.env.PGDATABASE || 'mudmapsdb', // Changed from POSTGRES_DB
     password: process.env.PGPASSWORD || 'mudmaps',   // Changed from POSTGRES_PASSWORD
     port: Number(process.env.PGPORT) || 5432,        // Changed from POSTGRES_PORT
+});
+
+// Redis connection
+const redis = createClient({ url: REDIS_URL });
+redis.on('error', (err) => console.error('Redis Error:', err));
+redis.connect().then(() => {
+    console.log('✅ Connected to Redis');
+}).catch(err => {
+    console.error('❌ Failed to connect to Redis:', err);
 });
 
 // Codec 8 decoder
@@ -119,6 +130,24 @@ const server = net.createServer((socket) => {
                             'INSERT INTO gps_raw_data (device_id, longitude, latitude, recorded_at, received_at, processed) VALUES ($1, $2, $3, $4, NOW(), FALSE)',
                             [imei, record.lon, record.lat, record.timestamp]
                         );
+                        
+                        // Check if device has accumulated enough points to process
+                        const countResult = await pool.query(
+                            'SELECT COUNT(*) as count FROM gps_raw_data WHERE device_id = $1 AND processed = FALSE',
+                            [imei]
+                        );
+                        
+                        const unprocessedCount = parseInt(countResult.rows[0].count);
+                        
+                        // Only publish to queue if we have 25+ unprocessed points
+                        if (unprocessedCount >= 25) {
+                            try {
+                                await redis.lPush('gps:queue', imei);
+                                console.log(`📤 Queued ${imei} for processing (${unprocessedCount} points)`);
+                            } catch (redisErr) {
+                                logError(`Redis publish error for ${imei}: ${redisErr.message}`);
+                            }
+                        }
                     } catch (dbErr) {
                         logError(`DB insert error for ${imei}: ${dbErr.message}`);
                     }

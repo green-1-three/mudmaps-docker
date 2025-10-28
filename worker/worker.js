@@ -1,10 +1,11 @@
 const { Pool } = require('pg');
 const fetch = require('node-fetch');
 const polyline = require('@mapbox/polyline');
+const { createClient } = require('redis');
 require('dotenv').config();
 
 // Configuration
-const WORKER_INTERVAL = parseInt(process.env.WORKER_INTERVAL) || 60000; // 60 seconds default
+const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
 const OSRM_BASE = process.env.OSRM_BASE || 'http://osrm:5000';
 const BATCH_SIZE = 100; // Process up to 100 coordinates per batch
 const TIME_WINDOW_MINUTES = 60; // Group coordinates within 60-minute windows
@@ -18,37 +19,21 @@ const pool = new Pool({
     port: parseInt(process.env.PGPORT) || 5432,
 });
 
-console.log('🚀 Background Worker Starting...');
-console.log(`📊 Config: Interval=${WORKER_INTERVAL}ms, OSRM=${OSRM_BASE}, BatchSize=${BATCH_SIZE}`);
+// Redis connection
+const redis = createClient({ url: REDIS_URL });
+redis.on('error', (err) => console.error('❌ Redis Error:', err));
 
-// Main processing function
-async function processUnprocessedGPS() {
+console.log('🚀 Background Worker Starting...');
+console.log(`📊 Config: OSRM=${OSRM_BASE}, BatchSize=${BATCH_SIZE}, Redis=${REDIS_URL}`);
+
+// Main processing function - called when device_id is pulled from queue
+async function processDevice(device_id) {
     const client = await pool.connect();
     
     try {
-        console.log('🔍 Checking for unprocessed GPS data...');
-        
-        // Get unprocessed GPS points grouped by device
-        const devicesResult = await client.query(`
-            SELECT DISTINCT device_id 
-            FROM gps_raw_data 
-            WHERE processed = FALSE
-            ORDER BY device_id
-        `);
-        
-        if (devicesResult.rows.length === 0) {
-            console.log('✅ No unprocessed data found');
-            return;
-        }
-        
-        console.log(`📱 Found ${devicesResult.rows.length} devices with unprocessed data`);
-        
-        for (const { device_id } of devicesResult.rows) {
-            await processDeviceData(client, device_id);
-        }
-        
+        await processDeviceData(client, device_id);
     } catch (error) {
-        console.error('❌ Error in processUnprocessedGPS:', error);
+        console.error(`❌ Error processing device ${device_id}:`, error);
     } finally {
         client.release();
     }
@@ -59,6 +44,15 @@ async function processDeviceData(client, device_id) {
     try {
         console.log(`\n📍 Processing device: ${device_id}`);
         
+        // Get the last processed point for this device (for seamless connection)
+        const lastProcessedResult = await client.query(`
+            SELECT id, longitude, latitude, recorded_at
+            FROM gps_raw_data
+            WHERE device_id = $1 AND processed = TRUE
+            ORDER BY recorded_at DESC
+            LIMIT 1
+        `, [device_id]);
+        
         // Get unprocessed GPS points for this device, ordered by time
         const gpsResult = await client.query(`
             SELECT id, longitude, latitude, recorded_at
@@ -68,19 +62,31 @@ async function processDeviceData(client, device_id) {
             LIMIT $2
         `, [device_id, BATCH_SIZE]);
         
-        if (gpsResult.rows.length < 2) {
-            console.log(`   ⚠️  Not enough points (need at least 2, have ${gpsResult.rows.length})`);
+        // Combine last processed point (if exists) with new unprocessed points
+        let allPoints = [];
+        if (lastProcessedResult.rows.length > 0) {
+            allPoints.push(lastProcessedResult.rows[0]);
+            console.log(`   🔗 Including last processed point for seamless connection`);
+        }
+        allPoints = allPoints.concat(gpsResult.rows);
+        
+        if (allPoints.length < 2) {
+            console.log(`   ⚠️  Not enough points (need at least 2, have ${allPoints.length})`);
             return;
         }
         
-        console.log(`   📊 Found ${gpsResult.rows.length} unprocessed GPS points`);
+        console.log(`   📊 Found ${gpsResult.rows.length} unprocessed GPS points (${allPoints.length} total with overlap)`);
         
         // Group points into time windows
-        const batches = groupIntoTimeWindows(gpsResult.rows);
+        const batches = groupIntoTimeWindows(allPoints);
         console.log(`   📦 Grouped into ${batches.length} time window(s)`);
         
         for (const batch of batches) {
-            await processBatch(client, device_id, batch);
+            // Only mark the NEW points as processed (not the overlapping first point)
+            const newPointsInBatch = batch.filter(p => 
+                !lastProcessedResult.rows.length || p.id !== lastProcessedResult.rows[0].id
+            );
+            await processBatch(client, device_id, batch, newPointsInBatch);
         }
         
     } catch (error) {
@@ -119,13 +125,13 @@ function groupIntoTimeWindows(points) {
 }
 
 // Process a single batch of GPS points
-async function processBatch(client, device_id, batch) {
+async function processBatch(client, device_id, batch, newPointsInBatch) {
     const batchId = generateUUID();
     const startTime = batch[0].recorded_at;
     const endTime = batch[batch.length - 1].recorded_at;
-    const pointIds = batch.map(p => p.id);
+    const pointIds = newPointsInBatch.map(p => p.id); // Only IDs of NEW points
     
-    console.log(`   🔄 Processing batch: ${batch.length} points from ${startTime} to ${endTime}`);
+    console.log(`   🔄 Processing batch: ${batch.length} points (${newPointsInBatch.length} new) from ${startTime} to ${endTime}`);
     
     // Log processing start
     await client.query(`
@@ -133,7 +139,7 @@ async function processBatch(client, device_id, batch) {
             batch_id, device_id, start_time, end_time, 
             coordinate_count, status, processing_started_at
         ) VALUES ($1, $2, $3, $4, $5, 'processing', NOW())
-    `, [batchId, device_id, startTime, endTime, batch.length]);
+    `, [batchId, device_id, startTime, endTime, newPointsInBatch.length]);
     
     try {
         // Call OSRM to match route
@@ -167,17 +173,19 @@ async function processBatch(client, device_id, batch) {
             endTime, 
             encodedPolyline,
             matchedRoute.confidence,
-            batch.length,
+            newPointsInBatch.length,
             batchId,
             osrmDuration
         ]);
         
-        // Mark GPS points as processed
-        await client.query(`
-            UPDATE gps_raw_data 
-            SET processed = TRUE, batch_id = $1
-            WHERE id = ANY($2)
-        `, [batchId, pointIds]);
+        // Mark only NEW GPS points as processed (not the overlapping first point)
+        if (pointIds.length > 0) {
+            await client.query(`
+                UPDATE gps_raw_data 
+                SET processed = TRUE, batch_id = $1
+                WHERE id = ANY($2)
+            `, [batchId, pointIds]);
+        }
         
         // Update processing log - success
         await client.query(`
@@ -268,27 +276,38 @@ async function logStatistics() {
 
 // Main loop
 async function main() {
-    console.log('✅ Worker ready. Starting processing loop...\n');
+    console.log('✅ Worker ready. Connecting to Redis and waiting for jobs...\n');
+    
+    // Connect to Redis
+    await redis.connect();
+    console.log('✅ Connected to Redis queue\n');
     
     // Log initial statistics
     await logStatistics();
-    
-    // Main processing loop
-    setInterval(async () => {
-        try {
-            await processUnprocessedGPS();
-        } catch (error) {
-            console.error('❌ Error in main loop:', error);
-        }
-    }, WORKER_INTERVAL);
     
     // Statistics logging (every 5 minutes)
     setInterval(async () => {
         await logStatistics();
     }, 5 * 60 * 1000);
     
-    // Run initial processing immediately
-    await processUnprocessedGPS();
+    // Main queue processing loop - blocks waiting for jobs
+    console.log('👂 Listening for jobs on gps:queue...');
+    while (true) {
+        try {
+            // BRPOP blocks until a job is available (timeout after 5 seconds to allow graceful shutdown)
+            const result = await redis.brPop('gps:queue', 5);
+            
+            if (result) {
+                const device_id = result.element;
+                console.log(`\n📦 Received job for device: ${device_id}`);
+                await processDevice(device_id);
+            }
+        } catch (error) {
+            console.error('❌ Error in main loop:', error);
+            // Brief pause before retrying on error
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
 }
 
 // Start the worker
