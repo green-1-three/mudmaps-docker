@@ -7,8 +7,9 @@ require('dotenv').config();
 // Configuration
 const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
 const OSRM_BASE = process.env.OSRM_BASE || 'http://osrm:5000';
-const BATCH_SIZE = 100; // Process up to 100 coordinates per batch
-const TIME_WINDOW_MINUTES = 60; // Group coordinates within 60-minute windows
+const BATCH_SIZE = 4; // Process 4 coordinates per batch (~2 minutes of data)
+const TIME_WINDOW_MINUTES = 2; // Group coordinates within 2-minute windows
+const MIN_MOVEMENT_METERS = 50; // Minimum movement to process batch
 
 // PostgreSQL connection
 const pool = new Pool({
@@ -24,7 +25,38 @@ const redis = createClient({ url: REDIS_URL });
 redis.on('error', (err) => console.error('❌ Redis Error:', err));
 
 console.log('🚀 Background Worker Starting...');
-console.log(`📊 Config: OSRM=${OSRM_BASE}, BatchSize=${BATCH_SIZE}, Redis=${REDIS_URL}`);
+console.log(`📊 Config: OSRM=${OSRM_BASE}, BatchSize=${BATCH_SIZE}, TimeWindow=${TIME_WINDOW_MINUTES}min, MinMovement=${MIN_MOVEMENT_METERS}m, Redis=${REDIS_URL}`);
+
+// Calculate distance between two GPS points in meters
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+    
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    
+    return R * c; // Distance in meters
+}
+
+// Check if batch has significant movement
+function hasSignificantMovement(batch, minDistanceMeters = MIN_MOVEMENT_METERS) {
+    if (batch.length < 2) return false;
+    
+    const first = batch[0];
+    const last = batch[batch.length - 1];
+    
+    const distance = calculateDistance(
+        first.latitude, first.longitude,
+        last.latitude, last.longitude
+    );
+    
+    return distance >= minDistanceMeters;
+}
 
 // Main processing function - called when device_id is pulled from queue
 async function processDevice(device_id) {
@@ -135,6 +167,25 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
     const pointIds = newPointsInBatch.map(p => p.id); // Only IDs of NEW points
     
     console.log(`   🔄 Processing batch: ${batch.length} points (${newPointsInBatch.length} new) from ${startTime} to ${endTime}`);
+    
+    // Check if batch has significant movement
+    if (!hasSignificantMovement(batch)) {
+        const distance = calculateDistance(
+            batch[0].latitude, batch[0].longitude,
+            batch[batch.length - 1].latitude, batch[batch.length - 1].longitude
+        );
+        console.log(`   ⏭️  Skipping stationary batch (movement: ${distance.toFixed(1)}m < ${MIN_MOVEMENT_METERS}m)`);
+        
+        // Still mark points as processed so they don't get reprocessed
+        if (pointIds.length > 0) {
+            await client.query(`
+                UPDATE gps_raw_data 
+                SET processed = TRUE
+                WHERE id = ANY($1)
+            `, [pointIds]);
+        }
+        return;
+    }
     
     // Log processing start
     await client.query(`
