@@ -116,8 +116,8 @@ const server = net.createServer((socket) => {
                     // Insert into DB
                     try {
                         await pool.query(
-                            'INSERT INTO markers (username, coords) VALUES ($1, $2)',
-                            [imei, [record.lon, record.lat]]
+                            'INSERT INTO gps_raw_data (device_id, longitude, latitude, recorded_at, received_at, processed) VALUES ($1, $2, $3, $4, NOW(), FALSE)',
+                            [imei, record.lon, record.lat, record.timestamp]
                         );
                     } catch (dbErr) {
                         logError(`DB insert error for ${imei}: ${dbErr.message}`);
