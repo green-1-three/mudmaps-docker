@@ -234,7 +234,7 @@ function createCurrentPositionStyle(feature) {
 }
 
 // Function to create path segments from coordinate array
-function createPathSegments(coordinates, minuteMarkers, deviceName, polylineEndTime, isMatched = true) {
+function createPathSegments(coordinates, deviceName, polylineEndTime, isMatched = true) {
     const segments = [];
 
     if (coordinates.length < 2) return segments;
@@ -255,15 +255,6 @@ function createPathSegments(coordinates, minuteMarkers, deviceName, polylineEndT
             if (distance > 0.01) continue;
         }
 
-        let segmentTimestamp = null;
-        for (const marker of minuteMarkers) {
-            if (marker.coord_index <= i + 1) {
-                segmentTimestamp = marker.timestamp;
-            } else {
-                break;
-            }
-        }
-
         const segmentCoords = [
             fromLonLat(start),
             fromLonLat(end)
@@ -272,7 +263,7 @@ function createPathSegments(coordinates, minuteMarkers, deviceName, polylineEndT
         const segmentFeature = new Feature({
             geometry: new LineString(segmentCoords),
             device: deviceName,
-            timestamp: segmentTimestamp,
+            timestamp: polylineEndTime,
             polylineEndTime: polylineEndTime, // Store for filtering
             segmentIndex: i,
             isMatched: isMatched
@@ -321,11 +312,11 @@ async function processBatchesInChunks(batches, minuteMarkers, deviceName) {
             if (batch.encoded_polyline) {
                 const coords = decodePolyline(batch.encoded_polyline);
                 const simplified = simplifyCoordinates(coords, 0.0001);
-                const segments = createPathSegments(simplified, minuteMarkers, deviceName, true);
+                const segments = createPathSegments(simplified, deviceName, Date.now(), true);
                 allSegments.matched.push(...segments);
             } else if (batch.raw_coordinates) {
                 const simplified = simplifyCoordinates(batch.raw_coordinates, 0.0001);
-                const segments = createPathSegments(simplified, minuteMarkers, deviceName, false);
+                const segments = createPathSegments(simplified, deviceName, Date.now(), false);
                 allSegments.unmatched.push(...segments);
             }
         });
@@ -376,8 +367,6 @@ async function loadAllData() {
 
         // Process each device and create ALL features (7 days worth)
         for (const device of data.devices) {
-            const minuteMarkers = device.minute_markers || [];
-
             // Handle polylines array from cached_polylines table
             if (device.polylines && device.polylines.length > 0) {
                 for (const polyline of device.polylines) {
@@ -385,7 +374,7 @@ async function loadAllData() {
                         const coords = decodePolyline(polyline.encoded_polyline);
                         const simplified = simplifyCoordinates(coords, 0.0001);
                         const polylineEndTime = new Date(polyline.end_time).getTime();
-                        const segments = createPathSegments(simplified, minuteMarkers, device.device, polylineEndTime, true);
+                        const segments = createPathSegments(simplified, device.device, polylineEndTime, true);
                         pathsSource.addFeatures(segments);
                         totalMatchedSegments += segments.length;
                     }
@@ -483,8 +472,6 @@ async function loadAndDisplayPaths() {
 
         // ✨ OPTIMIZED: Process each device
         for (const device of data.devices) {
-            const minuteMarkers = device.minute_markers || [];
-
             // Handle polylines array from cached_polylines table
             if (device.polylines && device.polylines.length > 0) {
                 for (const polyline of device.polylines) {
@@ -492,7 +479,7 @@ async function loadAndDisplayPaths() {
                         const coords = decodePolyline(polyline.encoded_polyline);
                         const simplified = simplifyCoordinates(coords, 0.0001);
                         const polylineEndTime = new Date(polyline.end_time).getTime();
-                        const segments = createPathSegments(simplified, minuteMarkers, device.device, polylineEndTime, true);
+                        const segments = createPathSegments(simplified, device.device, polylineEndTime, true);
                         pathsSource.addFeatures(segments);
                         totalMatchedSegments += segments.length;
                     }
@@ -505,12 +492,12 @@ async function loadAndDisplayPaths() {
                     if (batch.encoded_polyline) {
                         const coords = decodePolyline(batch.encoded_polyline);
                         const simplified = simplifyCoordinates(coords, 0.0001);
-                        const segments = createPathSegments(simplified, minuteMarkers, device.device, Date.now(), true);
+                        const segments = createPathSegments(simplified, device.device, Date.now(), true);
                         pathsSource.addFeatures(segments);
                         totalMatchedSegments += segments.length;
                     } else if (batch.raw_coordinates) {
                         const simplified = simplifyCoordinates(batch.raw_coordinates, 0.0001);
-                        const segments = createPathSegments(simplified, minuteMarkers, device.device, Date.now(), false);
+                        const segments = createPathSegments(simplified, device.device, Date.now(), false);
                         unmatchedPathsSource.addFeatures(segments);
                         totalUnmatchedSegments += segments.length;
                     }
@@ -518,13 +505,13 @@ async function loadAndDisplayPaths() {
             } else if (device.encoded_path) {
                 const coords = decodePolyline(device.encoded_path);
                 const simplified = simplifyCoordinates(coords, 0.0001);
-                const segments = createPathSegments(simplified, minuteMarkers, device.device, Date.now(), true);
+                const segments = createPathSegments(simplified, device.device, Date.now(), true);
 
                 pathsSource.addFeatures(segments);
                 totalMatchedSegments += segments.length;
             } else if (device.raw_coordinates) {
                 const simplified = simplifyCoordinates(device.raw_coordinates, 0.0001);
-                const segments = createPathSegments(simplified, minuteMarkers, device.device, Date.now(), false);
+                const segments = createPathSegments(simplified, device.device, Date.now(), false);
 
                 unmatchedPathsSource.addFeatures(segments);
                 totalUnmatchedSegments += segments.length;
