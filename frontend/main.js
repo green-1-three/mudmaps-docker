@@ -691,27 +691,13 @@ function createUI() {
     controlsDiv.id = 'controls';
     controlsDiv.innerHTML = `
         <div class="control-panel">
-            <h3>MudMaps - Path View</h3>
-            
-            <div class="control-group">
-                <button onclick="window.refreshPaths()">Refresh Now</button>
-                <button onclick="window.fitAllPaths()">Fit All Paths</button>
-            </div>
+            <h3>Latest Snowplow Activity</h3>
             
             <div class="control-group">
                 <label for="timeRange">Time Range:</label>
                 <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
                 <div class="time-display">
                     <span id="timeValue">Last 1 day</span>
-                </div>
-                <div class="time-presets">
-                    <button onclick="window.setTimeRangeByIndex(0)">1h</button>
-                    <button onclick="window.setTimeRangeByIndex(1)">2h</button>
-                    <button onclick="window.setTimeRangeByIndex(2)">4h</button>
-                    <button onclick="window.setTimeRangeByIndex(3)">8h</button>
-                    <button onclick="window.setTimeRangeByIndex(4)">1d</button>
-                    <button onclick="window.setTimeRangeByIndex(5)">3d</button>
-                    <button onclick="window.setTimeRangeByIndex(6)">7d</button>
                 </div>
             </div>
             
@@ -726,10 +712,6 @@ function createUI() {
                 <div class="legend-separator"></div>
                 <div class="legend-item"><span class="line-solid"></span> Road-matched</div>
                 <div class="legend-item"><span class="line-dashed"></span> GPS direct (gaps filtered)</div>
-            </div>
-            
-            <div class="status" id="status">
-                Loading...
             </div>
         </div>
     `;
@@ -828,8 +810,8 @@ function setTimeRangeByIndex(index) {
 }
 
 function showStatus(message) {
-    const statusDiv = document.getElementById('status');
-    if (statusDiv) statusDiv.textContent = message;
+    // Status div removed - log to console instead
+    console.log(message);
 }
 
 function fitAllPaths() {
@@ -848,10 +830,8 @@ function fitAllPaths() {
     }
 }
 
-// Make functions available globally
-window.refreshPaths = loadAllData;
+// Make functions available globally (keeping for compatibility)
 window.fitAllPaths = fitAllPaths;
-window.setTimeRangeByIndex = setTimeRangeByIndex;
 
 // User geolocation
 if ('geolocation' in navigator) {

@@ -35,22 +35,11 @@ html, body {
     color: #333;
     font-size: 16px;
     text-align: center;
+    font-weight: 600;
 }
 
 .control-group {
     margin-bottom: 15px;
-}
-
-.control-group button {
-    background: #007bff;
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    margin-right: 5px;
-    margin-bottom: 5px;
 }
 
 .control-group input[type="range"] {
@@ -91,31 +80,6 @@ html, body {
     font-weight: 500;
     color: #333;
     font-size: 13px;
-}
-
-.time-presets {
-    display: flex;
-    justify-content: space-between;
-    gap: 4px;
-    margin-top: 8px;
-}
-
-.time-presets button {
-    flex: 1;
-    padding: 6px 4px;
-    font-size: 11px;
-    background: #f8f9fa;
-    color: #666;
-    border: 1px solid #ddd;
-    border-radius: 3px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.time-presets button:hover {
-    background: #007bff;
-    color: white;
-    border-color: #007bff;
 }
 
 .legend {
@@ -168,15 +132,6 @@ html, body {
     border-radius: 1px;
 }
 
-.status {
-    background: #f8f9fa;
-    padding: 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    color: #666;
-    border-left: 3px solid #007bff;
-}
-
 /* Mobile responsiveness */
 @media (max-width: 768px) {
     #controls {
@@ -196,11 +151,6 @@ html, body {
 
     .control-panel {
         padding: 10px;
-    }
-
-    .control-group button {
-        width: 48%;
-        margin-right: 2%;
     }
 }
 
