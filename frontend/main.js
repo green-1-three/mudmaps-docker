@@ -2,7 +2,7 @@ import './style.css';
 import { Map, View } from 'ol';
 import TileLayer from 'ol/layer/Tile';
 import XYZ from 'ol/source/XYZ';
-import { fromLonLat } from 'ol/proj';
+import { fromLonLat, toLonLat } from 'ol/proj';
 import { Feature } from 'ol';
 import { Point, LineString } from 'ol/geom';
 import { Vector as VectorLayer } from 'ol/layer';
@@ -807,7 +807,7 @@ function setupAddressSearch() {
         
         searchTimeout = setTimeout(() => {
             performAddressSearch(query);
-        }, 500);
+        }, 200);
     });
 }
 
@@ -817,12 +817,18 @@ async function performAddressSearch(query) {
     searchResults.innerHTML = '<div class="search-loading">Searching...</div>';
 
     try {
-        // Use Nominatim API with a bounding box around New England for better results
-        // Bounding box: roughly Vermont, New Hampshire, Maine area
-        const bounds = '-73.5,41.5,-66.5,47.5'; // left,bottom,right,top
+        // Get current map view bounds to prioritize visible results
+        const view = map.getView();
+        const extent = view.calculateExtent(map.getSize());
+        const bottomLeft = toLonLat([extent[0], extent[1]]);
+        const topRight = toLonLat([extent[2], extent[3]]);
+        
+        // Format as viewbox: left,bottom,right,top
+        const viewbox = `${bottomLeft[0]},${bottomLeft[1]},${topRight[0]},${topRight[1]}`;
+        
         const url = `https://nominatim.openstreetmap.org/search?` +
             `format=json&q=${encodeURIComponent(query)}&` +
-            `bounded=1&viewbox=${bounds}&` +
+            `viewbox=${viewbox}&bounded=0&` +
             `addressdetails=1&limit=5`;
 
         const response = await fetch(url, {
