@@ -82,12 +82,12 @@ async function fetchJSON(url) {
     return r.json();
 }
 
-// Map setup with CartoDB Positron (light, minimal basemap)
+// Map setup with CartoDB Dark Matter (dark background for better contrast)
 const map = new Map({
     target: 'map',
     layers: [new TileLayer({ 
         source: new XYZ({
-            url: 'https://{a-d}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+            url: 'https://{a-d}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
             attributions: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>'
         })
     })],
@@ -709,9 +709,6 @@ function createUI() {
                     <span id="gradientCenter">12 hours</span>
                     <span id="gradientRight">1 day</span>
                 </div>
-                <div class="legend-separator"></div>
-                <div class="legend-item"><span class="line-solid"></span> Road-matched</div>
-                <div class="legend-item"><span class="line-dashed"></span> GPS direct (gaps filtered)</div>
             </div>
         </div>
     `;
