@@ -828,7 +828,7 @@ async function performAddressSearch(query) {
         
         const url = `https://nominatim.openstreetmap.org/search?` +
             `format=json&q=${encodeURIComponent(query)}&` +
-            `viewbox=${viewbox}&bounded=0&` +
+            `viewbox=${viewbox}&bounded=1&` +
             `addressdetails=1&limit=5`;
 
         const response = await fetch(url, {
