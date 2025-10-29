@@ -137,6 +137,30 @@ html, body {
     color: #666;
 }
 
+.gradient-bar {
+    height: 20px;
+    background: linear-gradient(to right, #00ff00 0%, #ffff00 50%, #ff8800 75%, #808080 100%);
+    border-radius: 4px;
+    margin: 8px 0;
+}
+
+.gradient-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+.gradient-labels span {
+    text-align: center;
+}
+
+.gradient-labels #gradientCenter {
+    position: relative;
+    left: 0;
+}
+
 .color-box {
     width: 16px;
     height: 3px;

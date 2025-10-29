@@ -716,14 +716,13 @@ function createUI() {
             </div>
             
             <div class="legend">
-                <div class="legend-title">Path Age (scales with time range):</div>
-                <div class="legend-item"><span class="color-box" style="background: #00ff00;"></span> Just now (0%)</div>
-                <div class="legend-item"><span class="color-box" style="background: #80ff00;"></span> 25% of range</div>
-                <div class="legend-item"><span class="color-box" style="background: #ffff00;"></span> 50% of range</div>
-                <div class="legend-item"><span class="color-box" style="background: #ffcc00;"></span> 62.5% of range</div>
-                <div class="legend-item"><span class="color-box" style="background: #ff8800;"></span> 75% of range</div>
-                <div class="legend-item"><span class="color-box" style="background: #cc8844;"></span> 87.5% of range</div>
-                <div class="legend-item"><span class="color-box" style="background: #808080;"></span> 100% (oldest)</div>
+                <div class="legend-title">Path Age:</div>
+                <div class="gradient-bar"></div>
+                <div class="gradient-labels">
+                    <span id="gradientLeft">Now</span>
+                    <span id="gradientCenter">12 hours</span>
+                    <span id="gradientRight">1 day</span>
+                </div>
                 <div class="legend-separator"></div>
                 <div class="legend-item"><span class="line-solid"></span> Road-matched</div>
                 <div class="legend-item"><span class="line-dashed"></span> GPS direct (gaps filtered)</div>
@@ -767,6 +766,34 @@ function setupTimeSlider() {
     });
 }
 
+function formatTimeLabel(minutes) {
+    if (minutes < 60) {
+        return `${minutes} min`;
+    } else if (minutes < 1440) {
+        const hours = Math.round(minutes / 60);
+        return hours === 1 ? '1 hour' : `${hours} hours`;
+    } else {
+        const days = Math.round(minutes / 1440);
+        return days === 1 ? '1 day' : `${days} days`;
+    }
+}
+
+function updateGradientLabels(hours) {
+    const leftLabel = document.getElementById('gradientLeft');
+    const centerLabel = document.getElementById('gradientCenter');
+    const rightLabel = document.getElementById('gradientRight');
+    
+    if (leftLabel) leftLabel.textContent = 'Now';
+    
+    // Center is 50% of range
+    const centerMinutes = (hours * 60) / 2;
+    if (centerLabel) centerLabel.textContent = formatTimeLabel(centerMinutes);
+    
+    // Right is 100% of range
+    const rightMinutes = hours * 60;
+    if (rightLabel) rightLabel.textContent = formatTimeLabel(rightMinutes);
+}
+
 function updateTimeDisplay(hours) {
     const timeValue = document.getElementById('timeValue');
 
@@ -785,6 +812,9 @@ function updateTimeDisplay(hours) {
     } else if (hours === 168) {
         timeValue.textContent = 'Last 7 days';
     }
+    
+    // Update gradient labels
+    updateGradientLabels(hours);
 }
 
 function setTimeRangeByIndex(index) {
@@ -851,4 +881,5 @@ map.on('click', (event) => {
 // Initialize
 console.log('🗺️ Initializing MudMaps (OPTIMIZED with 7-day preload)...');
 createUI();
+updateGradientLabels(currentTimeHours); // Set initial gradient labels
 loadAllData();
