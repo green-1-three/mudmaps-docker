@@ -707,42 +707,42 @@ function createCurrentPositionStyleWithFilter(feature) {
 
 // Create simple UI
 function createUI() {
-    const controlsDiv = document.createElement('div');
-    controlsDiv.id = 'controls';
-    controlsDiv.innerHTML = `
-        <div class="control-panel">
-            <h3>Latest Snowplow Activity</h3>
-            
-            <div class="control-group">
-                <label for="addressSearch">Search Address:</label>
-                <div class="search-container">
-                    <input type="text" id="addressSearch" placeholder="Enter street address...">
-                    <button id="searchButton">🔍</button>
-                </div>
-                <div id="searchResults" class="search-results"></div>
-            </div>
-            
-            <div class="control-group">
-                <label for="timeRange">Time Range:</label>
-                <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
-                <div class="time-display">
-                    <span id="timeValue">Last 1 day</span>
-                </div>
-            </div>
-            
-            <div class="legend">
-                <div class="legend-title">Path Age:</div>
-                <div class="gradient-bar"></div>
-                <div class="gradient-labels">
-                    <span id="gradientLeft">Now</span>
-                    <span id="gradientCenter">12 hours</span>
-                    <span id="gradientRight">1 day</span>
-                </div>
-            </div>
+    // Search bar (top-left)
+    const searchDiv = document.createElement('div');
+    searchDiv.id = 'search-bar';
+    searchDiv.innerHTML = `
+        <div class="search-input-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="addressSearch" placeholder="Search address...">
+        </div>
+        <div id="searchResults" class="search-results"></div>
+    `;
+    document.body.appendChild(searchDiv);
+
+    // Time controls (bottom-left)
+    const timeControlsDiv = document.createElement('div');
+    timeControlsDiv.id = 'time-controls';
+    timeControlsDiv.innerHTML = `
+        <div class="time-label">Show Activity:</div>
+        <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
+        <div class="time-value" id="timeValue">Last 1 day</div>
+    `;
+    document.body.appendChild(timeControlsDiv);
+
+    // Legend (bottom-right)
+    const legendDiv = document.createElement('div');
+    legendDiv.id = 'legend-panel';
+    legendDiv.innerHTML = `
+        <div class="legend-title">Path Age</div>
+        <div class="gradient-bar"></div>
+        <div class="gradient-labels">
+            <span id="gradientLeft">Now</span>
+            <span id="gradientCenter">12h</span>
+            <span id="gradientRight">1d</span>
         </div>
     `;
+    document.body.appendChild(legendDiv);
 
-    document.body.appendChild(controlsDiv);
     setupTimeSlider();
     setupAddressSearch();
 }
@@ -778,16 +778,7 @@ function setupTimeSlider() {
 // Setup address search functionality
 function setupAddressSearch() {
     const searchInput = document.getElementById('addressSearch');
-    const searchButton = document.getElementById('searchButton');
     const searchResults = document.getElementById('searchResults');
-
-    // Search on button click
-    searchButton.addEventListener('click', () => {
-        const query = searchInput.value.trim();
-        if (query) {
-            performAddressSearch(query);
-        }
-    });
 
     // Search on Enter key
     searchInput.addEventListener('keypress', (e) => {
@@ -797,6 +788,22 @@ function setupAddressSearch() {
                 performAddressSearch(query);
             }
         }
+    });
+
+    // Also trigger search as user types (debounced)
+    let searchTimeout;
+    searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const query = e.target.value.trim();
+        
+        if (query.length < 3) {
+            searchResults.innerHTML = '';
+            return;
+        }
+        
+        searchTimeout = setTimeout(() => {
+            performAddressSearch(query);
+        }, 500);
     });
 }
 
