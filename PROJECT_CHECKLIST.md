@@ -29,7 +29,7 @@ MudMaps is a real-time GPS tracking system designed for municipalities to track 
 **Context:** Essential features for residents to interact with and understand the map data.
 
 - [x] **Time slider with scale toggle** - Single slider control that switches between two modes: "0-24 hours" scale and "0-7 days" scale. Button to toggle between modes. Dragging slider instantly shows/hides polylines (no API calls).
-- [ ] **Address search** - Search box where residents can type their address/street name. Map zooms to that location and highlights relevant polylines.
+- [x] **Address search** - Search box where residents can type their address/street name. Map zooms to that location and highlights relevant polylines.
 - [ ] **Town boundaries with gray overlay** - Display all towns on single map. Participating towns show full-color data with clear boundaries. Non-participating towns show gray overlay with "Not available in [Town Name]" message. Residents near town borders can view neighboring coverage. Also serves as marketing (towns see neighbors have service, creates FOMO).
 - [ ] **Hover for timestamp (desktop)** - On desktop, hovering over any polyline segment displays tooltip with "Last plowed at [timestamp]". Requires geospatial intersection detection to find polyline under cursor. (Mobile: tap/click - will implement later during mobile optimization pass)
 - [ ] **Direction arrows on polylines** - Add directional arrows along polyline paths to show which direction the plow traveled. Helps residents understand if plow is coming toward or away from their location.

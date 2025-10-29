@@ -98,6 +98,7 @@ const map = new Map({
 // Vector sources for different layers
 const pathsSource = new VectorSource();
 const unmatchedPathsSource = new VectorSource();
+const arrowsSource = new VectorSource();
 const currentPositionsSource = new VectorSource();
 const userLocationSource = new VectorSource();
 const searchResultSource = new VectorSource();
@@ -113,6 +114,12 @@ map.addLayer(new VectorLayer({
     source: unmatchedPathsSource,
     zIndex: 0,
     style: createUnmatchedPathStyleWithFilter
+}));
+
+map.addLayer(new VectorLayer({
+    source: arrowsSource,
+    zIndex: 1.5,
+    style: createArrowStyleWithFilter
 }));
 
 map.addLayer(new VectorLayer({
@@ -265,6 +272,126 @@ function createCurrentPositionStyle(feature) {
     });
 }
 
+// Calculate bearing between two points (in degrees)
+function calculateBearing(coord1, coord2) {
+    const dx = coord2[0] - coord1[0];
+    const dy = coord2[1] - coord1[1];
+    return Math.atan2(dx, dy);
+}
+
+// Create a chevron (">") geometry at a point with rotation
+function createChevronGeometry(point, bearing, size = 8) {
+    const angle = bearing;
+    
+    // Chevron points (two lines forming ">")
+    const armLength = size;
+    const armAngle = Math.PI / 6; // 30 degrees
+    
+    // Upper arm
+    const upperArm = new LineString([
+        point,
+        [
+            point[0] + armLength * Math.sin(angle - armAngle),
+            point[1] + armLength * Math.cos(angle - armAngle)
+        ]
+    ]);
+    
+    // Lower arm
+    const lowerArm = new LineString([
+        point,
+        [
+            point[0] + armLength * Math.sin(angle + armAngle),
+            point[1] + armLength * Math.cos(angle + armAngle)
+        ]
+    ]);
+    
+    return [upperArm, lowerArm];
+}
+
+// Style for direction arrows
+function createArrowStyle(feature) {
+    const timestamp = feature.get('timestamp');
+    const color = timestamp ? getColorByAge(timestamp) : '#0066cc';
+    const geometries = feature.getGeometry();
+    
+    return [
+        new Style({
+            geometry: geometries[0],
+            stroke: new Stroke({
+                color: color,
+                width: 2
+            })
+        }),
+        new Style({
+            geometry: geometries[1],
+            stroke: new Stroke({
+                color: color,
+                width: 2
+            })
+        })
+    ];
+}
+
+// Generate arrow features for a line segment
+function generateArrowsForSegment(segment, zoom) {
+    // Only show arrows at zoom 14+
+    if (zoom < 14) return [];
+    
+    const geometry = segment.getGeometry();
+    const coords = geometry.getCoordinates();
+    
+    if (coords.length < 2) return [];
+    
+    const timestamp = segment.get('timestamp');
+    const polylineEndTime = segment.get('polylineEndTime');
+    const device = segment.get('device');
+    
+    // Calculate spacing based on zoom (more arrows when zoomed in)
+    // At zoom 14: ~100 pixels, at zoom 18: ~25 pixels
+    const baseSpacing = 100;
+    const zoomFactor = Math.pow(2, zoom - 14);
+    const spacing = baseSpacing / zoomFactor;
+    
+    // Calculate segment length in pixels (approximate)
+    const dx = coords[1][0] - coords[0][0];
+    const dy = coords[1][1] - coords[0][1];
+    const segmentLength = Math.sqrt(dx * dx + dy * dy);
+    
+    // Convert to meters (rough approximation at mid-latitudes)
+    const metersPerUnit = 111320;
+    const segmentLengthMeters = segmentLength * metersPerUnit;
+    
+    // Calculate how many arrows to place
+    const numArrows = Math.max(1, Math.floor(segmentLengthMeters / spacing));
+    
+    if (numArrows === 0) return [];
+    
+    const bearing = calculateBearing(coords[0], coords[1]);
+    const arrows = [];
+    
+    // Place arrows evenly along the segment
+    for (let i = 0; i < numArrows; i++) {
+        const t = (i + 1) / (numArrows + 1); // Position along segment (0 to 1)
+        const point = [
+            coords[0][0] + t * (coords[1][0] - coords[0][0]),
+            coords[0][1] + t * (coords[1][1] - coords[0][1])
+        ];
+        
+        const chevronGeometries = createChevronGeometry(point, bearing, 8);
+        
+        const arrowFeature = new Feature({
+            geometry: chevronGeometries,
+            timestamp: timestamp,
+            polylineEndTime: polylineEndTime,
+            device: device
+        });
+        
+        arrows.push(arrowFeature);
+    }
+    
+    return arrows;
+}
+
 // Function to create path segments from coordinate array
 function createPathSegments(coordinates, deviceName, polylineEndTime, isMatched = true) {
     const segments = [];
@@ -362,6 +489,27 @@ async function processBatchesInChunks(batches, minuteMarkers, deviceName) {
     return allSegments;
 }
 
+// Regenerate arrows for all visible segments at current zoom level
+function regenerateArrows() {
+    const zoom = map.getView().getZoom();
+    
+    // Clear existing arrows
+    arrowsSource.clear();
+    
+    // Only generate arrows at zoom 14+
+    if (zoom < 14) return;
+    
+    const allSegments = pathsSource.getFeatures();
+    const allArrows = [];
+    
+    for (const segment of allSegments) {
+        const arrows = generateArrowsForSegment(segment, zoom);
+        allArrows.push(...arrows);
+    }
+    
+    arrowsSource.addFeatures(allArrows);
+}
+
 // ✨ OPTIMIZED: Load all data once on startup (7 days)
 async function loadAllData() {
     try {
@@ -392,6 +540,7 @@ async function loadAllData() {
         // Clear existing features
         pathsSource.clear();
         unmatchedPathsSource.clear();
+        arrowsSource.clear();
         currentPositionsSource.clear();
 
         let totalMatchedSegments = 0;
@@ -420,11 +569,15 @@ async function loadAllData() {
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total load time: ${totalTime.toFixed(0)}ms`);
 
+        // Generate arrows for initial zoom level
+        regenerateArrows();
+
         // Fit map to show paths from initial time range (24 hours)
         // The style filter will hide older features
         isSliderDragging = true; // Enable filtering
         pathsSource.changed();
         unmatchedPathsSource.changed();
+        arrowsSource.changed();
         currentPositionsSource.changed();
         isSliderDragging = false; // Disable filtering (features are already filtered)
 
@@ -479,6 +632,7 @@ async function loadAndDisplayPaths() {
         // Clear existing features
         pathsSource.clear();
         unmatchedPathsSource.clear();
+        arrowsSource.clear();
         currentPositionsSource.clear();
 
         let totalMatchedSegments = 0;
@@ -537,6 +691,9 @@ async function loadAndDisplayPaths() {
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total render time: ${totalTime.toFixed(0)}ms`);
 
+        // Generate arrows for current zoom level
+        regenerateArrows();
+
         // Fit map to show all paths
         const allFeatures = [
             ...pathsSource.getFeatures(),
@@ -586,6 +743,26 @@ function createPathStyleWithFilter(feature) {
             width: 3
         })
     });
+}
+
+function createArrowStyleWithFilter(feature) {
+    const zoom = map.getView().getZoom();
+    
+    // Hide arrows below zoom 14
+    if (zoom < 14) return null;
+    
+    // If dragging, check if feature should be visible based on time
+    if (isSliderDragging) {
+        const polylineEndTime = feature.get('polylineEndTime');
+        if (polylineEndTime) {
+            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+            if (polylineEndTime < cutoffTime) {
+                return null; // Hide feature
+            }
+        }
+    }
+    
+    return createArrowStyle(feature);
 }
 
 function createUnmatchedPathStyleWithFilter(feature) {
@@ -706,6 +883,7 @@ function setupTimeSlider() {
         isSliderDragging = true;
         pathsSource.changed();
         unmatchedPathsSource.changed();
+        arrowsSource.changed();
         currentPositionsSource.changed();
     });
 
@@ -961,6 +1139,11 @@ map.on('click', (event) => {
             showStatus(`Device: ${device}${matchStatus}, Time: ${timestamp ? new Date(timestamp).toLocaleString() : 'Unknown'}`);
         }
     }
+});
+
+// Add zoom change listener to regenerate arrows
+map.getView().on('change:resolution', () => {
+    regenerateArrows();
 });
 
 // Initialize
