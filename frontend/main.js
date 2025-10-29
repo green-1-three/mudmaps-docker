@@ -719,29 +719,33 @@ function createUI() {
     `;
     document.body.appendChild(searchDiv);
 
-    // Time controls (bottom-left)
-    const timeControlsDiv = document.createElement('div');
-    timeControlsDiv.id = 'time-controls';
-    timeControlsDiv.innerHTML = `
-        <div class="time-label">Show Activity:</div>
-        <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
-        <div class="time-value" id="timeValue">Last 1 day</div>
-    `;
-    document.body.appendChild(timeControlsDiv);
-
-    // Legend (bottom-right)
-    const legendDiv = document.createElement('div');
-    legendDiv.id = 'legend-panel';
-    legendDiv.innerHTML = `
-        <div class="legend-title">Path Age</div>
-        <div class="gradient-bar"></div>
-        <div class="gradient-labels">
-            <span id="gradientLeft">Now</span>
-            <span id="gradientCenter">12h</span>
-            <span id="gradientRight">1d</span>
+    // Control panel (top-right) - back to original design
+    const controlsDiv = document.createElement('div');
+    controlsDiv.id = 'controls';
+    controlsDiv.innerHTML = `
+        <div class="control-panel">
+            <h3>Latest Snowplow Activity</h3>
+            
+            <div class="control-group">
+                <label for="timeRange">Time Range:</label>
+                <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
+                <div class="time-display">
+                    <span id="timeValue">Last 1 day</span>
+                </div>
+            </div>
+            
+            <div class="legend">
+                <div class="legend-title">Path Age:</div>
+                <div class="gradient-bar"></div>
+                <div class="gradient-labels">
+                    <span id="gradientLeft">Now</span>
+                    <span id="gradientCenter">12 hours</span>
+                    <span id="gradientRight">1 day</span>
+                </div>
+            </div>
         </div>
     `;
-    document.body.appendChild(legendDiv);
+    document.body.appendChild(controlsDiv);
 
     setupTimeSlider();
     setupAddressSearch();
