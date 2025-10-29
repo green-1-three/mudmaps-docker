@@ -764,12 +764,7 @@ function createPathStyleWithFilter(feature) {
     });
 }
 
-function createArrowStyleWithFilter(feature) {
-    const zoom = map.getView().getZoom();
-    
-    // Hide arrows below zoom 14
-    if (zoom < 14) return null;
-    
+function createArrowStyleWithFilter(feature) {    
     // If dragging, check if feature should be visible based on time
     if (isSliderDragging) {
         const polylineEndTime = feature.get('polylineEndTime');
