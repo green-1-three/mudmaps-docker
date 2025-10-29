@@ -21,8 +21,8 @@ MudMaps is a real-time GPS tracking system designed for municipalities to track 
 ### Phase 1: Data Foundation
 **Context:** Currently loading polylines based on time filter from backend. Need to preload all data and filter client-side for instant responsiveness.
 
-- [ ] **Preload week's data** - Modify backend endpoint to return all polylines from last 7 days at once, load into frontend on page load
-- [ ] **Time-based filtering logic** - Implement client-side show/hide of polylines based on selected time range (no re-fetching from server)
+- [x] **Preload week's data** - Modify backend endpoint to return all polylines from last 7 days at once, load into frontend on page load
+- [x] **Time-based filtering logic** - Implement client-side show/hide of polylines based on selected time range (no re-fetching from server)
 - [ ] **Smooth gradient coloring** - Replace discrete color buckets with interpolated gradient: 0min=bright green → 6hrs=yellow → 12hrs=orange → 24hrs=gray. Calculate exact age of each polyline segment and interpolate color accordingly.
 
 ### Phase 2: Core Interactions

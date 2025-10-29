@@ -111,10 +111,19 @@ async function processDeviceData(client, device_id) {
         `, [device_id]);
         
         // Combine last processed point (if exists) with new unprocessed points
+        // BUT ONLY if it's within 5 minutes of the first unprocessed point
         let allPoints = [];
-        if (lastProcessedResult.rows.length > 0) {
-            allPoints.push(lastProcessedResult.rows[0]);
-            log(`   🔗 Including last processed point for seamless connection`);
+        if (lastProcessedResult.rows.length > 0 && gpsResult.rows.length > 0) {
+            const lastProcessedTime = new Date(lastProcessedResult.rows[0].recorded_at);
+            const firstUnprocessedTime = new Date(gpsResult.rows[0].recorded_at);
+            const gapMinutes = (firstUnprocessedTime - lastProcessedTime) / 1000 / 60;
+            
+            if (gapMinutes <= 5) {
+                allPoints.push(lastProcessedResult.rows[0]);
+                log(`   🔗 Including last processed point for seamless connection (gap: ${gapMinutes.toFixed(1)}min)`);
+            } else {
+                log(`   ⚠️  Skipping last processed point - gap too large (${gapMinutes.toFixed(1)} minutes)`);
+            }
         }
         allPoints = allPoints.concat(gpsResult.rows);
         
@@ -271,6 +280,30 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
         
     } catch (error) {
         log(`   ❌ Error processing batch: ${error.message}`);
+        
+        // Check how many times these points have failed
+        const failureCountResult = await client.query(`
+            SELECT COUNT(DISTINCT pl.batch_id) as failure_count
+            FROM processing_log pl
+            WHERE pl.status = 'failed'
+            AND pl.device_id = $1
+            AND pl.start_time >= $2
+            AND pl.end_time <= $3
+        `, [device_id, startTime, endTime]);
+        
+        const failureCount = parseInt(failureCountResult.rows[0].failure_count) + 1; // +1 for current failure
+        
+        log(`   📊 Batch failure count: ${failureCount}`);
+        
+        // After 3 failures, mark points as processed with error flag
+        if (failureCount >= 3 && pointIds.length > 0) {
+            log(`   🗑️  Permanently abandoning ${pointIds.length} points after ${failureCount} failures`);
+            await client.query(`
+                UPDATE gps_raw_data 
+                SET processed = TRUE, batch_id = $1
+                WHERE id = ANY($2)
+            `, [batchId, pointIds]);
+        }
         
         // Update processing log - failure
         await client.query(`
