@@ -146,7 +146,7 @@ map.addLayer(new VectorLayer({
             }),
             text: new Text({
                 text: name,
-                offsetY: -45,
+                offsetY: -60,
                 fill: new Fill({ color: '#000' }),
                 stroke: new Stroke({ color: '#fff', width: 3 }),
                 font: 'bold 13px Arial'
@@ -814,9 +814,17 @@ function showSearchResult(result) {
     const lon = result.center[0];
     const lat = result.center[1];
 
-    // Extract just the street address (first part before the comma)
-    const addressParts = result.place_name.split(',');
-    const streetAddress = addressParts[0].trim();
+    // Parse address components for label: street, town, state
+    const addressParts = result.place_name.split(',').map(s => s.trim());
+    let displayAddress = '';
+    
+    if (addressParts.length >= 3) {
+        // Format: "Street, Town, State"
+        displayAddress = `${addressParts[0]}, ${addressParts[1]}, ${addressParts[2]}`;
+    } else {
+        // Fallback to first part
+        displayAddress = addressParts[0];
+    }
 
     // Clear previous search result
     searchResultSource.clear();
@@ -824,7 +832,7 @@ function showSearchResult(result) {
     // Add marker at the search result location
     const feature = new Feature({
         geometry: new Point(fromLonLat([lon, lat])),
-        name: streetAddress
+        name: displayAddress
     });
 
     searchResultSource.addFeature(feature);
