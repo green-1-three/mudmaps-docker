@@ -800,7 +800,7 @@ function setupAddressSearch() {
         clearTimeout(searchTimeout);
         const query = e.target.value.trim();
         
-        if (query.length < 3) {
+        if (query.length < 1) {
             searchResults.innerHTML = '';
             return;
         }
