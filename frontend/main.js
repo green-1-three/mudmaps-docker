@@ -312,24 +312,13 @@ function createChevronGeometry(point, bearing, size = 8) {
 function createArrowStyle(feature) {
     const timestamp = feature.get('timestamp');
     const color = timestamp ? getColorByAge(timestamp) : '#0066cc';
-    const geometries = feature.getGeometry();
     
-    return [
-        new Style({
-            geometry: geometries[0],
-            stroke: new Stroke({
-                color: color,
-                width: 2
-            })
-        }),
-        new Style({
-            geometry: geometries[1],
-            stroke: new Stroke({
-                color: color,
-                width: 2
-            })
+    return new Style({
+        stroke: new Stroke({
+            color: color,
+            width: 2
         })
-    ];
+    });
 }
 
 // Generate arrow features for a line segment
@@ -377,16 +366,24 @@ function generateArrowsForSegment(segment, zoom) {
             coords[0][1] + t * (coords[1][1] - coords[0][1])
         ];
         
-        const chevronGeometries = createChevronGeometry(point, bearing, 8);
+        const chevronLines = createChevronGeometry(point, bearing, 8);
         
-        const arrowFeature = new Feature({
-            geometry: chevronGeometries,
+        // Create two separate features for each arm of the chevron
+        const upperArmFeature = new Feature({
+            geometry: chevronLines[0],
             timestamp: timestamp,
             polylineEndTime: polylineEndTime,
             device: device
         });
         
-        arrows.push(arrowFeature);
+        const lowerArmFeature = new Feature({
+            geometry: chevronLines[1],
+            timestamp: timestamp,
+            polylineEndTime: polylineEndTime,
+            device: device
+        });
+        
+        arrows.push(upperArmFeature, lowerArmFeature);
     }
     
     return arrows;
