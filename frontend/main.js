@@ -123,18 +123,62 @@ map.addLayer(new VectorLayer({
     })
 }));
 
-// Function to get color based on time recency
-function getColorByAge(timestamp) {
+// Helper function to interpolate between two colors
+function interpolateColor(color1, color2, factor) {
+    // Parse hex colors
+    const r1 = parseInt(color1.slice(1, 3), 16);
+    const g1 = parseInt(color1.slice(3, 5), 16);
+    const b1 = parseInt(color1.slice(5, 7), 16);
+    
+    const r2 = parseInt(color2.slice(1, 3), 16);
+    const g2 = parseInt(color2.slice(3, 5), 16);
+    const b2 = parseInt(color2.slice(5, 7), 16);
+    
+    // Interpolate
+    const r = Math.round(r1 + (r2 - r1) * factor);
+    const g = Math.round(g1 + (g2 - g1) * factor);
+    const b = Math.round(b1 + (b2 - b1) * factor);
+    
+    // Convert back to hex
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+// Function to get color based on time recency with smooth gradient
+// Gradient dynamically scales to the selected time range
+function getColorByAge(timestamp, maxHours = currentTimeHours) {
     const now = Date.now();
     const recordTime = new Date(timestamp).getTime();
     const ageMinutes = (now - recordTime) / (1000 * 60);
-
-    if (ageMinutes < 5) return '#ff0000';
-    if (ageMinutes < 30) return '#ff4500';
-    if (ageMinutes < 60) return '#ffa500';
-    if (ageMinutes < 120) return '#ffff00';
-    if (ageMinutes < 360) return '#90ee90';
-    return '#808080';
+    const maxMinutes = maxHours * 60;
+    
+    // If older than the selected range, return gray
+    if (ageMinutes >= maxMinutes) return '#808080';
+    
+    // Calculate position in the range (0 = now, 1 = max age)
+    const position = ageMinutes / maxMinutes;
+    
+    // Color stops that scale to the selected range:
+    // 0% = bright green, 50% = yellow, 75% = orange, 100% = gray
+    const stops = [
+        { position: 0.00, color: '#00ff00' },   // Now: Bright green
+        { position: 0.50, color: '#ffff00' },   // Midpoint: Yellow
+        { position: 0.75, color: '#ff8800' },   // 75%: Orange
+        { position: 1.00, color: '#808080' }    // Max age: Gray
+    ];
+    
+    // Find which two stops we're between
+    for (let i = 0; i < stops.length - 1; i++) {
+        if (position >= stops[i].position && position <= stops[i + 1].position) {
+            const rangeDuration = stops[i + 1].position - stops[i].position;
+            const positionInRange = position - stops[i].position;
+            const factor = positionInRange / rangeDuration;
+            
+            return interpolateColor(stops[i].color, stops[i + 1].color, factor);
+        }
+    }
+    
+    // Default to bright green for brand new data
+    return '#00ff00';
 }
 
 // Style function for path segments
@@ -675,13 +719,14 @@ function createUI() {
             </div>
             
             <div class="legend">
-                <div class="legend-title">Path Age Colors:</div>
-                <div class="legend-item"><span class="color-box" style="background: #ff0000;"></span> < 5 min</div>
-                <div class="legend-item"><span class="color-box" style="background: #ff4500;"></span> < 30 min</div>
-                <div class="legend-item"><span class="color-box" style="background: #ffa500;"></span> < 1 hour</div>
-                <div class="legend-item"><span class="color-box" style="background: #ffff00;"></span> < 2 hours</div>
-                <div class="legend-item"><span class="color-box" style="background: #90ee90;"></span> < 6 hours</div>
-                <div class="legend-item"><span class="color-box" style="background: #808080;"></span> > 6 hours</div>
+                <div class="legend-title">Path Age (scales with time range):</div>
+                <div class="legend-item"><span class="color-box" style="background: #00ff00;"></span> Just now (0%)</div>
+                <div class="legend-item"><span class="color-box" style="background: #80ff00;"></span> 25% of range</div>
+                <div class="legend-item"><span class="color-box" style="background: #ffff00;"></span> 50% of range</div>
+                <div class="legend-item"><span class="color-box" style="background: #ffcc00;"></span> 62.5% of range</div>
+                <div class="legend-item"><span class="color-box" style="background: #ff8800;"></span> 75% of range</div>
+                <div class="legend-item"><span class="color-box" style="background: #cc8844;"></span> 87.5% of range</div>
+                <div class="legend-item"><span class="color-box" style="background: #808080;"></span> 100% (oldest)</div>
                 <div class="legend-separator"></div>
                 <div class="legend-item"><span class="line-solid"></span> Road-matched</div>
                 <div class="legend-item"><span class="line-dashed"></span> GPS direct (gaps filtered)</div>
