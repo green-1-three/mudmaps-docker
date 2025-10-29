@@ -136,20 +136,23 @@ map.addLayer(new VectorLayer({
 map.addLayer(new VectorLayer({
     source: searchResultSource,
     zIndex: 4,
-    style: new Style({
-        image: new Icon({
-            anchor: [0.5, 1],
-            src: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
-            scale: 1.5
-        }),
-        text: new Text({
-            text: '📍 Search Result',
-            offsetY: -45,
-            fill: new Fill({ color: '#000' }),
-            stroke: new Stroke({ color: '#fff', width: 3 }),
-            font: 'bold 13px Arial'
-        })
-    })
+    style: (feature) => {
+        const name = feature.get('name') || 'Search Result';
+        return new Style({
+            image: new Icon({
+                anchor: [0.5, 1],
+                src: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+                scale: 1.5
+            }),
+            text: new Text({
+                text: name,
+                offsetY: -45,
+                fill: new Fill({ color: '#000' }),
+                stroke: new Stroke({ color: '#fff', width: 3 }),
+                font: 'bold 13px Arial'
+            })
+        });
+    }
 }));
 
 // Helper function to interpolate between two colors
@@ -410,26 +413,8 @@ async function loadAllData() {
                 }
             }
 
-            // Add current position marker
-            if (device.polylines && device.polylines.length > 0) {
-                const lastPolyline = device.polylines[device.polylines.length - 1];
-                if (lastPolyline.encoded_polyline) {
-                    const coords = decodePolyline(lastPolyline.encoded_polyline);
-                    const lastCoord = coords[coords.length - 1];
-                    const lastPolylineEndTime = new Date(lastPolyline.end_time).getTime();
-                    
-                    if (lastCoord && lastCoord.length === 2) {
-                        const currentPosFeature = new Feature({
-                            geometry: new Point(fromLonLat(lastCoord)),
-                            device: device.device,
-                            timestamp: device.end_time,
-                            polylineEndTime: lastPolylineEndTime,
-                            type: 'current_position'
-                        });
-                        currentPositionsSource.addFeature(currentPosFeature);
-                    }
-                }
-            }
+            // Don't add current position marker - removed per user request
+            // Device position markers are hidden
         }
 
         const totalTime = performance.now() - startTime;
@@ -546,51 +531,7 @@ async function loadAndDisplayPaths() {
                 totalUnmatchedSegments += segments.length;
             }
 
-            // Add current position marker
-            let lastCoord = null;
-            let lastPolylineEndTime = null;
-            if (device.polylines && device.polylines.length > 0) {
-                // Get last coordinate from last polyline
-                const lastPolyline = device.polylines[device.polylines.length - 1];
-                if (lastPolyline.encoded_polyline) {
-                    const coords = decodePolyline(lastPolyline.encoded_polyline);
-                    lastCoord = coords[coords.length - 1];
-                    lastPolylineEndTime = new Date(lastPolyline.end_time).getTime();
-                }
-            } else if (device.batches && device.batches.length > 0) {
-                for (let j = device.batches.length - 1; j >= 0; j--) {
-                    const batch = device.batches[j];
-                    if (batch.encoded_polyline) {
-                        const coords = decodePolyline(batch.encoded_polyline);
-                        lastCoord = coords[coords.length - 1];
-                        lastPolylineEndTime = Date.now();
-                        break;
-                    } else if (batch.raw_coordinates) {
-                        lastCoord = batch.raw_coordinates[batch.raw_coordinates.length - 1];
-                        lastPolylineEndTime = Date.now();
-                        break;
-                    }
-                }
-            } else if (device.encoded_path) {
-                const coords = decodePolyline(device.encoded_path);
-                lastCoord = coords[coords.length - 1];
-                lastPolylineEndTime = Date.now();
-            } else if (device.raw_coordinates) {
-                lastCoord = device.raw_coordinates[device.raw_coordinates.length - 1];
-                lastPolylineEndTime = Date.now();
-            }
-
-            if (lastCoord && lastCoord.length === 2) {
-                const currentPosFeature = new Feature({
-                    geometry: new Point(fromLonLat(lastCoord)),
-                    device: device.device,
-                    timestamp: device.end_time,
-                    polylineEndTime: lastPolylineEndTime,
-                    type: 'current_position'
-                });
-
-                currentPositionsSource.addFeature(currentPosFeature);
-            }
+            // Don't add current position marker - removed per user request
         }
 
         const totalTime = performance.now() - startTime;
@@ -873,16 +814,26 @@ function showSearchResult(result) {
     const lon = result.center[0];
     const lat = result.center[1];
 
+    // Extract just the street address (first part before the comma)
+    const addressParts = result.place_name.split(',');
+    const streetAddress = addressParts[0].trim();
+
     // Clear previous search result
     searchResultSource.clear();
 
     // Add marker at the search result location
     const feature = new Feature({
         geometry: new Point(fromLonLat([lon, lat])),
-        name: result.place_name
+        name: streetAddress
     });
 
     searchResultSource.addFeature(feature);
+
+    // Update search input with full address
+    const searchInput = document.getElementById('addressSearch');
+    if (searchInput) {
+        searchInput.value = result.place_name;
+    }
 
     // Zoom to the location
     map.getView().animate({
@@ -979,12 +930,12 @@ function fitAllPaths() {
 // Make functions available globally (keeping for compatibility)
 window.fitAllPaths = fitAllPaths;
 
-// User geolocation
+// User geolocation (no marker, just functionality)
 if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition((pos) => {
+        // Geolocation obtained but no marker displayed
         const coords = [pos.coords.longitude, pos.coords.latitude];
-        userLocationSource.clear();
-        userLocationSource.addFeature(new Feature({ geometry: new Point(fromLonLat(coords)) }));
+        console.log('User location:', coords);
     }, () => {}, { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 });
 }
 
