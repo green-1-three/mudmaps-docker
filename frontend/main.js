@@ -335,8 +335,9 @@ function generateArrowsForSegment(segment, zoom) {
     const polylineEndTime = segment.get('polylineEndTime');
     const device = segment.get('device');
     
-    // Arrow size scales with zoom (larger when zoomed in)
-    const arrowSize = 10 + (zoom - 14) * 3; // Size 10 at zoom 14, up to 22 at zoom 18
+    // Arrow size scales INVERSELY with zoom (larger when zoomed OUT for visibility)
+    // At zoom 14 (far): size 30, at zoom 18 (close): size 18, at zoom 22+: size 10
+    const arrowSize = Math.max(10, 30 - (zoom - 14) * 2);
     
     const bearing = calculateBearing(coords[0], coords[1]);
     
@@ -498,7 +499,9 @@ function regenerateArrows() {
         
         console.log(`🎯 Regenerating arrows for ${allSegments.length} segments at zoom ${zoom.toFixed(1)}`);
         
-        for (const segment of allSegments) {
+        // Only generate arrows for every 3rd segment
+        for (let i = 0; i < allSegments.length; i += 3) {
+            const segment = allSegments[i];
             const arrows = generateArrowsForSegment(segment, zoom);
             allArrows.push(...arrows);
         }
