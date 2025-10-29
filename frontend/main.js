@@ -336,8 +336,8 @@ function generateArrowsForSegment(segment, zoom) {
     const device = segment.get('device');
     
     // Calculate spacing based on zoom (more arrows when zoomed in)
-    // At zoom 14: ~100 pixels, at zoom 18: ~25 pixels
-    const baseSpacing = 100;
+    // Much more conservative spacing to avoid performance issues
+    const baseSpacing = 200; // Doubled from 100
     const zoomFactor = Math.pow(2, zoom - 14);
     const spacing = baseSpacing / zoomFactor;
     
@@ -350,8 +350,8 @@ function generateArrowsForSegment(segment, zoom) {
     const metersPerUnit = 111320;
     const segmentLengthMeters = segmentLength * metersPerUnit;
     
-    // Calculate how many arrows to place
-    const numArrows = Math.max(1, Math.floor(segmentLengthMeters / spacing));
+    // Calculate how many arrows to place - with maximum limit
+    const numArrows = Math.min(3, Math.max(0, Math.floor(segmentLengthMeters / spacing)));
     
     if (numArrows === 0) return [];
     
@@ -487,24 +487,35 @@ async function processBatchesInChunks(batches, minuteMarkers, deviceName) {
 }
 
 // Regenerate arrows for all visible segments at current zoom level
+let arrowRegenerationTimeout = null;
 function regenerateArrows() {
-    const zoom = map.getView().getZoom();
-    
-    // Clear existing arrows
-    arrowsSource.clear();
-    
-    // Only generate arrows at zoom 14+
-    if (zoom < 14) return;
-    
-    const allSegments = pathsSource.getFeatures();
-    const allArrows = [];
-    
-    for (const segment of allSegments) {
-        const arrows = generateArrowsForSegment(segment, zoom);
-        allArrows.push(...arrows);
+    // Debounce arrow regeneration to avoid excessive calls during zoom
+    if (arrowRegenerationTimeout) {
+        clearTimeout(arrowRegenerationTimeout);
     }
     
-    arrowsSource.addFeatures(allArrows);
+    arrowRegenerationTimeout = setTimeout(() => {
+        const zoom = map.getView().getZoom();
+        
+        // Clear existing arrows
+        arrowsSource.clear();
+        
+        // Only generate arrows at zoom 14+
+        if (zoom < 14) return;
+        
+        const allSegments = pathsSource.getFeatures();
+        const allArrows = [];
+        
+        console.log(`🎯 Regenerating arrows for ${allSegments.length} segments at zoom ${zoom.toFixed(1)}`);
+        
+        for (const segment of allSegments) {
+            const arrows = generateArrowsForSegment(segment, zoom);
+            allArrows.push(...arrows);
+        }
+        
+        console.log(`➡️ Generated ${allArrows.length} arrow features`);
+        arrowsSource.addFeatures(allArrows);
+    }, 150); // 150ms debounce
 }
 
 // ✨ OPTIMIZED: Load all data once on startup (7 days)
