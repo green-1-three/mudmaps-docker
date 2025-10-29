@@ -99,6 +99,7 @@ const pathsSource = new VectorSource();
 const unmatchedPathsSource = new VectorSource();
 const currentPositionsSource = new VectorSource();
 const userLocationSource = new VectorSource();
+const searchResultSource = new VectorSource();
 
 // Add layers to map (order matters for display)
 map.addLayer(new VectorLayer({
@@ -127,6 +128,25 @@ map.addLayer(new VectorLayer({
             anchor: [0.5, 1],
             src: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
             scale: 1.2
+        })
+    })
+}));
+
+map.addLayer(new VectorLayer({
+    source: searchResultSource,
+    zIndex: 4,
+    style: new Style({
+        image: new Icon({
+            anchor: [0.5, 1],
+            src: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+            scale: 1.5
+        }),
+        text: new Text({
+            text: '📍 Search Result',
+            offsetY: -45,
+            fill: new Fill({ color: '#000' }),
+            stroke: new Stroke({ color: '#fff', width: 3 }),
+            font: 'bold 13px Arial'
         })
     })
 }));
@@ -694,6 +714,15 @@ function createUI() {
             <h3>Latest Snowplow Activity</h3>
             
             <div class="control-group">
+                <label for="addressSearch">Search Address:</label>
+                <div class="search-container">
+                    <input type="text" id="addressSearch" placeholder="Enter street address...">
+                    <button id="searchButton">🔍</button>
+                </div>
+                <div id="searchResults" class="search-results"></div>
+            </div>
+            
+            <div class="control-group">
                 <label for="timeRange">Time Range:</label>
                 <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
                 <div class="time-display">
@@ -715,6 +744,7 @@ function createUI() {
 
     document.body.appendChild(controlsDiv);
     setupTimeSlider();
+    setupAddressSearch();
 }
 
 function setupTimeSlider() {
@@ -743,6 +773,110 @@ function setupTimeSlider() {
         clearPolylineCache();
         loadAndDisplayPaths();
     });
+}
+
+// Setup address search functionality
+function setupAddressSearch() {
+    const searchInput = document.getElementById('addressSearch');
+    const searchButton = document.getElementById('searchButton');
+    const searchResults = document.getElementById('searchResults');
+
+    // Search on button click
+    searchButton.addEventListener('click', () => {
+        const query = searchInput.value.trim();
+        if (query) {
+            performAddressSearch(query);
+        }
+    });
+
+    // Search on Enter key
+    searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const query = searchInput.value.trim();
+            if (query) {
+                performAddressSearch(query);
+            }
+        }
+    });
+}
+
+// Perform geocoding search using Nominatim (OpenStreetMap)
+async function performAddressSearch(query) {
+    const searchResults = document.getElementById('searchResults');
+    searchResults.innerHTML = '<div class="search-loading">Searching...</div>';
+
+    try {
+        // Use Nominatim API with a bounding box around New England for better results
+        // Bounding box: roughly Vermont, New Hampshire, Maine area
+        const bounds = '-73.5,41.5,-66.5,47.5'; // left,bottom,right,top
+        const url = `https://nominatim.openstreetmap.org/search?` +
+            `format=json&q=${encodeURIComponent(query)}&` +
+            `bounded=1&viewbox=${bounds}&` +
+            `addressdetails=1&limit=5`;
+
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'MudMaps/1.0' // Nominatim requires user agent
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Search failed');
+        }
+
+        const results = await response.json();
+
+        if (results.length === 0) {
+            searchResults.innerHTML = '<div class="search-no-results">No results found</div>';
+            return;
+        }
+
+        // Display results
+        searchResults.innerHTML = results.map((result, index) => `
+            <div class="search-result-item" data-index="${index}">
+                <div class="result-name">${result.display_name}</div>
+            </div>
+        `).join('');
+
+        // Add click handlers to results
+        searchResults.querySelectorAll('.search-result-item').forEach((item, index) => {
+            item.addEventListener('click', () => {
+                const result = results[index];
+                showSearchResult(result);
+                searchResults.innerHTML = '';
+            });
+        });
+
+    } catch (err) {
+        console.error('Address search failed:', err);
+        searchResults.innerHTML = '<div class="search-error">Search failed. Please try again.</div>';
+    }
+}
+
+// Show the selected search result on the map
+function showSearchResult(result) {
+    const lon = parseFloat(result.lon);
+    const lat = parseFloat(result.lat);
+
+    // Clear previous search result
+    searchResultSource.clear();
+
+    // Add marker at the search result location
+    const feature = new Feature({
+        geometry: new Point(fromLonLat([lon, lat])),
+        name: result.display_name
+    });
+
+    searchResultSource.addFeature(feature);
+
+    // Zoom to the location
+    map.getView().animate({
+        center: fromLonLat([lon, lat]),
+        zoom: 16,
+        duration: 1000
+    });
+
+    console.log(`📍 Searched location: ${result.display_name}`);
 }
 
 function formatTimeLabel(minutes) {

@@ -26,10 +26,11 @@ MudMaps is a real-time GPS tracking system designed for municipalities to track 
 - [x] **Smooth gradient coloring** - Replace discrete color buckets with interpolated gradient: 0min=bright green → 6hrs=yellow → 12hrs=orange → 24hrs=gray. Calculate exact age of each polyline segment and interpolate color accordingly.
 
 ### Phase 2: Core Interactions
-**Context:** Current UI has basic time slider. Need to enhance with scale switching and better interaction patterns.
+**Context:** Essential features for residents to interact with and understand the map data.
 
-- [ ] **Simplify map appearance** - Map is too busy with current OSM tiles, making polylines hard to see. Evaluate options: switch to simpler/lighter tile provider (CartoDB Positron, Mapbox Light), adjust base layer opacity, or customize tile colors. Goal: polylines should be the visual focus, not the underlying map.
-- [ ] **Time slider with scale toggle** - Single slider control that switches between two modes: "0-24 hours" scale and "0-7 days" scale. Button to toggle between modes. Dragging slider instantly shows/hides polylines (no API calls).
+- [x] **Time slider with scale toggle** - Single slider control that switches between two modes: "0-24 hours" scale and "0-7 days" scale. Button to toggle between modes. Dragging slider instantly shows/hides polylines (no API calls).
+- [ ] **Address search** - Search box where residents can type their address/street name. Map zooms to that location and highlights relevant polylines.
+- [ ] **Town boundaries with gray overlay** - Display all towns on single map. Participating towns show full-color data with clear boundaries. Non-participating towns show gray overlay with "Not available in [Town Name]" message. Residents near town borders can view neighboring coverage. Also serves as marketing (towns see neighbors have service, creates FOMO).
 - [ ] **Hover for timestamp (desktop)** - On desktop, hovering over any polyline segment displays tooltip with "Last plowed at [timestamp]". Requires geospatial intersection detection to find polyline under cursor. (Mobile: tap/click - will implement later during mobile optimization pass)
 - [ ] **Direction arrows on polylines** - Add directional arrows along polyline paths to show which direction the plow traveled. Helps residents understand if plow is coming toward or away from their location.
 
@@ -43,8 +44,7 @@ MudMaps is a real-time GPS tracking system designed for municipalities to track 
 ### Phase 4: Polish & Utility
 **Context:** Current map is functional but needs UX improvements for non-technical residents.
 
-- [ ] **Address search** - Search box where residents can type their address/street name. Map zooms to that location and highlights relevant polylines.
-- [ ] **Town boundaries with gray overlay** - Display all towns on single map. Participating towns show full-color data with clear boundaries. Non-participating towns show gray overlay with "Not available in [Town Name]" message. Residents near town borders can view neighboring coverage. Also serves as marketing (towns see neighbors have service, creates FOMO).
+- [ ] **Simplify map appearance** - Map is too busy with current OSM tiles, making polylines hard to see. Evaluate options: switch to simpler/lighter tile provider (CartoDB Positron, Mapbox Light), adjust base layer opacity, or customize tile colors. Goal: polylines should be the visual focus, not the underlying map.
 - [ ] **Clean UI pass** - Polish interface for non-technical users. Clear labels, intuitive controls, professional appearance suitable for municipal website embedding.
 
 ### Phase 5: Later Features (Post-MVP)
@@ -224,6 +224,7 @@ docker compose logs backend --tail 50  # Shows last 50 lines
 - **Ask clarifying questions:** When ambiguous, ask rather than assume
 - **Correct approach:** User will push back if approach is wrong - this is good feedback, adjust accordingly
 - **Avoid over-explaining:** User will ask if they need more context
+- **ALWAYS ask for explicit approval before making ANY code changes:** Before modifying, creating, or editing any files in the codebase, Claude must present the approach/plan and wait for explicit user approval ("yes", "do it", "go ahead", "looks good", etc.). This applies to ALL changes, not just when presenting multiple options. NO exceptions.
 
 ### Common Patterns
 
