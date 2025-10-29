@@ -1,7 +1,7 @@
 import './style.css';
 import { Map, View } from 'ol';
 import TileLayer from 'ol/layer/Tile';
-import OSM from 'ol/source/OSM';
+import XYZ from 'ol/source/XYZ';
 import { fromLonLat } from 'ol/proj';
 import { Feature } from 'ol';
 import { Point, LineString } from 'ol/geom';
@@ -79,10 +79,15 @@ async function fetchJSON(url) {
     return r.json();
 }
 
-// Map setup
+// Map setup with CartoDB Positron (light, minimal basemap)
 const map = new Map({
     target: 'map',
-    layers: [new TileLayer({ source: new OSM() })],
+    layers: [new TileLayer({ 
+        source: new XYZ({
+            url: 'https://{a-d}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+            attributions: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>'
+        })
+    })],
     view: new View({ center: fromLonLat([0, 0]), zoom: 2 })
 });
 
