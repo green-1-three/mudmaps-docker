@@ -336,8 +336,8 @@ function generateArrowsForSegment(segment, zoom) {
     const device = segment.get('device');
     
     // Arrow size scales INVERSELY with zoom (larger when zoomed OUT for visibility)
-    // At zoom 14 (far): size 30, at zoom 18 (close): size 18, at zoom 22+: size 10
-    const arrowSize = Math.max(10, 30 - (zoom - 14) * 2);
+    // At zoom 14 (far): size 60, at zoom 16: size 40, at zoom 18: size 20, at zoom 22+: size 10
+    const arrowSize = Math.max(10, 60 - (zoom - 14) * 5);
     
     const bearing = calculateBearing(coords[0], coords[1]);
     
