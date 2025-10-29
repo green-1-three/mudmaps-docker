@@ -285,7 +285,7 @@ function createChevronGeometry(point, bearing, size = 8) {
     
     // Chevron points (two lines forming ">")
     const armLength = size;
-    const armAngle = Math.PI / 6; // 30 degrees
+    const armAngle = Math.PI / 5; // Slightly wider angle for better visibility
     
     // Upper arm
     const upperArm = new LineString([
@@ -335,13 +335,7 @@ function generateArrowsForSegment(segment, zoom) {
     const polylineEndTime = segment.get('polylineEndTime');
     const device = segment.get('device');
     
-    // Calculate spacing based on zoom (more arrows when zoomed in)
-    // Much more conservative spacing to avoid performance issues
-    const baseSpacing = 200; // Doubled from 100
-    const zoomFactor = Math.pow(2, zoom - 14);
-    const spacing = baseSpacing / zoomFactor;
-    
-    // Calculate segment length in pixels (approximate)
+    // Calculate segment length
     const dx = coords[1][0] - coords[0][0];
     const dy = coords[1][1] - coords[0][1];
     const segmentLength = Math.sqrt(dx * dx + dy * dy);
@@ -350,10 +344,27 @@ function generateArrowsForSegment(segment, zoom) {
     const metersPerUnit = 111320;
     const segmentLengthMeters = segmentLength * metersPerUnit;
     
-    // Calculate how many arrows to place - with maximum limit
-    const numArrows = Math.min(3, Math.max(0, Math.floor(segmentLengthMeters / spacing)));
+    // Distance-based spacing: every X meters based on zoom level
+    let spacingMeters;
+    if (zoom < 15) {
+        spacingMeters = 500; // Every 500m at zoom 14-15
+    } else if (zoom < 16) {
+        spacingMeters = 250; // Every 250m at zoom 15-16
+    } else if (zoom < 17) {
+        spacingMeters = 150; // Every 150m at zoom 16-17
+    } else if (zoom < 18) {
+        spacingMeters = 100; // Every 100m at zoom 17-18
+    } else {
+        spacingMeters = 50; // Every 50m at zoom 18+
+    }
+    
+    // Calculate number of arrows based on segment length
+    const numArrows = Math.floor(segmentLengthMeters / spacingMeters);
     
     if (numArrows === 0) return [];
+    
+    // Arrow size scales with zoom (larger when zoomed in)
+    const arrowSize = 10 + (zoom - 14) * 3; // Size 10 at zoom 14, up to 22 at zoom 18
     
     const bearing = calculateBearing(coords[0], coords[1]);
     const arrows = [];
@@ -366,7 +377,7 @@ function generateArrowsForSegment(segment, zoom) {
             coords[0][1] + t * (coords[1][1] - coords[0][1])
         ];
         
-        const chevronLines = createChevronGeometry(point, bearing, 8);
+        const chevronLines = createChevronGeometry(point, bearing, arrowSize);
         
         // Create two separate features for each arm of the chevron
         const upperArmFeature = new Feature({
@@ -874,8 +885,16 @@ function createUI() {
     `;
     document.body.appendChild(controlsDiv);
 
+    // Zoom level indicator (bottom-right, temporary for debugging)
+    const zoomDiv = document.createElement('div');
+    zoomDiv.id = 'zoom-indicator';
+    zoomDiv.style.cssText = 'position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.7); color: white; padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 14px; z-index: 1000;';
+    zoomDiv.innerHTML = 'Zoom: <span id="zoomLevel">--</span>';
+    document.body.appendChild(zoomDiv);
+
     setupTimeSlider();
     setupAddressSearch();
+    setupZoomIndicator();
 }
 
 function setupTimeSlider() {
@@ -905,6 +924,23 @@ function setupTimeSlider() {
         clearPolylineCache();
         loadAndDisplayPaths();
     });
+}
+
+// Setup zoom level indicator
+function setupZoomIndicator() {
+    const updateZoom = () => {
+        const zoom = map.getView().getZoom();
+        const zoomLevel = document.getElementById('zoomLevel');
+        if (zoomLevel) {
+            zoomLevel.textContent = zoom.toFixed(2);
+        }
+    };
+    
+    // Update on zoom change
+    map.getView().on('change:resolution', updateZoom);
+    
+    // Initial update
+    updateZoom();
 }
 
 // Setup address search functionality
