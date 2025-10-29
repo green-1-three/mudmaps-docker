@@ -335,69 +335,35 @@ function generateArrowsForSegment(segment, zoom) {
     const polylineEndTime = segment.get('polylineEndTime');
     const device = segment.get('device');
     
-    // Calculate segment length
-    const dx = coords[1][0] - coords[0][0];
-    const dy = coords[1][1] - coords[0][1];
-    const segmentLength = Math.sqrt(dx * dx + dy * dy);
-    
-    // Convert to meters (rough approximation at mid-latitudes)
-    const metersPerUnit = 111320;
-    const segmentLengthMeters = segmentLength * metersPerUnit;
-    
-    // Distance-based spacing: every X meters based on zoom level
-    let spacingMeters;
-    if (zoom < 15) {
-        spacingMeters = 500; // Every 500m at zoom 14-15
-    } else if (zoom < 16) {
-        spacingMeters = 250; // Every 250m at zoom 15-16
-    } else if (zoom < 17) {
-        spacingMeters = 150; // Every 150m at zoom 16-17
-    } else if (zoom < 18) {
-        spacingMeters = 100; // Every 100m at zoom 17-18
-    } else {
-        spacingMeters = 50; // Every 50m at zoom 18+
-    }
-    
-    // Calculate number of arrows based on segment length
-    const numArrows = Math.floor(segmentLengthMeters / spacingMeters);
-    
-    if (numArrows === 0) return [];
-    
     // Arrow size scales with zoom (larger when zoomed in)
     const arrowSize = 10 + (zoom - 14) * 3; // Size 10 at zoom 14, up to 22 at zoom 18
     
     const bearing = calculateBearing(coords[0], coords[1]);
-    const arrows = [];
     
-    // Place arrows evenly along the segment
-    for (let i = 0; i < numArrows; i++) {
-        const t = (i + 1) / (numArrows + 1); // Position along segment (0 to 1)
-        const point = [
-            coords[0][0] + t * (coords[1][0] - coords[0][0]),
-            coords[0][1] + t * (coords[1][1] - coords[0][1])
-        ];
-        
-        const chevronLines = createChevronGeometry(point, bearing, arrowSize);
-        
-        // Create two separate features for each arm of the chevron
-        const upperArmFeature = new Feature({
-            geometry: chevronLines[0],
-            timestamp: timestamp,
-            polylineEndTime: polylineEndTime,
-            device: device
-        });
-        
-        const lowerArmFeature = new Feature({
-            geometry: chevronLines[1],
-            timestamp: timestamp,
-            polylineEndTime: polylineEndTime,
-            device: device
-        });
-        
-        arrows.push(upperArmFeature, lowerArmFeature);
-    }
+    // Place exactly 1 arrow at midpoint (50% along segment)
+    const point = [
+        coords[0][0] + 0.5 * (coords[1][0] - coords[0][0]),
+        coords[0][1] + 0.5 * (coords[1][1] - coords[0][1])
+    ];
     
-    return arrows;
+    const chevronLines = createChevronGeometry(point, bearing, arrowSize);
+    
+    // Create two separate features for each arm of the chevron
+    const upperArmFeature = new Feature({
+        geometry: chevronLines[0],
+        timestamp: timestamp,
+        polylineEndTime: polylineEndTime,
+        device: device
+    });
+    
+    const lowerArmFeature = new Feature({
+        geometry: chevronLines[1],
+        timestamp: timestamp,
+        polylineEndTime: polylineEndTime,
+        device: device
+    });
+    
+    return [upperArmFeature, lowerArmFeature];
 }
 
 // Function to create path segments from coordinate array
@@ -499,20 +465,33 @@ async function processBatchesInChunks(batches, minuteMarkers, deviceName) {
 
 // Regenerate arrows for all visible segments at current zoom level
 let arrowRegenerationTimeout = null;
+let isRegeneratingArrows = false; // Prevent recursion
+
 function regenerateArrows() {
+    // Prevent recursive calls
+    if (isRegeneratingArrows) {
+        console.log('⚠️ Arrow regeneration already in progress, skipping');
+        return;
+    }
+    
     // Debounce arrow regeneration to avoid excessive calls during zoom
     if (arrowRegenerationTimeout) {
         clearTimeout(arrowRegenerationTimeout);
     }
     
     arrowRegenerationTimeout = setTimeout(() => {
+        isRegeneratingArrows = true; // Set flag before starting
+        
         const zoom = map.getView().getZoom();
         
         // Clear existing arrows
         arrowsSource.clear();
         
         // Only generate arrows at zoom 14+
-        if (zoom < 14) return;
+        if (zoom < 14) {
+            isRegeneratingArrows = false;
+            return;
+        }
         
         const allSegments = pathsSource.getFeatures();
         const allArrows = [];
@@ -525,7 +504,13 @@ function regenerateArrows() {
         }
         
         console.log(`➡️ Generated ${allArrows.length} arrow features`);
-        arrowsSource.addFeatures(allArrows);
+        
+        // Add all arrows at once
+        if (allArrows.length > 0) {
+            arrowsSource.addFeatures(allArrows);
+        }
+        
+        isRegeneratingArrows = false; // Clear flag after completion
     }, 150); // 150ms debounce
 }
 
