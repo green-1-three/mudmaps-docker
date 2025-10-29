@@ -327,22 +327,22 @@ function generateArrowForPolyline(polylineCoords, deviceName, polylineEndTime, z
     
     // Arrow size scales INVERSELY with zoom (larger when zoomed OUT for visibility)
     // Aggressive scaling at lower zooms for visibility:
-    // Zoom 12.0: 150, 12.5: 125, 13.0: 100, 13.5: 80, 14.0: 60, then gradual decrease
+    // Zoom 12.0: 300, 12.5: 225, 13.0: 150, 13.5: 120, 14.0: 60, then gradual decrease
     let arrowSize;
     if (zoom <= 12.0) {
-        arrowSize = 150;
+        arrowSize = 300;
     } else if (zoom <= 12.5) {
-        // Interpolate between 150 and 125
-        arrowSize = 150 - ((zoom - 12.0) / 0.5) * 25;
+        // Interpolate between 300 and 225
+        arrowSize = 300 - ((zoom - 12.0) / 0.5) * 75;
     } else if (zoom <= 13.0) {
-        // Interpolate between 125 and 100
-        arrowSize = 125 - ((zoom - 12.5) / 0.5) * 25;
+        // Interpolate between 225 and 150
+        arrowSize = 225 - ((zoom - 12.5) / 0.5) * 75;
     } else if (zoom <= 13.5) {
-        // Interpolate between 100 and 80
-        arrowSize = 100 - ((zoom - 13.0) / 0.5) * 20;
+        // Interpolate between 150 and 120
+        arrowSize = 150 - ((zoom - 13.0) / 0.5) * 30;
     } else if (zoom <= 14.0) {
-        // Interpolate between 80 and 60
-        arrowSize = 80 - ((zoom - 13.5) / 0.5) * 20;
+        // Interpolate between 120 and 60
+        arrowSize = 120 - ((zoom - 13.5) / 0.5) * 60;
     } else {
         // Zoom > 14: continue gradual decrease (60 at zoom 14, down to min 10)
         arrowSize = Math.max(10, 60 - (zoom - 14) * 5);
