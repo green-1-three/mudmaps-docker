@@ -20,6 +20,9 @@ if (!API_BASE) {
 
 console.log('Using API_BASE:', API_BASE);
 
+// Discrete time intervals mapping: index -> hours
+const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
+
 // ✨ OPTIMIZED: Polyline cache to avoid re-decoding
 // Using a plain object instead of Map to avoid potential issues
 const polylineCache = {};
@@ -697,16 +700,18 @@ function createUI() {
             
             <div class="control-group">
                 <label for="timeRange">Time Range:</label>
-                <input type="range" id="timeRange" min="1" max="168" value="24" step="1">
+                <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
                 <div class="time-display">
-                    <span id="timeValue">Last 24 hours</span>
+                    <span id="timeValue">Last 1 day</span>
                 </div>
                 <div class="time-presets">
-                    <button onclick="setTimeRange(1)">1h</button>
-                    <button onclick="setTimeRange(6)">6h</button>
-                    <button onclick="setTimeRange(24)">1d</button>
-                    <button onclick="setTimeRange(72)">3d</button>
-                    <button onclick="setTimeRange(168)">1w</button>
+                    <button onclick="window.setTimeRangeByIndex(0)">1h</button>
+                    <button onclick="window.setTimeRangeByIndex(1)">2h</button>
+                    <button onclick="window.setTimeRangeByIndex(2)">4h</button>
+                    <button onclick="window.setTimeRangeByIndex(3)">8h</button>
+                    <button onclick="window.setTimeRangeByIndex(4)">1d</button>
+                    <button onclick="window.setTimeRangeByIndex(5)">3d</button>
+                    <button onclick="window.setTimeRangeByIndex(6)">7d</button>
                 </div>
             </div>
             
@@ -738,7 +743,8 @@ function setupTimeSlider() {
     const slider = document.getElementById('timeRange');
 
     slider.addEventListener('input', (e) => {
-        const hours = parseInt(e.target.value);
+        const index = parseInt(e.target.value);
+        const hours = TIME_INTERVALS[index];
         updateTimeDisplay(hours);
         currentTimeHours = hours;
         
@@ -754,7 +760,8 @@ function setupTimeSlider() {
         isSliderDragging = false;
         
         // Actually rebuild features with correct time range
-        currentTimeHours = parseInt(e.target.value);
+        const index = parseInt(e.target.value);
+        currentTimeHours = TIME_INTERVALS[index];
         clearPolylineCache();
         loadAndDisplayPaths();
     });
@@ -763,20 +770,27 @@ function setupTimeSlider() {
 function updateTimeDisplay(hours) {
     const timeValue = document.getElementById('timeValue');
 
-    if (hours < 24) {
-        timeValue.textContent = `Last ${hours} hour${hours !== 1 ? 's' : ''}`;
-    } else if (hours < 168) {
-        const days = Math.round(hours / 24 * 10) / 10;
-        timeValue.textContent = `Last ${days} day${days !== 1 ? 's' : ''}`;
-    } else {
-        const weeks = Math.round(hours / 168 * 10) / 10;
-        timeValue.textContent = `Last ${weeks} week${weeks !== 1 ? 's' : ''}`;
+    if (hours === 1) {
+        timeValue.textContent = 'Last 1 hour';
+    } else if (hours === 2) {
+        timeValue.textContent = 'Last 2 hours';
+    } else if (hours === 4) {
+        timeValue.textContent = 'Last 4 hours';
+    } else if (hours === 8) {
+        timeValue.textContent = 'Last 8 hours';
+    } else if (hours === 24) {
+        timeValue.textContent = 'Last 1 day';
+    } else if (hours === 72) {
+        timeValue.textContent = 'Last 3 days';
+    } else if (hours === 168) {
+        timeValue.textContent = 'Last 7 days';
     }
 }
 
-function setTimeRange(hours) {
+function setTimeRangeByIndex(index) {
     const slider = document.getElementById('timeRange');
-    slider.value = hours;
+    slider.value = index;
+    const hours = TIME_INTERVALS[index];
     updateTimeDisplay(hours);
     currentTimeHours = hours;
     clearPolylineCache();
@@ -807,7 +821,7 @@ function fitAllPaths() {
 // Make functions available globally
 window.refreshPaths = loadAllData;
 window.fitAllPaths = fitAllPaths;
-window.setTimeRange = setTimeRange;
+window.setTimeRangeByIndex = setTimeRangeByIndex;
 
 // User geolocation
 if ('geolocation' in navigator) {
