@@ -321,30 +321,29 @@ function createArrowStyle(feature) {
     });
 }
 
-// Generate arrow features for a line segment
-function generateArrowsForSegment(segment, zoom) {
-    // Only show arrows at zoom 14+
-    if (zoom < 14) return [];
-    
-    const geometry = segment.getGeometry();
-    const coords = geometry.getCoordinates();
-    
-    if (coords.length < 2) return [];
-    
-    const timestamp = segment.get('timestamp');
-    const polylineEndTime = segment.get('polylineEndTime');
-    const device = segment.get('device');
+// Generate arrow feature for a polyline (place at midpoint)
+function generateArrowForPolyline(polylineCoords, deviceName, polylineEndTime, zoom) {
+    if (polylineCoords.length < 2) return [];
     
     // Arrow size scales INVERSELY with zoom (larger when zoomed OUT for visibility)
     // At zoom 14 (far): size 60, at zoom 16: size 40, at zoom 18: size 20, at zoom 22+: size 10
     const arrowSize = Math.max(10, 60 - (zoom - 14) * 5);
     
-    const bearing = calculateBearing(coords[0], coords[1]);
+    // Find the midpoint of the entire polyline
+    const midIndex = Math.floor(polylineCoords.length / 2);
+    const coord1 = polylineCoords[Math.max(0, midIndex - 1)];
+    const coord2 = polylineCoords[Math.min(polylineCoords.length - 1, midIndex)];
     
-    // Place exactly 1 arrow at midpoint (50% along segment)
+    // Convert to map projection
+    const projCoord1 = fromLonLat(coord1);
+    const projCoord2 = fromLonLat(coord2);
+    
+    const bearing = calculateBearing(projCoord1, projCoord2);
+    
+    // Place arrow at the midpoint
     const point = [
-        coords[0][0] + 0.5 * (coords[1][0] - coords[0][0]),
-        coords[0][1] + 0.5 * (coords[1][1] - coords[0][1])
+        projCoord1[0] + 0.5 * (projCoord2[0] - projCoord1[0]),
+        projCoord1[1] + 0.5 * (projCoord2[1] - projCoord1[1])
     ];
     
     const chevronLines = createChevronGeometry(point, bearing, arrowSize);
@@ -352,16 +351,16 @@ function generateArrowsForSegment(segment, zoom) {
     // Create two separate features for each arm of the chevron
     const upperArmFeature = new Feature({
         geometry: chevronLines[0],
-        timestamp: timestamp,
+        timestamp: polylineEndTime,
         polylineEndTime: polylineEndTime,
-        device: device
+        device: deviceName
     });
     
     const lowerArmFeature = new Feature({
         geometry: chevronLines[1],
-        timestamp: timestamp,
+        timestamp: polylineEndTime,
         polylineEndTime: polylineEndTime,
-        device: device
+        device: deviceName
     });
     
     return [upperArmFeature, lowerArmFeature];
@@ -494,15 +493,21 @@ function regenerateArrows() {
             return;
         }
         
-        const allSegments = pathsSource.getFeatures();
+        // Use cached polyline data
+        const polylineData = window.cachedPolylineData || [];
+        
+        if (polylineData.length === 0) {
+            isRegeneratingArrows = false;
+            return;
+        }
+        
         const allArrows = [];
         
-        console.log(`🎯 Regenerating arrows for ${allSegments.length} segments at zoom ${zoom.toFixed(1)}`);
+        console.log(`🎯 Regenerating arrows for ${polylineData.length} polylines at zoom ${zoom.toFixed(1)}`);
         
-        // Only generate arrows for every 3rd segment
-        for (let i = 0; i < allSegments.length; i += 3) {
-            const segment = allSegments[i];
-            const arrows = generateArrowsForSegment(segment, zoom);
+        // Generate one arrow per polyline
+        for (const polyline of polylineData) {
+            const arrows = generateArrowForPolyline(polyline.coords, polyline.deviceName, polyline.endTime, zoom);
             allArrows.push(...arrows);
         }
         
@@ -553,6 +558,9 @@ async function loadAllData() {
         let totalMatchedSegments = 0;
         let totalUnmatchedSegments = 0;
 
+        // Store polyline data for arrow generation
+        const polylineData = [];
+
         // Process each device and create ALL features (7 days worth)
         for (const device of data.devices) {
             // Handle polylines array from cached_polylines table
@@ -565,6 +573,13 @@ async function loadAllData() {
                         const segments = createPathSegments(simplified, device.device, polylineEndTime, true);
                         pathsSource.addFeatures(segments);
                         totalMatchedSegments += segments.length;
+                        
+                        // Store polyline data for arrow generation
+                        polylineData.push({
+                            coords: coords,
+                            deviceName: device.device,
+                            endTime: polylineEndTime
+                        });
                     }
                 }
             }
@@ -576,7 +591,8 @@ async function loadAllData() {
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total load time: ${totalTime.toFixed(0)}ms`);
 
-        // Generate arrows for initial zoom level
+        // Generate arrows for initial zoom level (store polyline data globally for regeneration)
+        window.cachedPolylineData = polylineData;
         regenerateArrows();
 
         // Fit map to show paths from initial time range (24 hours)
