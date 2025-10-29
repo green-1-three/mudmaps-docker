@@ -11,6 +11,7 @@ import { Style, Icon, Stroke, Fill, Text } from 'ol/style';
 
 // Configuration
 let API_BASE = import.meta.env.VITE_API_BASE;
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 if (!API_BASE) {
     API_BASE = (window.location.hostname === 'localhost')
@@ -811,37 +812,33 @@ function setupAddressSearch() {
     });
 }
 
-// Perform geocoding search using Nominatim (OpenStreetMap)
+// Perform geocoding search using Mapbox Geocoding API
 async function performAddressSearch(query) {
     const searchResults = document.getElementById('searchResults');
     searchResults.innerHTML = '<div class="search-loading">Searching...</div>';
 
     try {
-        // Get current map view bounds to prioritize visible results
+        // Get current map center to bias results toward visible area
         const view = map.getView();
-        const extent = view.calculateExtent(map.getSize());
-        const bottomLeft = toLonLat([extent[0], extent[1]]);
-        const topRight = toLonLat([extent[2], extent[3]]);
+        const center = view.getCenter();
+        const centerLonLat = toLonLat(center);
         
-        // Format as viewbox: left,bottom,right,top
-        const viewbox = `${bottomLeft[0]},${bottomLeft[1]},${topRight[0]},${topRight[1]}`;
-        
-        const url = `https://nominatim.openstreetmap.org/search?` +
-            `format=json&q=${encodeURIComponent(query)}&` +
-            `viewbox=${viewbox}&bounded=1&` +
-            `addressdetails=1&limit=5`;
+        // Mapbox Geocoding API with proximity bias
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?` +
+            `access_token=${MAPBOX_TOKEN}&` +
+            `proximity=${centerLonLat[0]},${centerLonLat[1]}&` +
+            `country=US&` +
+            `limit=5&` +
+            `autocomplete=true`;
 
-        const response = await fetch(url, {
-            headers: {
-                'User-Agent': 'MudMaps/1.0' // Nominatim requires user agent
-            }
-        });
+        const response = await fetch(url);
 
         if (!response.ok) {
             throw new Error('Search failed');
         }
 
-        const results = await response.json();
+        const data = await response.json();
+        const results = data.features || [];
 
         if (results.length === 0) {
             searchResults.innerHTML = '<div class="search-no-results">No results found</div>';
@@ -851,7 +848,7 @@ async function performAddressSearch(query) {
         // Display results
         searchResults.innerHTML = results.map((result, index) => `
             <div class="search-result-item" data-index="${index}">
-                <div class="result-name">${result.display_name}</div>
+                <div class="result-name">${result.place_name}</div>
             </div>
         `).join('');
 
@@ -872,8 +869,9 @@ async function performAddressSearch(query) {
 
 // Show the selected search result on the map
 function showSearchResult(result) {
-    const lon = parseFloat(result.lon);
-    const lat = parseFloat(result.lat);
+    // Mapbox returns coordinates as [lon, lat]
+    const lon = result.center[0];
+    const lat = result.center[1];
 
     // Clear previous search result
     searchResultSource.clear();
@@ -881,7 +879,7 @@ function showSearchResult(result) {
     // Add marker at the search result location
     const feature = new Feature({
         geometry: new Point(fromLonLat([lon, lat])),
-        name: result.display_name
+        name: result.place_name
     });
 
     searchResultSource.addFeature(feature);
@@ -893,7 +891,7 @@ function showSearchResult(result) {
         duration: 1000
     });
 
-    console.log(`📍 Searched location: ${result.display_name}`);
+    console.log(`📍 Searched location: ${result.place_name}`);
 }
 
 function formatTimeLabel(minutes) {
