@@ -326,8 +326,27 @@ function generateArrowForPolyline(polylineCoords, deviceName, polylineEndTime, z
     if (polylineCoords.length < 2) return [];
     
     // Arrow size scales INVERSELY with zoom (larger when zoomed OUT for visibility)
-    // At zoom 12 (far): size 60, at zoom 14: size 50, at zoom 16: size 40, at zoom 18: size 30, at zoom 20: size 20, at zoom 22+: size 10
-    const arrowSize = Math.max(10, 60 - (zoom - 12) * 5);
+    // Aggressive scaling at lower zooms for visibility:
+    // Zoom 12.0: 150, 12.5: 125, 13.0: 100, 13.5: 80, 14.0: 60, then gradual decrease
+    let arrowSize;
+    if (zoom <= 12.0) {
+        arrowSize = 150;
+    } else if (zoom <= 12.5) {
+        // Interpolate between 150 and 125
+        arrowSize = 150 - ((zoom - 12.0) / 0.5) * 25;
+    } else if (zoom <= 13.0) {
+        // Interpolate between 125 and 100
+        arrowSize = 125 - ((zoom - 12.5) / 0.5) * 25;
+    } else if (zoom <= 13.5) {
+        // Interpolate between 100 and 80
+        arrowSize = 100 - ((zoom - 13.0) / 0.5) * 20;
+    } else if (zoom <= 14.0) {
+        // Interpolate between 80 and 60
+        arrowSize = 80 - ((zoom - 13.5) / 0.5) * 20;
+    } else {
+        // Zoom > 14: continue gradual decrease (60 at zoom 14, down to min 10)
+        arrowSize = Math.max(10, 60 - (zoom - 14) * 5);
+    }
     
     // Find the midpoint of the entire polyline
     const midIndex = Math.floor(polylineCoords.length / 2);
