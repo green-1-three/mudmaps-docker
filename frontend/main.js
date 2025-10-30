@@ -1178,13 +1178,18 @@ function fitAllPaths() {
 // Make functions available globally (keeping for compatibility)
 window.fitAllPaths = fitAllPaths;
 
-// User geolocation (no marker, just functionality)
+// User geolocation - center map on user's location
 if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition((pos) => {
-        // Geolocation obtained but no marker displayed
         const coords = [pos.coords.longitude, pos.coords.latitude];
         console.log('User location:', coords);
-    }, () => {}, { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 });
+        
+        // Center map on user's location
+        map.getView().setCenter(fromLonLat(coords));
+        map.getView().setZoom(13);
+    }, (error) => {
+        console.warn('Geolocation error:', error.message);
+    }, { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 });
 }
 
 // Map click handler

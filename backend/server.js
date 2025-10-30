@@ -475,6 +475,78 @@ app.delete('/cache/cleanup', async (req, res) => {
     }
 });
 
+// NEW: Get activated road segments
+app.get('/api/segments', async (req, res) => {
+    try {
+        const { municipality = 'pomfret-vt', since } = req.query;
+        
+        console.log(`🛣️  Fetching segments for ${municipality}${since ? ` since ${since}` : ''}`);
+        
+        let query = `
+            SELECT 
+                id,
+                ST_AsGeoJSON(geometry) as geometry,
+                street_name,
+                road_classification,
+                bearing,
+                last_plowed_forward,
+                last_plowed_reverse,
+                last_plowed_device_id,
+                plow_count_today,
+                plow_count_total,
+                segment_length
+            FROM road_segments
+            WHERE municipality_id = $1
+        `;
+        
+        const params = [municipality];
+        
+        // Optional time filter
+        if (since) {
+            query += ` AND (last_plowed_forward > $2 OR last_plowed_reverse > $2)`;
+            params.push(new Date(since));
+        } else {
+            // Default: only return segments plowed in last 7 days
+            query += ` AND (last_plowed_forward > NOW() - INTERVAL '7 days' OR last_plowed_reverse > NOW() - INTERVAL '7 days')`;
+        }
+        
+        query += ` ORDER BY GREATEST(last_plowed_forward, last_plowed_reverse) DESC`;
+        
+        const { rows } = await pool.query(query, params);
+        
+        console.log(`✅ Returning ${rows.length} activated segments`);
+        
+        // Transform to GeoJSON-friendly format
+        const segments = rows.map(row => ({
+            id: row.id,
+            geometry: JSON.parse(row.geometry),
+            properties: {
+                street_name: row.street_name,
+                road_classification: row.road_classification,
+                bearing: row.bearing,
+                last_plowed_forward: row.last_plowed_forward,
+                last_plowed_reverse: row.last_plowed_reverse,
+                last_plowed: row.last_plowed_forward > row.last_plowed_reverse 
+                    ? row.last_plowed_forward 
+                    : row.last_plowed_reverse,
+                device_id: row.last_plowed_device_id,
+                plow_count_today: row.plow_count_today,
+                plow_count_total: row.plow_count_total,
+                segment_length: row.segment_length
+            }
+        }));
+        
+        res.json({
+            type: 'FeatureCollection',
+            features: segments
+        });
+        
+    } catch (error) {
+        console.error('GET /api/segments error:', error);
+        res.status(500).json({ error: 'db_error', message: error.message });
+    }
+});
+
 // Health check endpoint (with OSRM check)
 app.get('/health', async (req, res) => {
     try {
