@@ -72,18 +72,7 @@ fi
 
 echo ""
 echo "───────────────────────────────────────────────────────────"
-echo "STEP 2: Deleting existing road segments"
-echo "───────────────────────────────────────────────────────────"
-
-docker exec mudmaps-postgres psql -U mudmaps -d mudmapsdb -c "
-    DELETE FROM road_segments WHERE municipality_id = 'pomfret-vt';
-"
-
-echo "✓ Road segments deleted"
-
-echo ""
-echo "───────────────────────────────────────────────────────────"
-echo "STEP 3: Truncating derived tables"
+echo "STEP 2: Truncating derived tables (must be done before deleting segments)"
 echo "───────────────────────────────────────────────────────────"
 
 docker exec mudmaps-postgres psql -U mudmaps -d mudmapsdb -c "
@@ -97,10 +86,21 @@ docker exec mudmaps-postgres psql -U mudmaps -d mudmapsdb -c "
     TRUNCATE TABLE processing_log CASCADE;
 "
 
-echo "✓ Cached polylines truncated"
 echo "✓ Segment updates truncated"
+echo "✓ Cached polylines truncated"
 echo "✓ GPS data reset to unprocessed"
 echo "✓ Processing log cleared"
+
+echo ""
+echo "───────────────────────────────────────────────────────────"
+echo "STEP 3: Deleting existing road segments"
+echo "───────────────────────────────────────────────────────────"
+
+docker exec mudmaps-postgres psql -U mudmaps -d mudmapsdb -c "
+    DELETE FROM road_segments WHERE municipality_id = 'pomfret-vt';
+"
+
+echo "✓ Road segments deleted"
 
 echo ""
 echo "───────────────────────────────────────────────────────────"
