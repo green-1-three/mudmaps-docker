@@ -28,6 +28,13 @@ const pool = new Pool({
     port: Number(process.env.PGPORT) || 5432,        // Changed from POSTGRES_PORT
 });
 
+// Handle pool errors to prevent crashes
+pool.on('error', (err) => {
+    console.error('❌ PostgreSQL pool error:', err.message);
+    logError(`PostgreSQL pool error: ${err.stack}`);
+    // Pool will automatically try to reconnect
+});
+
 // Redis connection
 const redis = createClient({ url: REDIS_URL });
 redis.on('error', (err) => console.error('Redis Error:', err));
