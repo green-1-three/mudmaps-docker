@@ -855,6 +855,123 @@ map.on('click', (event) => {
     }
 });
 
+// Hover functionality for segments
+let hoveredSegment = null;
+let hoverPopup = null;
+
+// Create hover popup element
+function createHoverPopup() {
+    const popup = document.createElement('div');
+    popup.id = 'segment-hover-popup';
+    popup.style.cssText = `
+        position: fixed;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-family: monospace;
+        pointer-events: none;
+        z-index: 10000;
+        max-width: 350px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        display: none;
+        line-height: 1.4;
+    `;
+    document.body.appendChild(popup);
+    return popup;
+}
+
+hoverPopup = createHoverPopup();
+
+// Hover style for segments - makes them "pop"
+function createHoverStyle(feature) {
+    const isActivated = feature.get('is_activated');
+    const lastPlowed = feature.get('last_plowed');
+    const color = isActivated && lastPlowed ? getColorByAge(lastPlowed) : (isActivated ? '#0066cc' : '#ff0000');
+    
+    return [
+        // Glow effect (underneath)
+        new Style({
+            stroke: new Stroke({
+                color: 'rgba(255, 255, 255, 0.8)',
+                width: 10
+            })
+        }),
+        // Main stroke (on top, thicker)
+        new Style({
+            stroke: new Stroke({
+                color: color,
+                width: 6
+            })
+        })
+    ];
+}
+
+// Map hover handler
+map.on('pointermove', (event) => {
+    // Check if we're over a segment
+    const features = map.getFeaturesAtPixel(event.pixel, {
+        layerFilter: (layer) => layer === segmentsLayer
+    });
+    
+    if (features.length > 0) {
+        const feature = features[0];
+        
+        // Only process if it's a different segment
+        if (hoveredSegment !== feature) {
+            // Reset previous hovered segment
+            if (hoveredSegment) {
+                hoveredSegment.setStyle(undefined); // Reset to default style
+            }
+            
+            // Set new hovered segment
+            hoveredSegment = feature;
+            hoveredSegment.setStyle(createHoverStyle(feature));
+            
+            // Update popup content
+            const props = feature.getProperties();
+            const lastPlowed = props.last_plowed ? new Date(props.last_plowed).toLocaleString() : 'Never';
+            const lastPlowedFwd = props.last_plowed_forward ? new Date(props.last_plowed_forward).toLocaleString() : 'Never';
+            const lastPlowedRev = props.last_plowed_reverse ? new Date(props.last_plowed_reverse).toLocaleString() : 'Never';
+            
+            hoverPopup.innerHTML = `
+                <div style="color: #00ff88; font-weight: bold; margin-bottom: 6px;">🛣️ SEGMENT #${props.segment_id}</div>
+                <div><span style="color: #888;">Street:</span> ${props.street_name || 'Unknown'}</div>
+                <div><span style="color: #888;">Classification:</span> ${props.road_classification || 'Unknown'}</div>
+                <div><span style="color: #888;">Length:</span> ${props.segment_length ? props.segment_length.toFixed(1) + 'm' : 'Unknown'}</div>
+                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                    <span style="color: #888;">Status:</span> ${props.is_activated ? '<span style="color: #00ff00;">✓ Activated</span>' : '<span style="color: #ff4444;">✗ Not Activated</span>'}
+                </div>
+                <div><span style="color: #888;">Last Plowed:</span> ${lastPlowed}</div>
+                <div style="font-size: 10px; color: #666; margin-left: 12px;">Forward: ${lastPlowedFwd}</div>
+                <div style="font-size: 10px; color: #666; margin-left: 12px;">Reverse: ${lastPlowedRev}</div>
+                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                    <span style="color: #888;">Device ID:</span> ${props.device_id || 'Unknown'}
+                </div>
+                <div><span style="color: #888;">Plow Count Today:</span> ${props.plow_count_today || 0}</div>
+                <div><span style="color: #888;">Plow Count Total:</span> ${props.plow_count_total || 0}</div>
+            `;
+        }
+        
+        // Position popup near cursor (offset to avoid blocking)
+        hoverPopup.style.left = (event.pixel[0] + 20) + 'px';
+        hoverPopup.style.top = (event.pixel[1] + 20) + 'px';
+        hoverPopup.style.display = 'block';
+        
+        // Change cursor
+        map.getTargetElement().style.cursor = 'pointer';
+    } else {
+        // Reset when not hovering over segment
+        if (hoveredSegment) {
+            hoveredSegment.setStyle(undefined);
+            hoveredSegment = null;
+        }
+        hoverPopup.style.display = 'none';
+        map.getTargetElement().style.cursor = '';
+    }
+});
+
 // Initialize
 console.log('🗺️ Initializing MudMaps (POLYLINES + SEGMENTS)...');
 createUI();
