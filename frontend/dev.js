@@ -961,45 +961,6 @@ function initDevPanel() {
     // Global state for segment borders
     let showSegmentBorders = false;
     
-    if (togglePolylines) {
-        togglePolylines.addEventListener('change', (e) => {
-            polylinesLayer.setVisible(e.target.checked);
-        });
-    }
-    
-    if (toggleSegmentBorders) {
-        toggleSegmentBorders.addEventListener('change', (e) => {
-            showSegmentBorders = e.target.checked;
-            updateSegmentVisibility();
-        });
-    }
-    
-    if (toggleActiveSegments || toggleInactiveSegments) {
-        const updateSegmentVisibility = () => {
-            const showActive = toggleActiveSegments ? toggleActiveSegments.checked : true;
-            const showInactive = toggleInactiveSegments ? toggleInactiveSegments.checked : true;
-            
-            // Update the style function to filter segments
-            segmentsLayer.setStyle((feature) => {
-                const isActivated = feature.get('is_activated');
-                
-                // Filter based on toggle states
-                if (isActivated && !showActive) return null;
-                if (!isActivated && !showInactive) return null;
-                
-                // Apply the normal style with optional borders
-                return createSegmentStyleWithBorders(feature);
-            });
-        };
-        
-        if (toggleActiveSegments) {
-            toggleActiveSegments.addEventListener('change', updateSegmentVisibility);
-        }
-        if (toggleInactiveSegments) {
-            toggleInactiveSegments.addEventListener('change', updateSegmentVisibility);
-        }
-    }
-    
     // Helper function to create segment style with optional borders
     function createSegmentStyleWithBorders(feature) {
         const baseStyle = createSegmentStyleWithFilter(feature);
@@ -1025,6 +986,45 @@ function initDevPanel() {
             // Original colored stroke on top
             baseStyle
         ];
+    }
+    
+    // Update segment visibility function (needs to be accessible to all toggles)
+    const updateSegmentVisibility = () => {
+        const showActive = toggleActiveSegments ? toggleActiveSegments.checked : true;
+        const showInactive = toggleInactiveSegments ? toggleInactiveSegments.checked : true;
+        
+        // Update the style function to filter segments
+        segmentsLayer.setStyle((feature) => {
+            const isActivated = feature.get('is_activated');
+            
+            // Filter based on toggle states
+            if (isActivated && !showActive) return null;
+            if (!isActivated && !showInactive) return null;
+            
+            // Apply the normal style with optional borders
+            return createSegmentStyleWithBorders(feature);
+        });
+    };
+    
+    if (togglePolylines) {
+        togglePolylines.addEventListener('change', (e) => {
+            polylinesLayer.setVisible(e.target.checked);
+        });
+    }
+    
+    if (toggleSegmentBorders) {
+        toggleSegmentBorders.addEventListener('change', (e) => {
+            showSegmentBorders = e.target.checked;
+            updateSegmentVisibility();
+        });
+    }
+    
+    if (toggleActiveSegments) {
+        toggleActiveSegments.addEventListener('change', updateSegmentVisibility);
+    }
+    
+    if (toggleInactiveSegments) {
+        toggleInactiveSegments.addEventListener('change', updateSegmentVisibility);
     }
 }
 
