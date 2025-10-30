@@ -1,0 +1,54 @@
+# .claudeignore
+# Files and directories Claude should not read to conserve tokens
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Version Control
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Backups
+compose_backups/
+compose_backups_20250810-211936/
+*.bak
+*.backup
+*.old
+*.deleted
+*.delete
+
+# Archived/Deprecated Code
+old_files/
+deleted_scripts/
+old_markdown_files/
+
+# Build Artifacts
+dist/
+build/
+*.log
+
+# Environment (can read .env.example, but not actual env files)
+.env
+.env.local
+.env.development
+.env.production
+
+# Docker
+*.dockerfile
+Dockerfile.*
+
+# Misc
+*.min.js
+*.min.css
+*.map
