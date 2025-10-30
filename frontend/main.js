@@ -24,55 +24,6 @@ console.log('Using API_BASE:', API_BASE);
 // Discrete time intervals mapping: index -> hours
 const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
 
-// ✨ OPTIMIZED: Polyline cache to avoid re-decoding
-// Using a plain object instead of Map to avoid potential issues
-const polylineCache = {};
-
-// ✨ OPTIMIZED: Simple polyline decoder with caching
-function decodePolyline(str, precision = 5) {
-    // Check cache first
-    if (polylineCache[str]) {
-        return polylineCache[str];
-    }
-
-    let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null;
-    const factor = Math.pow(10, precision);
-
-    while (index < str.length) {
-        // Decode latitude
-        byte = null; shift = 0; result = 0;
-        do {
-            byte = str.charCodeAt(index++) - 63;
-            result |= (byte & 0x1f) << shift;
-            shift += 5;
-        } while (byte >= 0x20);
-        lat += ((result & 1) ? ~(result >> 1) : (result >> 1));
-
-        // Decode longitude
-        byte = null; shift = 0; result = 0;
-        do {
-            byte = str.charCodeAt(index++) - 63;
-            result |= (byte & 0x1f) << shift;
-            shift += 5;
-        } while (byte >= 0x20);
-        lng += ((result & 1) ? ~(result >> 1) : (result >> 1));
-
-        coordinates.push([lng / factor, lat / factor]);
-    }
-
-    // Cache the result
-    polylineCache[str] = coordinates;
-
-    return coordinates;
-}
-
-function clearPolylineCache() {
-    // Clear all cache entries
-    for (const key in polylineCache) {
-        delete polylineCache[key];
-    }
-}
-
 async function fetchJSON(url) {
     const r = await fetch(url);
     const ct = (r.headers.get('content-type') || '').toLowerCase();
@@ -96,36 +47,15 @@ const map = new Map({
 });
 
 // Vector sources for different layers
-const pathsSource = new VectorSource();
-const unmatchedPathsSource = new VectorSource();
-const arrowsSource = new VectorSource();
-const currentPositionsSource = new VectorSource();
+const segmentsSource = new VectorSource();
 const userLocationSource = new VectorSource();
 const searchResultSource = new VectorSource();
 
 // Add layers to map (order matters for display)
 map.addLayer(new VectorLayer({
-    source: pathsSource,
+    source: segmentsSource,
     zIndex: 1,
-    style: createPathStyleWithFilter
-}));
-
-map.addLayer(new VectorLayer({
-    source: unmatchedPathsSource,
-    zIndex: 0,
-    style: createUnmatchedPathStyleWithFilter
-}));
-
-map.addLayer(new VectorLayer({
-    source: arrowsSource,
-    zIndex: 1.5,
-    style: createArrowStyleWithFilter
-}));
-
-map.addLayer(new VectorLayer({
-    source: currentPositionsSource,
-    zIndex: 2,
-    style: createCurrentPositionStyleWithFilter
+    style: createSegmentStyleWithFilter
 }));
 
 map.addLayer(new VectorLayer({
@@ -220,645 +150,136 @@ function getColorByAge(timestamp, maxHours = currentTimeHours) {
     return '#00ff00';
 }
 
-// Style function for path segments
-function createPathStyle(feature) {
-    const timestamp = feature.get('timestamp');
-    const color = timestamp ? getColorByAge(timestamp) : '#0066cc';
-
-    return new Style({
-        stroke: new Stroke({
-            color: color,
-            width: 3
-        })
-    });
-}
-
-// Style for unmatched path segments (dashed, thinner, more transparent)
-function createUnmatchedPathStyle(feature) {
-    const timestamp = feature.get('timestamp');
-    const baseColor = timestamp ? getColorByAge(timestamp) : '#0066cc';
-    const colorWithAlpha = baseColor + '80';
-
-    return new Style({
-        stroke: new Stroke({
-            color: colorWithAlpha,
-            width: 2,
-            lineDash: [5, 5]
-        })
-    });
-}
-
-// Style for current position markers
-function createCurrentPositionStyle(feature) {
-    const device = feature.get('device');
-    const timestamp = feature.get('timestamp');
-    const isVeryRecent = timestamp && (Date.now() - new Date(timestamp).getTime()) < 300000;
-
-    return new Style({
-        image: new Icon({
-            anchor: [0.5, 1],
-            src: isVeryRecent
-                ? 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
-                : 'https://maps.google.com/mapfiles/ms/icons/orange-dot.png',
-            scale: 1.0
-        }),
-        text: new Text({
-            text: device ? device.substring(0, 8) + '...' : 'Device',
-            offsetY: -40,
-            fill: new Fill({ color: 'black' }),
-            stroke: new Stroke({ color: 'white', width: 2 }),
-            font: '12px Arial'
-        })
-    });
-}
-
-// Calculate bearing between two points (in degrees)
-function calculateBearing(coord1, coord2) {
-    const dx = coord2[0] - coord1[0];
-    const dy = coord2[1] - coord1[1];
-    return Math.atan2(dx, dy);
-}
-
-// Create a chevron (">") geometry at a point with rotation
-function createChevronGeometry(point, bearing, size = 8) {
-    const angle = bearing;
-    
-    // Chevron points (two lines forming ">")
-    const armLength = size;
-    const armAngle = Math.PI / 5; // Slightly wider angle for better visibility
-    
-    // Upper arm
-    const upperArm = new LineString([
-        point,
-        [
-            point[0] + armLength * Math.sin(angle - armAngle),
-            point[1] + armLength * Math.cos(angle - armAngle)
-        ]
-    ]);
-    
-    // Lower arm
-    const lowerArm = new LineString([
-        point,
-        [
-            point[0] + armLength * Math.sin(angle + armAngle),
-            point[1] + armLength * Math.cos(angle + armAngle)
-        ]
-    ]);
-    
-    return [upperArm, lowerArm];
-}
-
-// Style for direction arrows
-function createArrowStyle(feature) {
-    const timestamp = feature.get('timestamp');
-    const color = timestamp ? getColorByAge(timestamp) : '#0066cc';
-    
-    return new Style({
-        stroke: new Stroke({
-            color: color,
-            width: 2
-        })
-    });
-}
-
-// Generate arrow feature for a polyline (place at midpoint)
-function generateArrowForPolyline(polylineCoords, deviceName, polylineEndTime, zoom) {
-    if (polylineCoords.length < 2) return [];
-    
-    // Arrow size scales INVERSELY with zoom (larger when zoomed OUT for visibility)
-    // Aggressive scaling at lower zooms for visibility:
-    // Zoom 12.0: 300, 12.5: 225, 13.0: 150, 13.5: 120, 14.0: 60, then gradual decrease
-    let arrowSize;
-    if (zoom <= 12.0) {
-        arrowSize = 300;
-    } else if (zoom <= 12.5) {
-        // Interpolate between 300 and 225
-        arrowSize = 300 - ((zoom - 12.0) / 0.5) * 75;
-    } else if (zoom <= 13.0) {
-        // Interpolate between 225 and 150
-        arrowSize = 225 - ((zoom - 12.5) / 0.5) * 75;
-    } else if (zoom <= 13.5) {
-        // Interpolate between 150 and 120
-        arrowSize = 150 - ((zoom - 13.0) / 0.5) * 30;
-    } else if (zoom <= 14.0) {
-        // Interpolate between 120 and 60
-        arrowSize = 120 - ((zoom - 13.5) / 0.5) * 60;
-    } else {
-        // Zoom > 14: continue gradual decrease (60 at zoom 14, down to min 10)
-        arrowSize = Math.max(10, 60 - (zoom - 14) * 5);
-    }
-    
-    // Find the midpoint of the entire polyline
-    const midIndex = Math.floor(polylineCoords.length / 2);
-    const coord1 = polylineCoords[Math.max(0, midIndex - 1)];
-    const coord2 = polylineCoords[Math.min(polylineCoords.length - 1, midIndex)];
-    
-    // Convert to map projection
-    const projCoord1 = fromLonLat(coord1);
-    const projCoord2 = fromLonLat(coord2);
-    
-    const bearing = calculateBearing(projCoord1, projCoord2);
-    
-    // Place arrow at the midpoint
-    const point = [
-        projCoord1[0] + 0.5 * (projCoord2[0] - projCoord1[0]),
-        projCoord1[1] + 0.5 * (projCoord2[1] - projCoord1[1])
-    ];
-    
-    const chevronLines = createChevronGeometry(point, bearing, arrowSize);
-    
-    // Create two separate features for each arm of the chevron
-    const upperArmFeature = new Feature({
-        geometry: chevronLines[0],
-        timestamp: polylineEndTime,
-        polylineEndTime: polylineEndTime,
-        device: deviceName
-    });
-    
-    const lowerArmFeature = new Feature({
-        geometry: chevronLines[1],
-        timestamp: polylineEndTime,
-        polylineEndTime: polylineEndTime,
-        device: deviceName
-    });
-    
-    return [upperArmFeature, lowerArmFeature];
-}
-
-// Function to create path segments from coordinate array
-function createPathSegments(coordinates, deviceName, polylineEndTime, isMatched = true) {
-    const segments = [];
-
-    if (coordinates.length < 2) return segments;
-
-    for (let i = 0; i < coordinates.length - 1; i++) {
-        const start = coordinates[i];
-        const end = coordinates[i + 1];
-
-        if (!start || !end || start.length !== 2 || end.length !== 2) continue;
-
-        // Filter out large gaps for unmatched segments
-        if (!isMatched) {
-            const distance = Math.sqrt(
-                Math.pow(end[0] - start[0], 2) +
-                Math.pow(end[1] - start[1], 2)
-            );
-
-            if (distance > 0.01) continue;
-        }
-
-        const segmentCoords = [
-            fromLonLat(start),
-            fromLonLat(end)
-        ];
-
-        const segmentFeature = new Feature({
-            geometry: new LineString(segmentCoords),
-            device: deviceName,
-            timestamp: polylineEndTime,
-            polylineEndTime: polylineEndTime, // Store for filtering
-            segmentIndex: i,
-            isMatched: isMatched
-        });
-
-        segments.push(segmentFeature);
-    }
-
-    return segments;
-}
-
-// Function to create simplified path (reduce coordinate density)
-function simplifyCoordinates(coordinates, tolerance = 0.0001) {
-    if (coordinates.length <= 2) return coordinates;
-
-    const simplified = [coordinates[0]];
-    let lastAdded = coordinates[0];
-
-    for (let i = 1; i < coordinates.length - 1; i++) {
-        const current = coordinates[i];
-        const distance = Math.sqrt(
-            Math.pow(current[0] - lastAdded[0], 2) +
-            Math.pow(current[1] - lastAdded[1], 2)
-        );
-
-        if (distance > tolerance) {
-            simplified.push(current);
-            lastAdded = current;
-        }
-    }
-
-    simplified.push(coordinates[coordinates.length - 1]);
-    return simplified;
-}
-
-// ✨ OPTIMIZED: Process batches in chunks to avoid blocking UI
-async function processBatchesInChunks(batches, minuteMarkers, deviceName) {
-    const CHUNK_SIZE = 10;
-    const allSegments = { matched: [], unmatched: [] };
-
-    for (let i = 0; i < batches.length; i += CHUNK_SIZE) {
-        const chunk = batches.slice(i, i + CHUNK_SIZE);
-
-        // Process this chunk
-        chunk.forEach(batch => {
-            if (batch.encoded_polyline) {
-                const coords = decodePolyline(batch.encoded_polyline);
-                const simplified = simplifyCoordinates(coords, 0.0001);
-                const segments = createPathSegments(simplified, deviceName, Date.now(), true);
-                allSegments.matched.push(...segments);
-            } else if (batch.raw_coordinates) {
-                const simplified = simplifyCoordinates(batch.raw_coordinates, 0.0001);
-                const segments = createPathSegments(simplified, deviceName, Date.now(), false);
-                allSegments.unmatched.push(...segments);
-            }
-        });
-
-        // Yield to browser between chunks (keeps UI responsive)
-        if (i + CHUNK_SIZE < batches.length) {
-            await new Promise(resolve => setTimeout(resolve, 0));
-        }
-    }
-
-    return allSegments;
-}
-
-// Regenerate arrows for all visible segments at current zoom level
-let arrowRegenerationTimeout = null;
-let isRegeneratingArrows = false; // Prevent recursion
-
-function regenerateArrows() {
-    // Prevent recursive calls
-    if (isRegeneratingArrows) {
-        console.log('⚠️ Arrow regeneration already in progress, skipping');
-        return;
-    }
-    
-    // Debounce arrow regeneration to avoid excessive calls during zoom
-    if (arrowRegenerationTimeout) {
-        clearTimeout(arrowRegenerationTimeout);
-    }
-    
-    arrowRegenerationTimeout = setTimeout(() => {
-        isRegeneratingArrows = true; // Set flag before starting
-        
-        const zoom = map.getView().getZoom();
-        
-        // Clear existing arrows
-        arrowsSource.clear();
-        
-        // Only generate arrows at zoom 12+
-        if (zoom < 12) {
-            isRegeneratingArrows = false;
-            return;
-        }
-        
-        // Use cached polyline data
-        const polylineData = window.cachedPolylineData || [];
-        
-        if (polylineData.length === 0) {
-            isRegeneratingArrows = false;
-            return;
-        }
-        
-        const allArrows = [];
-        
-        console.log(`🎯 Regenerating arrows for ${polylineData.length} polylines at zoom ${zoom.toFixed(1)}`);
-        
-        // Generate one arrow per polyline
-        for (const polyline of polylineData) {
-            const arrows = generateArrowForPolyline(polyline.coords, polyline.deviceName, polyline.endTime, zoom);
-            allArrows.push(...arrows);
-        }
-        
-        console.log(`➡️ Generated ${allArrows.length} arrow features`);
-        
-        // Add all arrows at once
-        if (allArrows.length > 0) {
-            arrowsSource.addFeatures(allArrows);
-        }
-        
-        isRegeneratingArrows = false; // Clear flag after completion
-    }, 150); // 150ms debounce
-}
-
-// ✨ OPTIMIZED: Load all data once on startup (7 days)
-async function loadAllData() {
-    try {
-        showStatus('Loading all paths (7 days)...');
-        const startTime = performance.now();
-
-        // Load 7 days of data (168 hours)
-        const url = `${API_BASE}/paths/encoded?hours=168`;
-        const data = await fetchJSON(url);
-        const fetchTime = performance.now() - startTime;
-        console.log(`✅ Preloaded 7 days in ${fetchTime.toFixed(0)}ms`);
-        console.log('📦 Response data:', JSON.stringify(data, null, 2));
-
-        if (!data.devices || data.devices.length === 0) {
-            showStatus('No devices found');
-            console.log('⚠️ No devices in response');
-            return;
-        }
-
-        console.log(`📱 Processing ${data.devices.length} device(s)`);
-        for (const device of data.devices) {
-            if (device.polylines) {
-                console.log(`  Device ${device.device}: ${device.polylines.length} polylines, ${device.total_points} points`);
-                console.log(`  Time range: ${device.start_time} to ${device.end_time}`);
-            }
-        }
-
-        // Clear existing features
-        pathsSource.clear();
-        unmatchedPathsSource.clear();
-        arrowsSource.clear();
-        currentPositionsSource.clear();
-
-        let totalMatchedSegments = 0;
-        let totalUnmatchedSegments = 0;
-
-        // Store polyline data for arrow generation
-        const polylineData = [];
-
-        // Process each device and create ALL features (7 days worth)
-        for (const device of data.devices) {
-            // Handle polylines array from cached_polylines table
-            if (device.polylines && device.polylines.length > 0) {
-                for (const polyline of device.polylines) {
-                    if (polyline.encoded_polyline) {
-                        const coords = decodePolyline(polyline.encoded_polyline);
-                        const simplified = simplifyCoordinates(coords, 0.0001);
-                        const polylineEndTime = new Date(polyline.end_time).getTime();
-                        const segments = createPathSegments(simplified, device.device, polylineEndTime, true);
-                        pathsSource.addFeatures(segments);
-                        totalMatchedSegments += segments.length;
-                        
-                        // Store polyline data for arrow generation
-                        polylineData.push({
-                            coords: coords,
-                            deviceName: device.device,
-                            endTime: polylineEndTime
-                        });
-                    }
-                }
-            }
-
-            // Don't add current position marker - removed per user request
-            // Device position markers are hidden
-        }
-
-        const totalTime = performance.now() - startTime;
-        console.log(`⚡ Total load time: ${totalTime.toFixed(0)}ms`);
-
-        // Generate arrows for initial zoom level (store polyline data globally for regeneration)
-        window.cachedPolylineData = polylineData;
-        regenerateArrows();
-
-        // Fit map to show paths from initial time range (24 hours)
-        // The style filter will hide older features
-        isSliderDragging = true; // Enable filtering
-        pathsSource.changed();
-        unmatchedPathsSource.changed();
-        arrowsSource.changed();
-        currentPositionsSource.changed();
-        isSliderDragging = false; // Disable filtering (features are already filtered)
-
-        const allFeatures = [
-            ...pathsSource.getFeatures(),
-            ...unmatchedPathsSource.getFeatures()
-        ];
-
-        if (allFeatures.length > 0) {
-            const extent = pathsSource.getExtent();
-            map.getView().fit(extent, {
-                padding: [50, 50, 50, 50],
-                maxZoom: 16,
-                duration: 1000
-            });
-        }
-
-        showStatus(`Loaded 7 days: ${data.devices.length} device(s), ${totalMatchedSegments} segments`);
-
-    } catch (err) {
-        console.error('Failed to load paths:', err);
-        showStatus(`Error: ${err.message}`);
-    }
-}
-
-// Load and display paths for a specific time range (used after slider change)
-async function loadAndDisplayPaths() {
-    try {
-        showStatus('Loading paths...');
-        const startTime = performance.now();
-
-        const url = `${API_BASE}/paths/encoded?hours=${currentTimeHours}`;
-        const data = await fetchJSON(url);
-        const fetchTime = performance.now() - startTime;
-        console.log(`✅ API response in ${fetchTime.toFixed(0)}ms`);
-        console.log('📦 Response data:', JSON.stringify(data, null, 2));
-
-        if (!data.devices || data.devices.length === 0) {
-            showStatus('No devices found');
-            console.log('⚠️ No devices in response');
-            return;
-        }
-
-        console.log(`📱 Processing ${data.devices.length} device(s)`);
-        for (const device of data.devices) {
-            if (device.polylines) {
-                console.log(`  Device ${device.device}: ${device.polylines.length} polylines, ${device.total_points} points`);
-                console.log(`  Time range: ${device.start_time} to ${device.end_time}`);
-            }
-        }
-
-        // Clear existing features
-        pathsSource.clear();
-        unmatchedPathsSource.clear();
-        arrowsSource.clear();
-        currentPositionsSource.clear();
-
-        let totalMatchedSegments = 0;
-        let totalUnmatchedSegments = 0;
-
-        // ✨ OPTIMIZED: Process each device
-        for (const device of data.devices) {
-            // Handle polylines array from cached_polylines table
-            if (device.polylines && device.polylines.length > 0) {
-                for (const polyline of device.polylines) {
-                    if (polyline.encoded_polyline) {
-                        const coords = decodePolyline(polyline.encoded_polyline);
-                        const simplified = simplifyCoordinates(coords, 0.0001);
-                        const polylineEndTime = new Date(polyline.end_time).getTime();
-                        const segments = createPathSegments(simplified, device.device, polylineEndTime, true);
-                        pathsSource.addFeatures(segments);
-                        totalMatchedSegments += segments.length;
-                    }
-                }
-            }
-            // OLD: Keep backwards compatibility with batches format
-            else if (device.batches && device.batches.length > 0) {
-                // For batches, we need to process them (this path shouldn't be hit with cached_polylines)
-                for (const batch of device.batches) {
-                    if (batch.encoded_polyline) {
-                        const coords = decodePolyline(batch.encoded_polyline);
-                        const simplified = simplifyCoordinates(coords, 0.0001);
-                        const segments = createPathSegments(simplified, device.device, Date.now(), true);
-                        pathsSource.addFeatures(segments);
-                        totalMatchedSegments += segments.length;
-                    } else if (batch.raw_coordinates) {
-                        const simplified = simplifyCoordinates(batch.raw_coordinates, 0.0001);
-                        const segments = createPathSegments(simplified, device.device, Date.now(), false);
-                        unmatchedPathsSource.addFeatures(segments);
-                        totalUnmatchedSegments += segments.length;
-                    }
-                }
-            } else if (device.encoded_path) {
-                const coords = decodePolyline(device.encoded_path);
-                const simplified = simplifyCoordinates(coords, 0.0001);
-                const segments = createPathSegments(simplified, device.device, Date.now(), true);
-
-                pathsSource.addFeatures(segments);
-                totalMatchedSegments += segments.length;
-            } else if (device.raw_coordinates) {
-                const simplified = simplifyCoordinates(device.raw_coordinates, 0.0001);
-                const segments = createPathSegments(simplified, device.device, Date.now(), false);
-
-                unmatchedPathsSource.addFeatures(segments);
-                totalUnmatchedSegments += segments.length;
-            }
-
-            // Don't add current position marker - removed per user request
-        }
-
-        const totalTime = performance.now() - startTime;
-        console.log(`⚡ Total render time: ${totalTime.toFixed(0)}ms`);
-
-        // Generate arrows for current zoom level
-        regenerateArrows();
-
-        // Fit map to show all paths
-        const allFeatures = [
-            ...pathsSource.getFeatures(),
-            ...unmatchedPathsSource.getFeatures()
-        ];
-
-        if (allFeatures.length > 0) {
-            const extent = pathsSource.getExtent();
-            map.getView().fit(extent, {
-                padding: [50, 50, 50, 50],
-                maxZoom: 16,
-                duration: 1000
-            });
-        }
-
-        showStatus(`Loaded ${data.devices.length} device(s): ${totalMatchedSegments} matched, ${totalUnmatchedSegments} unmatched segments`);
-
-    } catch (err) {
-        console.error('Failed to load paths:', err);
-        showStatus(`Error: ${err.message}`);
-    }
-}
-
 // Global variable to store current time range
 let currentTimeHours = 24;
 let isSliderDragging = false; // Track if slider is being dragged
 
-// Enhanced style functions that can filter based on time while dragging
-function createPathStyleWithFilter(feature) {
+// Enhanced style function that can filter based on time while dragging
+function createSegmentStyleWithFilter(feature) {
     // If dragging, check if feature should be visible based on time
     if (isSliderDragging) {
-        const polylineEndTime = feature.get('polylineEndTime');
-        if (polylineEndTime) {
+        const lastPlowed = feature.get('last_plowed');
+        if (lastPlowed) {
             const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-            if (polylineEndTime < cutoffTime) {
+            const plowTime = new Date(lastPlowed).getTime();
+            if (plowTime < cutoffTime) {
                 return null; // Hide feature
             }
         }
     }
     
     // Normal style
-    const timestamp = feature.get('timestamp');
-    const color = timestamp ? getColorByAge(timestamp) : '#0066cc';
+    const lastPlowed = feature.get('last_plowed');
+    const color = lastPlowed ? getColorByAge(lastPlowed) : '#0066cc';
+    
+    // Make segments thicker for better visibility
     return new Style({
         stroke: new Stroke({
             color: color,
-            width: 3
+            width: 4
         })
     });
 }
 
-function createArrowStyleWithFilter(feature) {    
-    // If dragging, check if feature should be visible based on time
-    if (isSliderDragging) {
-        const polylineEndTime = feature.get('polylineEndTime');
-        if (polylineEndTime) {
-            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-            if (polylineEndTime < cutoffTime) {
-                return null; // Hide feature
-            }
-        }
-    }
-    
-    return createArrowStyle(feature);
-}
+// Load and display road segments
+async function loadSegments() {
+    try {
+        showStatus('Loading road segments...');
+        const startTime = performance.now();
 
-function createUnmatchedPathStyleWithFilter(feature) {
-    // If dragging, check if feature should be visible based on time
-    if (isSliderDragging) {
-        const polylineEndTime = feature.get('polylineEndTime');
-        if (polylineEndTime) {
-            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-            if (polylineEndTime < cutoffTime) {
-                return null; // Hide feature
-            }
-        }
-    }
-    
-    // Normal style
-    const timestamp = feature.get('timestamp');
-    const baseColor = timestamp ? getColorByAge(timestamp) : '#0066cc';
-    const colorWithAlpha = baseColor + '80';
-    return new Style({
-        stroke: new Stroke({
-            color: colorWithAlpha,
-            width: 2,
-            lineDash: [5, 5]
-        })
-    });
-}
+        // Load all activated segments (last 7 days)
+        const url = `${API_BASE}/segments?municipality=pomfret-vt`;
+        console.log(`🛣️  Fetching segments from: ${url}`);
+        
+        const data = await fetchJSON(url);
+        const fetchTime = performance.now() - startTime;
+        console.log(`✅ Segments loaded in ${fetchTime.toFixed(0)}ms`);
+        console.log('📦 Response data:', data);
 
-function createCurrentPositionStyleWithFilter(feature) {
-    // If dragging, check if feature should be visible based on time
-    if (isSliderDragging) {
-        const polylineEndTime = feature.get('polylineEndTime');
-        if (polylineEndTime) {
-            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-            if (polylineEndTime < cutoffTime) {
-                return null; // Hide feature
-            }
+        if (!data.features || data.features.length === 0) {
+            showStatus('No activated segments found');
+            console.log('⚠️ No segments in response');
+            return;
         }
+
+        console.log(`🛣️  Processing ${data.features.length} segment(s)`);
+
+        // Clear existing features
+        segmentsSource.clear();
+
+        let totalSegments = 0;
+        let segmentsWithinTimeRange = 0;
+
+        // Create features from GeoJSON
+        data.features.forEach(segment => {
+            if (!segment.geometry || !segment.geometry.coordinates) {
+                console.warn('⚠️ Segment missing geometry:', segment);
+                return;
+            }
+
+            // Get the most recent plow time (forward or reverse)
+            const forwardTime = segment.properties.last_plowed_forward 
+                ? new Date(segment.properties.last_plowed_forward).getTime() 
+                : 0;
+            const reverseTime = segment.properties.last_plowed_reverse 
+                ? new Date(segment.properties.last_plowed_reverse).getTime() 
+                : 0;
+            const lastPlowed = Math.max(forwardTime, reverseTime);
+            const lastPlowedISO = lastPlowed > 0 ? new Date(lastPlowed).toISOString() : null;
+
+            // Check if within current time range
+            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+            if (lastPlowed >= cutoffTime) {
+                segmentsWithinTimeRange++;
+            }
+
+            // Convert GeoJSON coordinates to OpenLayers format
+            const coordinates = segment.geometry.coordinates.map(coord => fromLonLat(coord));
+
+            const feature = new Feature({
+                geometry: new LineString(coordinates),
+                segment_id: segment.id,
+                street_name: segment.properties.street_name,
+                road_classification: segment.properties.road_classification,
+                last_plowed: lastPlowedISO,
+                last_plowed_forward: segment.properties.last_plowed_forward,
+                last_plowed_reverse: segment.properties.last_plowed_reverse,
+                device_id: segment.properties.device_id,
+                plow_count_today: segment.properties.plow_count_today,
+                plow_count_total: segment.properties.plow_count_total,
+                segment_length: segment.properties.segment_length
+            });
+
+            segmentsSource.addFeature(feature);
+            totalSegments++;
+        });
+
+        const totalTime = performance.now() - startTime;
+        console.log(`⚡ Total load time: ${totalTime.toFixed(0)}ms`);
+        console.log(`📊 Segments: ${totalSegments} total, ${segmentsWithinTimeRange} within ${currentTimeHours}h range`);
+
+        // Fit map to show segments from initial time range
+        isSliderDragging = true; // Enable filtering
+        segmentsSource.changed();
+        isSliderDragging = false; // Disable filtering
+
+        const allFeatures = segmentsSource.getFeatures();
+
+        if (allFeatures.length > 0) {
+            const extent = segmentsSource.getExtent();
+            map.getView().fit(extent, {
+                padding: [50, 50, 50, 50],
+                maxZoom: 16,
+                duration: 1000
+            });
+        }
+
+        showStatus(`Loaded ${totalSegments} road segments (${segmentsWithinTimeRange} active in last ${currentTimeHours}h)`);
+
+    } catch (err) {
+        console.error('Failed to load segments:', err);
+        showStatus(`Error: ${err.message}`);
     }
-    
-    // Normal style
-    const device = feature.get('device');
-    const timestamp = feature.get('timestamp');
-    const isVeryRecent = timestamp && (Date.now() - new Date(timestamp).getTime()) < 300000;
-    return new Style({
-        image: new Icon({
-            anchor: [0.5, 1],
-            src: isVeryRecent
-                ? 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
-                : 'https://maps.google.com/mapfiles/ms/icons/orange-dot.png',
-            scale: 1.0
-        }),
-        text: new Text({
-            text: device ? device.substring(0, 8) + '...' : 'Device',
-            offsetY: -40,
-            fill: new Fill({ color: 'black' }),
-            stroke: new Stroke({ color: 'white', width: 2 }),
-            font: '12px Arial'
-        })
-    });
 }
 
 // Create simple UI
@@ -875,7 +296,7 @@ function createUI() {
     `;
     document.body.appendChild(searchDiv);
 
-    // Control panel (top-right) - back to original design
+    // Control panel (top-right)
     const controlsDiv = document.createElement('div');
     controlsDiv.id = 'controls';
     controlsDiv.innerHTML = `
@@ -891,7 +312,7 @@ function createUI() {
             </div>
             
             <div class="legend">
-                <div class="legend-title">Path Age:</div>
+                <div class="legend-title">Segment Age:</div>
                 <div class="gradient-bar"></div>
                 <div class="gradient-labels">
                     <span id="gradientLeft">Now</span>
@@ -926,21 +347,27 @@ function setupTimeSlider() {
         
         // Set dragging flag and force style recalculation for instant visual feedback
         isSliderDragging = true;
-        pathsSource.changed();
-        unmatchedPathsSource.changed();
-        arrowsSource.changed();
-        currentPositionsSource.changed();
+        segmentsSource.changed();
     });
 
     slider.addEventListener('change', (e) => {
         // Clear dragging flag
         isSliderDragging = false;
         
-        // Actually rebuild features with correct time range
+        // Update the time range and force re-render
         const index = parseInt(e.target.value);
         currentTimeHours = TIME_INTERVALS[index];
-        clearPolylineCache();
-        loadAndDisplayPaths();
+        segmentsSource.changed();
+        
+        // Update status
+        const visibleCount = segmentsSource.getFeatures().filter(f => {
+            const lastPlowed = f.get('last_plowed');
+            if (!lastPlowed) return false;
+            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+            return new Date(lastPlowed).getTime() >= cutoffTime;
+        }).length;
+        
+        showStatus(`Showing ${visibleCount} segments plowed in last ${currentTimeHours}h`);
     });
 }
 
@@ -1144,29 +571,16 @@ function updateTimeDisplay(hours) {
     updateGradientLabels(hours);
 }
 
-function setTimeRangeByIndex(index) {
-    const slider = document.getElementById('timeRange');
-    slider.value = index;
-    const hours = TIME_INTERVALS[index];
-    updateTimeDisplay(hours);
-    currentTimeHours = hours;
-    clearPolylineCache();
-    loadAndDisplayPaths();
-}
-
 function showStatus(message) {
     // Status div removed - log to console instead
     console.log(message);
 }
 
-function fitAllPaths() {
-    const allFeatures = [
-        ...pathsSource.getFeatures(),
-        ...unmatchedPathsSource.getFeatures()
-    ];
+function fitAllSegments() {
+    const allFeatures = segmentsSource.getFeatures();
 
     if (allFeatures.length > 0) {
-        const extent = pathsSource.getExtent();
+        const extent = segmentsSource.getExtent();
         map.getView().fit(extent, {
             padding: [50, 50, 50, 50],
             maxZoom: 16,
@@ -1176,7 +590,7 @@ function fitAllPaths() {
 }
 
 // Make functions available globally (keeping for compatibility)
-window.fitAllPaths = fitAllPaths;
+window.fitAllSegments = fitAllSegments;
 
 // User geolocation - center map on user's location
 if ('geolocation' in navigator) {
@@ -1192,29 +606,29 @@ if ('geolocation' in navigator) {
     }, { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 });
 }
 
-// Map click handler
+// Map click handler - show segment info
 map.on('click', (event) => {
     const features = map.getFeaturesAtPixel(event.pixel);
     if (features.length > 0) {
         const feature = features[0];
-        const device = feature.get('device');
-        const timestamp = feature.get('timestamp');
-        const isMatched = feature.get('isMatched');
+        const streetName = feature.get('street_name');
+        const lastPlowed = feature.get('last_plowed');
+        const deviceId = feature.get('device_id');
+        const plowCount = feature.get('plow_count_total');
 
-        if (device) {
-            const matchStatus = isMatched !== undefined ? (isMatched ? ' (matched)' : ' (unmatched)') : '';
-            showStatus(`Device: ${device}${matchStatus}, Time: ${timestamp ? new Date(timestamp).toLocaleString() : 'Unknown'}`);
+        if (streetName) {
+            const plowedText = lastPlowed 
+                ? new Date(lastPlowed).toLocaleString() 
+                : 'Unknown';
+            const info = `${streetName} - Last plowed: ${plowedText} (Device: ${deviceId || 'Unknown'}, Total: ${plowCount || 0}x)`;
+            showStatus(info);
+            console.log('📍 Segment clicked:', info);
         }
     }
 });
 
-// Add zoom change listener to regenerate arrows
-map.getView().on('change:resolution', () => {
-    regenerateArrows();
-});
-
 // Initialize
-console.log('🗺️ Initializing MudMaps (OPTIMIZED with 7-day preload)...');
+console.log('🗺️ Initializing MudMaps (SEGMENT-BASED)...');
 createUI();
 updateGradientLabels(currentTimeHours); // Set initial gradient labels
-loadAllData();
+loadSegments();
