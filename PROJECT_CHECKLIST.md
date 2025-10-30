@@ -151,6 +151,178 @@ MudMaps is a real-time GPS tracking system designed for municipalities to track 
 
 ---
 
+## ROAD SEGMENT MODEL - IMPLEMENTATION STATUS
+
+### ✅ PHASE 1: FOUNDATION (COMPLETE)
+
+**Database Schema:**
+- Migration created: `004_add_road_segment_model.sql`
+- Tables: `municipalities`, `streets`, `road_segments`, `segment_updates`
+- PostGIS enabled: Using `postgis/postgis:16-3.4-alpine` Docker image
+
+**OSM Import Tool:**
+- Script: `/db/scripts/import-osm-segments.js`
+- Dependencies installed: `@turf/turf`, `node-fetch`, `pg`, `dotenv` (in package.json)
+- Segment length: **50m** (configurable via --segment-length flag)
+- Boundary intersection fixed (100m buffer + proper ring closing)
+- OSM relation IDs corrected (Pomfret VT: 2030458)
+
+**Data Imported:**
+- **Pomfret, VT:** 1,141 segments, 26 unique streets, 84.1 km total
+- Municipality boundary stored in PostGIS
+- Ready for Lyme, NH import (OSM relation needs verification)
+
+**Server Environment Setup:**
+```bash
+# Required environment variables for import script:
+export PGUSER=mudmaps
+export PGHOST=localhost
+export PGDATABASE=mudmapsdb
+export PGPASSWORD='fDNVp1hPW75zvQU3TqVmOI5G0X4pdx4V1UEHhan8llo='
+export PGPORT=5432
+```
+
+### 🎯 PHASE 2: ACTIVATION LOGIC (NEXT)
+
+**Goal:** Match incoming GPS polylines to road segments and update timestamps.
+
+**Implementation Steps:**
+
+1. **Segment Matching Algorithm**
+   - Use PostGIS `ST_DWithin` to find segments within 20m of polyline
+   - Consider directional matching (compare polyline bearing to segment bearing)
+   - Calculate overlap percentage: `ST_Length(ST_Intersection(polyline, segment)) / ST_Length(segment)`
+   
+   **Example Query:**
+   ```sql
+   -- Find segments intersecting with polyline
+   SELECT rs.id, rs.street_name, rs.bearing
+   FROM road_segments rs
+   WHERE rs.municipality_id = 'pomfret-vt'
+   AND ST_DWithin(
+     rs.geometry::geography,
+     ST_GeomFromText('LINESTRING(...)', 4326)::geography,
+     20  -- 20 meter tolerance
+   );
+   ```
+
+2. **Update segment_updates Table**
+   - Record which device activated which segment and when
+   - Use UPSERT to handle repeated passes over same segment
+   
+   **Example Query:**
+   ```sql
+   INSERT INTO segment_updates (segment_id, device_name, updated_at)
+   VALUES ($1, $2, NOW())
+   ON CONFLICT (segment_id, device_name) 
+   DO UPDATE SET updated_at = NOW();
+   ```
+
+3. **Worker Integration**
+   - Modify `/worker/index.js` (or worker files) to call segment activation after OSRM processing
+   - Keep existing polyline storage for backup/debugging
+   - Run both systems in parallel initially
+   - Location to add code: After successful polyline insertion in worker
+
+4. **Testing with Real Data**
+   - Use existing Pomfret GPS data to test activation
+   - Verify segments are being updated correctly
+   - Check performance (should be fast with spatial indexes)
+
+**Database Indexes Needed:**
+```sql
+-- Spatial index on segments (should already exist from migration)
+CREATE INDEX IF NOT EXISTS idx_road_segments_geom 
+ON road_segments USING GIST(geometry);
+
+-- Index for efficient timestamp queries
+CREATE INDEX IF NOT EXISTS idx_segment_updates_time 
+ON segment_updates(segment_id, updated_at DESC);
+```
+
+### 🌐 PHASE 3: FRONTEND DISPLAY (AFTER ACTIVATION WORKS)
+
+**New API Endpoint:**
+```
+GET /api/segments?municipality=pomfret-vt&since=timestamp
+Returns: Array of activated segments with geometries and last_updated
+```
+
+**Frontend Changes:**
+- Load segments instead of polylines from new endpoint
+- Render segments as LineStrings on map
+- Color by recency (use existing gradient logic)
+- Segments more efficient: 1,141 objects vs 9,000+ polylines
+
+**Parallel Operation:**
+- Keep polyline display working
+- Add segment layer as optional toggle
+- Compare both visualizations
+- Gradually migrate once confident
+
+### 📊 PHASE 4: COVERAGE METRICS (FUTURE)
+
+**Admin Features:**
+- Calculate % of road network covered in last X hours
+- Show streets with no recent activity
+- Directional coverage (northbound vs southbound)
+- Frequency tracking per segment
+
+**Performance Benefits:**
+- Fixed dataset size (never grows, only timestamps update)
+- Efficient queries (predictable, indexed)
+- Frontend caching (segments downloaded once)
+- Mobile-friendly (fewer objects to render)
+
+### 🔧 IMPORT NEW MUNICIPALITIES
+
+**To import another municipality:**
+
+1. Find OSM relation ID for the town boundary
+2. Add municipality config to `import-osm-segments.js`:
+   ```javascript
+   'town-state': {
+       name: 'Town Name',
+       state: 'ST',
+       osmRelationId: 123456,
+       bbox: [minLon, minLat, maxLon, maxLat]
+   }
+   ```
+3. Run import on server:
+   ```bash
+   cd ~/mudmaps-docker/db/scripts
+   node import-osm-segments.js town-state --segment-length=50
+   ```
+
+**Next Municipality:** Lyme, NH (need to verify OSM relation ID 61644)
+
+### 📝 KEY TECHNICAL DETAILS
+
+**Schema Reference:**
+- `road_segments.id` - Primary key (auto-increment)
+- `road_segments.municipality_id` - Foreign key to municipalities
+- `road_segments.geometry` - PostGIS LineString (4326)
+- `road_segments.segment_length` - Length in meters
+- `road_segments.bearing` - Direction in degrees (0-360)
+- `road_segments.street_name` - From OSM
+- `road_segments.osm_way_id` - Original OSM way reference
+
+**Performance Characteristics:**
+- Pomfret: 1,141 segments (manageable)
+- Vermont entire state: ~250,000 segments at 100m (500,000 at 50m)
+- Single town typically: 500-2,000 segments
+- Activation query: Fast with GIST index on geometry
+- Frontend: Loads once, then only timestamp updates
+
+**Implementation Strategy:**
+- Start with activation logic in worker
+- Test thoroughly with real GPS data
+- Add frontend display once confident
+- Keep polylines as parallel system initially
+- Migrate gradually, not all at once
+
+---
+
 ## Immediate Goals: Public-Facing Map
 
 ### Phase 1: Data Foundation

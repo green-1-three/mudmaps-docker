@@ -212,6 +212,79 @@ function groupIntoTimeWindows(points) {
     return batches;
 }
 
+// Activate road segments based on polyline intersection
+async function activateRoadSegments(client, polylineId, deviceId, polylineWKT, polylineBearing, timestamp) {
+    try {
+        // Find all road segments that intersect with this polyline
+        const segmentsResult = await client.query(`
+            SELECT 
+                rs.id,
+                rs.bearing as segment_bearing,
+                rs.municipality_id,
+                rs.street_name,
+                ST_Length(ST_Intersection(rs.geometry, ST_GeomFromText($1, 4326))::geography) / 
+                ST_Length(rs.geometry::geography) * 100 as overlap_percentage
+            FROM road_segments rs
+            WHERE ST_Intersects(rs.geometry, ST_GeomFromText($1, 4326))
+        `, [polylineWKT]);
+        
+        if (segmentsResult.rows.length === 0) {
+            log(`   📍 No road segments found for polyline ${polylineId}`);
+            return;
+        }
+        
+        log(`   🛣️  Activating ${segmentsResult.rows.length} road segments`);
+        
+        // Process each intersecting segment
+        for (const segment of segmentsResult.rows) {
+            // Determine direction (forward or reverse)
+            const direction = await client.query(`
+                SELECT determine_direction($1, $2) as direction
+            `, [polylineBearing, segment.segment_bearing]);
+            
+            const directionValue = direction.rows[0].direction;
+            const timestampColumn = directionValue === 'forward' ? 'last_plowed_forward' : 'last_plowed_reverse';
+            
+            // Update the segment timestamp and counters
+            await client.query(`
+                UPDATE road_segments
+                SET 
+                    ${timestampColumn} = $1,
+                    last_plowed_device_id = $2,
+                    plow_count_today = plow_count_today + 1,
+                    plow_count_total = plow_count_total + 1,
+                    updated_at = NOW()
+                WHERE id = $3
+            `, [timestamp, deviceId, segment.id]);
+            
+            // Log the activation in segment_updates
+            await client.query(`
+                INSERT INTO segment_updates (
+                    segment_id,
+                    polyline_id,
+                    device_id,
+                    direction,
+                    overlap_percentage,
+                    timestamp
+                ) VALUES ($1, $2, $3, $4, $5, $6)
+            `, [
+                segment.id,
+                polylineId,
+                deviceId,
+                directionValue,
+                segment.overlap_percentage,
+                timestamp
+            ]);
+        }
+        
+        log(`   ✅ Activated ${segmentsResult.rows.length} segments (polyline ${polylineId})`);
+        
+    } catch (error) {
+        log(`   ❌ Error activating road segments: ${error.message}`);
+        // Don't throw - we want the polyline to still be saved even if segment activation fails
+    }
+}
+
 // Process a single batch of GPS points
 async function processBatch(client, device_id, batch, newPointsInBatch) {
     // Sort batch by recorded_at to ensure correct time order
@@ -277,7 +350,7 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
         );
         
         // Insert into cached_polylines with geometry and bearing
-        await client.query(`
+        const polylineResult = await client.query(`
             INSERT INTO cached_polylines (
                 device_id, start_time, end_time, encoded_polyline,
                 geometry, bearing,
@@ -291,6 +364,7 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
                 osrm_confidence = EXCLUDED.osrm_confidence,
                 batch_id = EXCLUDED.batch_id,
                 osrm_duration_ms = EXCLUDED.osrm_duration_ms
+            RETURNING id
         `, [
             device_id, 
             startTime, 
@@ -303,6 +377,11 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
             batchId,
             osrmDuration
         ]);
+        
+        const polylineId = polylineResult.rows[0].id;
+        
+        // Activate road segments
+        await activateRoadSegments(client, polylineId, device_id, wkt, bearing, endTime);
         
         // Mark only NEW GPS points as processed (not the overlapping first point)
         if (pointIds.length > 0) {
