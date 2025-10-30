@@ -279,21 +279,42 @@ async function importMunicipality(municipalityId, segmentLength = 75) {
         console.log('Step 3: Processing and clipping roads...');
         let features = osmWays.map(osmWayToGeoJSON);
         
+        // Create a buffered boundary for more forgiving intersection test
+        // Buffer by 100m to catch roads on the boundary edge
+        const bufferedBoundary = turf.buffer(boundary, 0.1, { units: 'kilometers' });
+        
+        // Convert MultiPolygon to Polygon if only one ring (turf works better with simple polygons)
+        let testBoundary = bufferedBoundary;
+        if (bufferedBoundary.geometry.type === 'MultiPolygon' && bufferedBoundary.geometry.coordinates.length === 1) {
+            testBoundary = turf.polygon(bufferedBoundary.geometry.coordinates[0]);
+        }
+        
         // Clip to municipality boundary
         const clippedFeatures = [];
+        let skipped = 0;
+        
         for (const feature of features) {
             try {
                 const line = turf.lineString(feature.geometry.coordinates);
-                if (turf.booleanIntersects(line, boundary)) {
+                
+                // Test if line intersects OR is within the buffered boundary
+                if (turf.booleanIntersects(line, testBoundary) || turf.booleanWithin(line, testBoundary)) {
                     clippedFeatures.push(feature);
                 }
             } catch (e) {
                 // Skip invalid geometries
-                console.warn(`  ⚠️  Skipping invalid geometry for way ${feature.properties.osm_way_id}`);
+                skipped++;
+                if (skipped <= 5) {  // Only show first 5 warnings
+                    console.warn(`  ⚠️  Skipping invalid geometry for way ${feature.properties.osm_way_id}: ${e.message}`);
+                }
             }
         }
         
-        console.log(`✓ ${clippedFeatures.length} roads within municipality boundary\n`);
+        if (skipped > 5) {
+            console.warn(`  ⚠️  (${skipped - 5} more geometries skipped)`);
+        }
+        
+        console.log(`✓ ${clippedFeatures.length} roads within municipality boundary (${features.length - clippedFeatures.length - skipped} outside, ${skipped} invalid)\n`);
         
         // Step 4: Segment roads
         console.log('Step 4: Segmenting roads...');

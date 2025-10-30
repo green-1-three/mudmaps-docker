@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgis/postgis:16-3.4-alpine
     container_name: mudmaps-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
