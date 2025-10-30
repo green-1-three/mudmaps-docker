@@ -83,6 +83,18 @@ async function fetchMunicipalityBoundary(osmRelationId) {
     for (const member of relation.members) {
         if (member.role === 'outer' && member.type === 'way') {
             const wayCoords = member.geometry.map(node => [node.lon, node.lat]);
+            
+            // Ensure ring is closed (first point = last point)
+            if (wayCoords.length > 0) {
+                const first = wayCoords[0];
+                const last = wayCoords[wayCoords.length - 1];
+                
+                if (first[0] !== last[0] || first[1] !== last[1]) {
+                    // Close the ring by adding first point to the end
+                    wayCoords.push([...first]);
+                }
+            }
+            
             coordinates.push(wayCoords);
         }
     }
