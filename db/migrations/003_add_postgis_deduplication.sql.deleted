@@ -1,0 +1,233 @@
+-- ============================================
+-- Migration: Add PostGIS for Spatial Deduplication
+-- ============================================
+-- Description: Add PostGIS extension, geometry column, bearing calculation
+--              for intelligent polyline deduplication based on spatial overlap
+-- Date: 2025-10-29
+-- Author: MudMaps Team
+-- ============================================
+
+BEGIN;
+
+-- ============================================
+-- STEP 1: ADD POSTGIS EXTENSION
+-- ============================================
+DO $$
+BEGIN
+    RAISE NOTICE 'Installing PostGIS extension...';
+END $$;
+
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- Verify PostGIS is installed
+DO $$
+DECLARE
+    postgis_version TEXT;
+BEGIN
+    SELECT PostGIS_version() INTO postgis_version;
+    RAISE NOTICE '✓ PostGIS installed: %', postgis_version;
+END $$;
+
+-- ============================================
+-- STEP 2: ADD GEOMETRY AND BEARING COLUMNS
+-- ============================================
+DO $$
+BEGIN
+    RAISE NOTICE 'Adding geometry and bearing columns to cached_polylines...';
+END $$;
+
+ALTER TABLE cached_polylines 
+ADD COLUMN IF NOT EXISTS geometry GEOMETRY(LINESTRING, 4326),
+ADD COLUMN IF NOT EXISTS bearing DOUBLE PRECISION;
+
+-- Add comments
+COMMENT ON COLUMN cached_polylines.geometry IS 
+    'PostGIS geometry representation of the polyline for spatial queries and deduplication';
+COMMENT ON COLUMN cached_polylines.bearing IS 
+    'Average bearing of the polyline in degrees (0-360), calculated from start to end point. Used to distinguish northbound vs southbound traffic on same road.';
+
+-- ============================================
+-- STEP 3: CREATE HELPER FUNCTIONS
+-- ============================================
+DO $$
+BEGIN
+    RAISE NOTICE 'Creating bearing calculation functions...';
+END $$;
+
+-- Function to calculate bearing between two points (in degrees, 0-360)
+CREATE OR REPLACE FUNCTION calculate_bearing(
+    lat1 DOUBLE PRECISION, 
+    lon1 DOUBLE PRECISION,
+    lat2 DOUBLE PRECISION, 
+    lon2 DOUBLE PRECISION
+) RETURNS DOUBLE PRECISION AS $$
+DECLARE
+    dlon DOUBLE PRECISION;
+    y DOUBLE PRECISION;
+    x DOUBLE PRECISION;
+    bearing DOUBLE PRECISION;
+BEGIN
+    -- Handle case where points are identical
+    IF lat1 = lat2 AND lon1 = lon2 THEN
+        RETURN NULL;
+    END IF;
+    
+    dlon := radians(lon2 - lon1);
+    
+    y := sin(dlon) * cos(radians(lat2));
+    x := cos(radians(lat1)) * sin(radians(lat2)) - 
+         sin(radians(lat1)) * cos(radians(lat2)) * cos(dlon);
+    
+    bearing := degrees(atan2(y, x));
+    
+    -- Normalize to 0-360
+    IF bearing < 0 THEN
+        bearing := bearing + 360;
+    END IF;
+    
+    RETURN bearing;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+COMMENT ON FUNCTION calculate_bearing IS 
+    'Calculate bearing between two lat/lon points in degrees (0-360). Returns NULL if points are identical.';
+
+-- Function to calculate average bearing of a linestring
+CREATE OR REPLACE FUNCTION polyline_bearing(geom GEOMETRY) 
+RETURNS DOUBLE PRECISION AS $$
+DECLARE
+    num_points INTEGER;
+    start_point GEOMETRY;
+    end_point GEOMETRY;
+    lat1 DOUBLE PRECISION;
+    lon1 DOUBLE PRECISION;
+    lat2 DOUBLE PRECISION;
+    lon2 DOUBLE PRECISION;
+BEGIN
+    num_points := ST_NPoints(geom);
+    
+    IF num_points < 2 THEN
+        RETURN NULL;
+    END IF;
+    
+    -- Use first and last point for overall bearing
+    start_point := ST_StartPoint(geom);
+    end_point := ST_EndPoint(geom);
+    
+    lat1 := ST_Y(start_point);
+    lon1 := ST_X(start_point);
+    lat2 := ST_Y(end_point);
+    lon2 := ST_X(end_point);
+    
+    RETURN calculate_bearing(lat1, lon1, lat2, lon2);
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+COMMENT ON FUNCTION polyline_bearing IS 
+    'Calculate overall bearing of a linestring from start to end point';
+
+-- Function to check if two bearings are similar (within tolerance)
+CREATE OR REPLACE FUNCTION bearings_similar(
+    bearing1 DOUBLE PRECISION, 
+    bearing2 DOUBLE PRECISION,
+    tolerance DOUBLE PRECISION DEFAULT 30.0  -- degrees
+) RETURNS BOOLEAN AS $$
+DECLARE
+    diff DOUBLE PRECISION;
+BEGIN
+    IF bearing1 IS NULL OR bearing2 IS NULL THEN
+        RETURN FALSE;
+    END IF;
+    
+    -- Calculate smallest angle difference (handles 0/360 wraparound)
+    diff := ABS(bearing1 - bearing2);
+    IF diff > 180 THEN
+        diff := 360 - diff;
+    END IF;
+    
+    RETURN diff <= tolerance;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+COMMENT ON FUNCTION bearings_similar IS 
+    'Check if two bearings are within tolerance degrees of each other (handles 0/360 wraparound)';
+
+-- ============================================
+-- STEP 4: CREATE SPATIAL INDEXES
+-- ============================================
+DO $$
+BEGIN
+    RAISE NOTICE 'Creating spatial indexes...';
+END $$;
+
+-- Primary spatial index on geometry
+CREATE INDEX IF NOT EXISTS idx_cached_polylines_geom 
+ON cached_polylines USING GIST(geometry)
+WHERE geometry IS NOT NULL;
+
+-- Composite index for time-based spatial queries
+CREATE INDEX IF NOT EXISTS idx_cached_polylines_time_geom 
+ON cached_polylines(device_id, start_time DESC) 
+WHERE geometry IS NOT NULL;
+
+-- Index on bearing for direction-based queries
+CREATE INDEX IF NOT EXISTS idx_cached_polylines_bearing
+ON cached_polylines(bearing)
+WHERE bearing IS NOT NULL;
+
+-- ============================================
+-- STEP 5: VERIFICATION
+-- ============================================
+DO $$
+DECLARE
+    total_polylines INTEGER;
+    polylines_with_geom INTEGER;
+BEGIN
+    RAISE NOTICE '';
+    RAISE NOTICE '==================================================';
+    RAISE NOTICE 'MIGRATION VERIFICATION';
+    RAISE NOTICE '==================================================';
+    
+    SELECT COUNT(*) INTO total_polylines FROM cached_polylines;
+    SELECT COUNT(*) INTO polylines_with_geom FROM cached_polylines WHERE geometry IS NOT NULL;
+    
+    RAISE NOTICE 'Total polylines: %', total_polylines;
+    RAISE NOTICE 'Polylines with geometry: %', polylines_with_geom;
+    
+    IF polylines_with_geom = 0 AND total_polylines > 0 THEN
+        RAISE NOTICE '';
+        RAISE NOTICE '⚠️  NEXT STEP: Run data migration script to populate geometry';
+        RAISE NOTICE '    node migrate-polylines-to-postgis.js';
+    ELSIF polylines_with_geom = total_polylines THEN
+        RAISE NOTICE '✓ All existing polylines have geometry!';
+    ELSE
+        RAISE NOTICE '⚠️  Partial migration: % of % polylines have geometry', polylines_with_geom, total_polylines;
+    END IF;
+    
+    RAISE NOTICE '==================================================';
+    RAISE NOTICE '';
+END $$;
+
+COMMIT;
+
+-- ============================================
+-- POST-MIGRATION INSTRUCTIONS
+-- ============================================
+DO $$
+BEGIN
+    RAISE NOTICE '';
+    RAISE NOTICE '==================================================';
+    RAISE NOTICE 'MIGRATION COMPLETED SUCCESSFULLY';
+    RAISE NOTICE '==================================================';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Next steps:';
+    RAISE NOTICE '1. Run data migration to populate existing polylines:';
+    RAISE NOTICE '   node db/scripts/migrate-polylines-to-postgis.js';
+    RAISE NOTICE '';
+    RAISE NOTICE '2. Update worker to generate geometry for new polylines';
+    RAISE NOTICE '';
+    RAISE NOTICE '3. Update backend API to use spatial deduplication';
+    RAISE NOTICE '';
+    RAISE NOTICE '4. Test deduplication queries';
+    RAISE NOTICE '==================================================';
+END $$;

@@ -1,0 +1,250 @@
+-- ============================================
+-- Testing Queries for PostGIS Deduplication
+-- ============================================
+-- Run these queries after migration to verify everything works
+
+-- ============================================
+-- 1. VERIFY POSTGIS INSTALLATION
+-- ============================================
+SELECT PostGIS_version();
+-- Expected: Should return version string like "3.x POSTGIS="3.x.x" ..."
+
+-- ============================================
+-- 2. CHECK GEOMETRY POPULATION
+-- ============================================
+SELECT 
+    COUNT(*) as total_polylines,
+    COUNT(geometry) as with_geometry,
+    COUNT(bearing) as with_bearing,
+    ROUND(COUNT(geometry)::numeric / COUNT(*)::numeric * 100, 1) as geometry_percentage,
+    ROUND(COUNT(bearing)::numeric / COUNT(*)::numeric * 100, 1) as bearing_percentage
+FROM cached_polylines;
+-- Expected: All polylines should have geometry and bearing (100%)
+
+-- ============================================
+-- 3. SAMPLE POLYLINES WITH GEOMETRY
+-- ============================================
+SELECT 
+    id,
+    device_id,
+    start_time,
+    end_time,
+    bearing,
+    ST_AsText(geometry) as wkt_geometry_sample,
+    ST_Length(geometry::geography) as length_meters
+FROM cached_polylines
+WHERE geometry IS NOT NULL
+ORDER BY start_time DESC
+LIMIT 5;
+-- Expected: Should show 5 recent polylines with bearings and lengths
+
+-- ============================================
+-- 4. TEST BEARING SIMILARITY FUNCTION
+-- ============================================
+-- Test cases for bearing similarity
+SELECT 
+    bearings_similar(0, 30, 30) as "0_vs_30_tol30",     -- Should be TRUE
+    bearings_similar(0, 30, 45) as "0_vs_30_tol45",     -- Should be TRUE
+    bearings_similar(0, 30, 60) as "0_vs_30_tol60",     -- Should be TRUE
+    bearings_similar(0, 90, 30) as "0_vs_90_tol30",     -- Should be FALSE
+    bearings_similar(10, 350, 30) as "10_vs_350_tol30", -- Should be TRUE (wraparound)
+    bearings_similar(180, 200, 30) as "180_vs_200_tol30"; -- Should be TRUE
+-- Expected: Results should match comments
+
+-- ============================================
+-- 5. FIND OVERLAPPING POLYLINES
+-- ============================================
+-- Find polylines that overlap spatially with same bearing
+WITH overlaps AS (
+    SELECT 
+        p1.id as polyline1_id,
+        p1.device_id as device1,
+        p1.start_time as time1,
+        p1.bearing as bearing1,
+        p2.id as polyline2_id,
+        p2.device_id as device2,
+        p2.start_time as time2,
+        p2.bearing as bearing2,
+        ST_Length(ST_Intersection(p1.geometry, p2.geometry)::geography) as overlap_meters,
+        ST_Length(p1.geometry::geography) as p1_length_meters,
+        ROUND(
+            (ST_Length(ST_Intersection(p1.geometry, p2.geometry)::geography) / 
+             ST_Length(p1.geometry::geography) * 100)::numeric, 
+            1
+        ) as overlap_percentage
+    FROM cached_polylines p1
+    JOIN cached_polylines p2 ON p1.id < p2.id
+    WHERE 
+        p1.geometry IS NOT NULL 
+        AND p2.geometry IS NOT NULL
+        AND ST_Intersects(p1.geometry, p2.geometry)
+        AND bearings_similar(p1.bearing, p2.bearing, 30)
+)
+SELECT *
+FROM overlaps
+WHERE overlap_percentage > 50
+ORDER BY overlap_percentage DESC
+LIMIT 10;
+-- Expected: Shows polylines with >50% overlap and similar bearings
+-- These are candidates for deduplication
+
+-- ============================================
+-- 6. COUNT SUPERSEDED POLYLINES
+-- ============================================
+-- How many polylines would be filtered by deduplication?
+WITH superseded_check AS (
+    SELECT 
+        p1.id,
+        p1.device_id,
+        p1.start_time,
+        EXISTS(
+            SELECT 1 
+            FROM cached_polylines p2
+            WHERE p2.start_time > p1.end_time
+            AND p2.geometry IS NOT NULL
+            AND p1.geometry IS NOT NULL
+            AND ST_Intersects(p1.geometry, p2.geometry)
+            AND ST_Length(
+                ST_Intersection(p1.geometry, p2.geometry)::geography
+            ) / NULLIF(ST_Length(p1.geometry::geography), 0) > 0.5
+            AND bearings_similar(p1.bearing, p2.bearing, 30)
+        ) AS is_superseded
+    FROM cached_polylines p1
+    WHERE p1.geometry IS NOT NULL
+)
+SELECT 
+    COUNT(*) as total_polylines,
+    COUNT(*) FILTER (WHERE is_superseded) as superseded_count,
+    COUNT(*) FILTER (WHERE NOT is_superseded) as visible_count,
+    ROUND(
+        COUNT(*) FILTER (WHERE is_superseded)::numeric / COUNT(*)::numeric * 100, 
+        1
+    ) as superseded_percentage
+FROM superseded_check;
+-- Expected: Shows how many polylines are superseded vs visible
+
+-- ============================================
+-- 7. TEST SPATIAL INDEX PERFORMANCE
+-- ============================================
+-- Check if spatial index exists and is being used
+EXPLAIN ANALYZE
+SELECT COUNT(*)
+FROM cached_polylines p1
+WHERE EXISTS(
+    SELECT 1 
+    FROM cached_polylines p2
+    WHERE ST_Intersects(p1.geometry, p2.geometry)
+    AND p1.id != p2.id
+)
+AND p1.geometry IS NOT NULL;
+-- Expected: Query plan should show "Index Scan using idx_cached_polylines_geom"
+-- If it shows "Seq Scan", the index isn't being used properly
+
+-- ============================================
+-- 8. COMPARE DEDUPLICATED vs NON-DEDUPLICATED
+-- ============================================
+-- Without deduplication
+WITH all_polylines AS (
+    SELECT COUNT(*) as count
+    FROM cached_polylines
+    WHERE start_time > NOW() - INTERVAL '24 hours'
+),
+-- With deduplication
+deduplicated AS (
+    SELECT COUNT(*) as count
+    FROM (
+        SELECT p1.id
+        FROM cached_polylines p1
+        WHERE p1.start_time > NOW() - INTERVAL '24 hours'
+        AND NOT EXISTS(
+            SELECT 1 
+            FROM cached_polylines p2
+            WHERE p2.start_time > p1.end_time
+            AND p2.start_time <= NOW()
+            AND p2.geometry IS NOT NULL
+            AND p1.geometry IS NOT NULL
+            AND ST_Intersects(p1.geometry, p2.geometry)
+            AND ST_Length(
+                ST_Intersection(p1.geometry, p2.geometry)::geography
+            ) / NULLIF(ST_Length(p1.geometry::geography), 0) > 0.5
+            AND bearings_similar(p1.bearing, p2.bearing, 30)
+        )
+    ) deduped
+)
+SELECT 
+    (SELECT count FROM all_polylines) as total_polylines_24h,
+    (SELECT count FROM deduplicated) as deduplicated_polylines_24h,
+    (SELECT count FROM all_polylines) - (SELECT count FROM deduplicated) as removed_by_dedup,
+    ROUND(
+        ((SELECT count FROM deduplicated)::numeric / (SELECT count FROM all_polylines)::numeric * 100), 
+        1
+    ) as retention_percentage;
+-- Expected: Shows how effective deduplication is
+
+-- ============================================
+-- 9. DEVICES WITH MOST OVERLAPPING PATHS
+-- ============================================
+-- Which devices create the most overlapping polylines?
+SELECT 
+    device_id,
+    COUNT(*) as total_polylines,
+    COUNT(*) FILTER (WHERE is_superseded) as superseded,
+    COUNT(*) FILTER (WHERE NOT is_superseded) as visible,
+    ROUND(
+        COUNT(*) FILTER (WHERE is_superseded)::numeric / COUNT(*)::numeric * 100,
+        1
+    ) as superseded_pct
+FROM (
+    SELECT 
+        p1.device_id,
+        p1.id,
+        EXISTS(
+            SELECT 1 
+            FROM cached_polylines p2
+            WHERE p2.device_id = p1.device_id
+            AND p2.start_time > p1.end_time
+            AND p2.geometry IS NOT NULL
+            AND p1.geometry IS NOT NULL
+            AND ST_Intersects(p1.geometry, p2.geometry)
+            AND ST_Length(
+                ST_Intersection(p1.geometry, p2.geometry)::geography
+            ) / NULLIF(ST_Length(p1.geometry::geography), 0) > 0.5
+            AND bearings_similar(p1.bearing, p2.bearing, 30)
+        ) AS is_superseded
+    FROM cached_polylines p1
+    WHERE p1.geometry IS NOT NULL
+    AND p1.start_time > NOW() - INTERVAL '7 days'
+) device_stats
+GROUP BY device_id
+ORDER BY superseded_pct DESC;
+-- Expected: Shows which devices have the most route repetition
+
+-- ============================================
+-- 10. VISUAL CHECK: SAME ROAD, OPPOSITE DIRECTIONS
+-- ============================================
+-- Find polylines on same road but going opposite directions (should NOT be deduplicated)
+SELECT 
+    p1.id as polyline1,
+    p1.bearing as bearing1,
+    p2.id as polyline2,
+    p2.bearing as bearing2,
+    ABS(p1.bearing - p2.bearing) as bearing_diff,
+    ST_Length(ST_Intersection(p1.geometry, p2.geometry)::geography) as overlap_meters,
+    ROUND(
+        (ST_Length(ST_Intersection(p1.geometry, p2.geometry)::geography) / 
+         ST_Length(p1.geometry::geography) * 100)::numeric,
+        1
+    ) as overlap_pct
+FROM cached_polylines p1
+JOIN cached_polylines p2 ON p1.id < p2.id
+WHERE 
+    p1.geometry IS NOT NULL 
+    AND p2.geometry IS NOT NULL
+    AND ST_Intersects(p1.geometry, p2.geometry)
+    AND ST_Length(ST_Intersection(p1.geometry, p2.geometry)::geography) > 100  -- >100m overlap
+    AND ABS(p1.bearing - p2.bearing) > 150  -- Roughly opposite directions
+    AND p1.start_time > NOW() - INTERVAL '24 hours'
+ORDER BY overlap_pct DESC
+LIMIT 10;
+-- Expected: Shows opposite-direction traffic that should remain visible
+-- Both should appear on map even though they overlap spatially

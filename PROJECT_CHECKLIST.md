@@ -16,6 +16,141 @@ MudMaps is a real-time GPS tracking system designed for municipalities to track 
 
 ---
 
+## Architecture Reconsideration (Before Continuing)
+
+### Road Segment Model vs Current Polyline Model
+**Context:** Current system displays vehicle polylines directly. Alternative approach: pre-segment all roads into 50m chunks, use polylines as triggers to activate segments.
+
+**Current Model:**
+- Vehicle drives → creates polyline → display polyline
+- Issues: overlapping polylines, arrow clutter, hard to measure coverage
+- Deduplication is complex: need to handle cumulative overlaps, diverging paths, partial coverage
+
+**Proposed Segment Model:**
+- Town has predefined 50m road segments (from OSM)
+- Vehicle polylines trigger segments (mark as "plowed"), then are effectively done
+- Polylines never sent to frontend - only used backend to update segment timestamps
+- Display segments colored by recency, not polylines at all
+- Polylines stored for debugging/historical replay but not used for resident-facing visualization
+- Hybrid: polylines remain authoritative source, segments are visualization layer
+
+**Benefits:**
+- No overlap/deduplication needed (discrete segments)
+- Granular reporting: "50% of Main St cleared", "cleared both directions"
+- Coverage statistics: "83% of roads serviced"
+- Directional tracking: northbound vs southbound (compare polyline bearing to segment bearing)
+- Partial coverage: "40% of this segment plowed" using ST_Length(ST_Intersection(polyline, segment)) / ST_Length(segment)
+- Frequency tracking: "Main Street plowed 3 times today"
+- Clean visualization, solves arrow clutter naturally
+- Better product for B2G: municipalities care about "which streets serviced" not "exact vehicle path"
+
+*Performance & scalability:*
+- VT has ~25,000 km of roads = 250,000 segments for entire state (at 100m each)
+- Single town might have only 1,000 segments vs 9,000+ polylines from just a few drives
+- Fixed dataset size - never grows (just timestamp updates)
+- Frontend loads 1,000 objects once vs thousands that keep accumulating
+- Mobile/slow devices: trivial to render, aggressive caching possible
+- Network: download segments once, then only tiny timestamp updates via WebSocket
+- Database: UPDATE operations only (no infinite INSERT growth)
+- Queries stay fast - predictable, fixed dataset size
+
+*Operational simplicity:*
+- Complexity front-loaded in setup phase (OSM import, segmentation)
+- Runtime is dead simple: polyline intersects segment → update timestamp
+- No complex deduplication, filtering, or arrow logic during storms
+- Easy to monitor: "are segments updating?" (binary yes/no)
+- Fewer failure modes - simpler to debug
+- Perfect for solo operation: system "just works" once configured
+- Critical for B2G: can't afford complex failures during peak usage (winter storms)
+
+**Implementation considerations:**
+
+*Preprocessing (automated):*
+- Download OSM road data via Overpass API or Geofabrik extracts
+- Filter for drivable roads: highway IN ('residential', 'primary', 'secondary', 'tertiary', 'unclassified', 'service')
+- Use PostGIS ST_LineSubstring() to segment roads into 50m chunks
+- Tools: osm2pgsql, osmium, Overpass Turbo
+- One-time setup per municipality (can be automated with script)
+- Per municipality: define boundary polygon → download roads → clip → segment → load to DB
+
+*Database schema additions:*
+- `road_segments` table with:
+  - `segment_id` (primary key)
+  - `geometry` (PostGIS linestring, 50m max length)
+  - `street_name` (from OSM)
+  - `municipality_id`
+  - `bearing` (calculated from geometry)
+  - `road_classification` (residential, highway, etc.)
+  - `last_plowed_northbound` (timestamp)
+  - `last_plowed_southbound` (timestamp)
+  - `coverage_percentage` (0-100)
+  - `plow_count_today` (integer, reset daily)
+  - `last_plowed_device_id`
+
+*Processing flow:*
+1. Vehicle reports GPS → create polyline (existing system, unchanged)
+2. Worker processes polyline through OSRM (existing system, unchanged)
+3. NEW: Check which road segments intersect with new polyline (PostGIS ST_Intersects)
+4. NEW: For each intersecting segment:
+   - Calculate overlap: ST_Length(ST_Intersection(polyline, segment)) / ST_Length(segment)
+   - Determine direction: compare polyline bearing to segment bearing (within ±30° tolerance)
+   - Update appropriate timestamp (northbound/southbound)
+   - Update coverage_percentage
+   - Increment plow_count_today
+5. Frontend loads segments instead of polylines, colors by timestamp
+
+*Map-matching criticality:*
+- Accurate polyline-to-segment matching depends on good OSRM map-matching
+- Already have this infrastructure in place
+- May need to tune OSRM confidence thresholds
+
+*Edge cases to consider:*
+- What about roads not in OSM network? (driveways, parking lots, private roads)
+- Handle segments that span municipality boundaries
+- Roads that vehicles service but aren't "plowing" (salt spreading, sanding)
+
+*Database complexity:*
+- More structured schema vs current simple polyline storage
+- Multiple linked tables: `road_segments`, `municipalities`, `streets`, `segment_updates`
+- More database relationships and foreign keys to manage
+- Migrations more complex when onboarding new municipalities
+- Schema changes affect multiple tables
+- Trade-off: more upfront database design vs simpler runtime logic
+- Consider: is added database complexity worth the operational simplicity?
+- **Mitigation: AI-assisted iteration makes this practical**
+  - Can iterate on schema design locally many times before production
+  - Docker local development = safe experimentation environment
+  - Test with real GPS data from existing drives
+  - Drop/recreate tables freely during design phase
+  - AI helps with SQL syntax, PostGIS functions, migration scripts
+  - Reduces friction of database iteration by 10x
+  - Focus on design decisions, not syntax details
+  - Makes ambitious schema practical for solo developer
+
+**Frontend changes:**
+- Load road segments instead of polylines from API
+- Color segments by recency (same gradient system)
+- Show directional indicators if needed (northbound/southbound have different ages)
+- Display partial coverage visually (segment partially colored)
+- Arrows become less relevant or unnecessary
+
+**Conversation notes:**
+- Discussed deduplication complexity: single polyline overlap vs cumulative overlap from multiple polylines
+- Considered ST_Difference approach (trim overlapping segments from older polylines) but segmented model solves this more elegantly
+- Realized this is better product-market fit for B2G customers
+- Can automate preprocessing completely using OSM + PostGIS
+- Hybrid architecture keeps all benefits of current system while improving visualization
+- Key insight: polylines trigger segments once, then are done - never sent to frontend
+- Polylines become internal processing step only (GPS → polylines → trigger segments → done)
+- Polylines kept in database for debugging/admin historical replay, but not used for resident-facing map
+- Segment model is drastically more efficient: 1,000 segments per town vs 9,000+ polylines from a few drives
+- Performance benefits cascade: mobile devices, slow connections, simple caching, predictable scaling
+- Operational simplicity: complexity in setup, runtime is trivial - critical for solo operation during storms
+
+**Decision point:** Evaluate if this architectural shift is worth it before building more features on current polyline model. This would be a significant refactor but solves multiple problems (deduplication, coverage metrics, clean visualization) and provides stronger product value for municipalities.
+
+---
+
 ## Immediate Goals: Public-Facing Map
 
 ### Phase 1: Data Foundation
@@ -32,7 +167,7 @@ MudMaps is a real-time GPS tracking system designed for municipalities to track 
 - [x] **Address search** - Search box where residents can type their address/street name. Map zooms to that location and highlights relevant polylines.
 - [ ] **Town boundaries with gray overlay** - Display all towns on single map. Participating towns show full-color data with clear boundaries. Non-participating towns show gray overlay with "Not available in [Town Name]" message. Residents near town borders can view neighboring coverage. Also serves as marketing (towns see neighbors have service, creates FOMO).
 - [ ] **Hover for timestamp (desktop)** - On desktop, hovering over any polyline segment displays tooltip with "Last plowed at [timestamp]". Requires geospatial intersection detection to find polyline under cursor. (Mobile: tap/click - will implement later during mobile optimization pass)
-- [ ] **Direction arrows on polylines** - Add directional arrows along polyline paths to show which direction the plow traveled. Helps residents understand if plow is coming toward or away from their location.
+- [x] **Direction arrows on polylines** - Add directional arrows along polyline paths to show which direction the plow traveled. Helps residents understand if plow is coming toward or away from their location.
 
 ### Phase 3: Live Features
 **Context:** Map currently requires manual refresh. Need real-time updates and visual indicators for active plowing.
@@ -44,6 +179,7 @@ MudMaps is a real-time GPS tracking system designed for municipalities to track 
 ### Phase 4: Polish & Utility
 **Context:** Current map is functional but needs UX improvements for non-technical residents.
 
+- [ ] **Polyline deduplication** - Backend optimization to reduce visual noise from overlapping polylines. When new polyline comes in, identify overlapping older polylines traveling same direction and either hide them or trim overlapping segments using ST_Difference. Reduces arrow clutter and makes map cleaner.
 - [ ] **Simplify map appearance** - Map is too busy with current OSM tiles, making polylines hard to see. Evaluate options: switch to simpler/lighter tile provider (CartoDB Positron, Mapbox Light), adjust base layer opacity, or customize tile colors. Goal: polylines should be the visual focus, not the underlying map.
 - [ ] **Clean UI pass** - Polish interface for non-technical users. Clear labels, intuitive controls, professional appearance suitable for municipal website embedding.
 

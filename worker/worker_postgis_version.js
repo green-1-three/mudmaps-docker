@@ -53,6 +53,36 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c; // Distance in meters
 }
 
+// Calculate bearing between two points (0-360 degrees)
+function calculateBearing(lat1, lon1, lat2, lon2) {
+    if (lat1 === lat2 && lon1 === lon2) {
+        return null;
+    }
+    
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const lat1Rad = lat1 * Math.PI / 180;
+    const lat2Rad = lat2 * Math.PI / 180;
+    
+    const y = Math.sin(dLon) * Math.cos(lat2Rad);
+    const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - 
+              Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+    
+    let bearing = Math.atan2(y, x) * 180 / Math.PI;
+    
+    // Normalize to 0-360
+    bearing = (bearing + 360) % 360;
+    
+    return bearing;
+}
+
+// Convert coordinates to WKT LINESTRING for PostGIS
+function coordinatesToWKT(coords) {
+    // coords is array of [lat, lon]
+    // WKT needs "lon lat" format
+    const wktCoords = coords.map(coord => `${coord[1]} ${coord[0]}`).join(', ');
+    return `LINESTRING(${wktCoords})`;
+}
+
 // Check if batch has significant movement
 function hasSignificantMovement(batch, minDistanceMeters = MIN_MOVEMENT_METERS) {
     if (batch.length < 2) return false;
@@ -235,15 +265,29 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
         // Encode the polyline
         const encodedPolyline = polyline.encode(matchedRoute.coordinates);
         
-        // Insert into cached_polylines
+        // Convert to WKT for PostGIS
+        const wkt = coordinatesToWKT(matchedRoute.coordinates);
+        
+        // Calculate bearing
+        const firstCoord = matchedRoute.coordinates[0];
+        const lastCoord = matchedRoute.coordinates[matchedRoute.coordinates.length - 1];
+        const bearing = calculateBearing(
+            firstCoord[0], firstCoord[1],
+            lastCoord[0], lastCoord[1]
+        );
+        
+        // Insert into cached_polylines with geometry and bearing
         await client.query(`
             INSERT INTO cached_polylines (
                 device_id, start_time, end_time, encoded_polyline,
+                geometry, bearing,
                 osrm_confidence, point_count, batch_id, osrm_duration_ms
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ) VALUES ($1, $2, $3, $4, ST_GeomFromText($5, 4326), $6, $7, $8, $9, $10)
             ON CONFLICT (device_id, start_time, end_time) 
             DO UPDATE SET 
                 encoded_polyline = EXCLUDED.encoded_polyline,
+                geometry = EXCLUDED.geometry,
+                bearing = EXCLUDED.bearing,
                 osrm_confidence = EXCLUDED.osrm_confidence,
                 batch_id = EXCLUDED.batch_id,
                 osrm_duration_ms = EXCLUDED.osrm_duration_ms
@@ -252,6 +296,8 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
             startTime, 
             endTime, 
             encodedPolyline,
+            wkt,
+            bearing,
             matchedRoute.confidence,
             newPointsInBatch.length,
             batchId,
@@ -276,7 +322,7 @@ async function processBatch(client, device_id, batch, newPointsInBatch) {
             WHERE batch_id = $1
         `, [batchId]);
         
-        log(`   ✅ Batch processed successfully (${osrmDuration}ms)`);
+        log(`   ✅ Batch processed successfully (${osrmDuration}ms, bearing: ${bearing ? bearing.toFixed(1) : 'N/A'}°)`);
         
     } catch (error) {
         log(`   ❌ Error processing batch: ${error.message}`);

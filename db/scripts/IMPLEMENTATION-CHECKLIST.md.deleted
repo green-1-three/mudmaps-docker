@@ -1,0 +1,290 @@
+# PostGIS Deduplication - Implementation Checklist
+
+## Pre-Implementation
+
+### 1. Capture Baseline Metrics
+```bash
+cd /Users/jamesfreeman/Desktop/Mudmaps-Docker/db/scripts
+chmod +x capture-metrics.sh
+./capture-metrics.sh before
+```
+
+This creates a file like `deduplication-metrics-before-20251029-143022.txt` with:
+- Total polylines count
+- Polylines per device
+- Polylines by time window (24h, 7d, 30d)
+
+**Save this file for comparison!**
+
+Alternative (manual):
+```bash
+# SSH to server
+ssh your-server
+
+# Run query
+docker compose exec postgres psql -U mudmaps -d mudmaps
+
+# Then copy/paste the "BASELINE METRICS" section from:
+# measure-deduplication-impact.sql
+```
+
+## Implementation Steps
+
+### 2. Run Database Migration
+```bash
+# Copy migration to server
+scp db/migrations/003_add_postgis_deduplication.sql your-server:/tmp/
+
+# SSH to server
+ssh your-server
+
+# Run migration
+docker compose exec postgres psql -U mudmaps -d mudmaps -f /tmp/003_add_postgis_deduplication.sql
+```
+
+**Expected output:**
+- ✓ PostGIS installed: 3.x.x
+- ✓ Columns added
+- ✓ Functions created
+- ✓ Indexes created
+
+### 3. Populate Geometry for Existing Polylines
+
+**Option A: Run locally (recommended)**
+```bash
+cd /Users/jamesfreeman/Desktop/Mudmaps-Docker/db/scripts
+npm install
+node migrate-polylines-to-postgis.js
+```
+
+Make sure your `.env` or environment has production DB credentials.
+
+**Option B: Run on server**
+```bash
+# Copy script to server
+scp db/scripts/migrate-polylines-to-postgis.js your-server:/tmp/
+scp db/scripts/package.json your-server:/tmp/
+
+# SSH to server
+ssh your-server
+cd /tmp
+npm install
+
+# Set env vars
+export PGUSER=mudmaps
+export PGHOST=localhost
+export PGDATABASE=mudmaps
+export PGPASSWORD=your_password
+
+# Run migration
+node migrate-polylines-to-postgis.js
+```
+
+**Expected output:**
+- Progress updates showing % complete
+- ✅ All polylines have geometry! Migration successful.
+
+**If it fails:**
+- Check which polylines failed (script will show IDs)
+- Most likely: corrupt encoded_polyline data
+- Script skips bad data and continues
+
+### 4. Deploy Updated Worker
+
+Your worker now generates geometry+bearing for new polylines.
+
+```bash
+# Via Raycast deployment script, or:
+cd /Users/jamesfreeman/Desktop/Mudmaps-Docker
+# Deploy worker (your Raycast script handles this)
+```
+
+**Verify:**
+```bash
+ssh your-server
+docker compose logs worker --tail 50 -f
+```
+
+Look for: `✅ Batch processed successfully (123ms, bearing: 45.2°)`
+
+The `bearing: X°` confirms new code is running.
+
+### 5. Deploy Updated Backend
+
+Backend now supports spatial deduplication queries.
+
+```bash
+# Via Raycast deployment script
+```
+
+**Verify:**
+```bash
+ssh your-server
+docker compose logs backend --tail 50
+```
+
+Look for: `💾 Reading from cached_polylines with PostGIS deduplication`
+
+### 6. Test API
+
+```bash
+# From local machine
+curl "https://gps.mudmaps.io/api/paths/encoded?hours=24&deduplicate=false" | jq '.devices[0].polylines | length'
+# Output: 150 (example)
+
+curl "https://gps.mudmaps.io/api/paths/encoded?hours=24&deduplicate=true" | jq '.devices[0].polylines | length'
+# Output: 85 (example - should be less)
+```
+
+If deduplicated count is lower, it's working! 🎉
+
+### 7. Capture After Metrics
+
+```bash
+cd /Users/jamesfreeman/Desktop/Mudmaps-Docker/db/scripts
+./capture-metrics.sh after
+```
+
+This creates `deduplication-metrics-after-TIMESTAMP.txt`
+
+**Compare with before metrics:**
+- How many polylines were filtered out?
+- What's the reduction percentage?
+- Does it vary by device?
+
+### 8. Check Your Map
+
+Open your frontend and look at the map:
+- Are there fewer overlapping polylines?
+- Is arrow density reduced?
+- Can you still see opposite-direction traffic?
+- Does it look cleaner?
+
+## Post-Implementation
+
+### Tune If Needed
+
+If too aggressive (too few polylines showing):
+```bash
+# More conservative - keep more polylines
+# 70% overlap required, stricter bearing match
+curl "https://gps.mudmaps.io/api/paths/encoded?hours=24&overlap_threshold=0.7&bearing_tolerance=20"
+```
+
+If not aggressive enough (still too cluttered):
+```bash
+# More aggressive - filter more polylines
+# 30% overlap required, wider bearing match
+curl "https://gps.mudmaps.io/api/paths/encoded?hours=24&overlap_threshold=0.3&bearing_tolerance=45"
+```
+
+Default settings (usually good):
+- `overlap_threshold=0.5` (50%)
+- `bearing_tolerance=30` (±30 degrees)
+
+### Monitor Performance
+
+```bash
+# Check query performance
+docker compose exec postgres psql -U mudmaps -d mudmaps
+
+EXPLAIN ANALYZE
+SELECT COUNT(*)
+FROM cached_polylines p1
+WHERE start_time > NOW() - INTERVAL '24 hours'
+AND NOT EXISTS(
+    SELECT 1 FROM cached_polylines p2
+    WHERE p2.start_time > p1.end_time
+    AND ST_Intersects(p1.geometry, p2.geometry)
+);
+```
+
+Look for:
+- `Index Scan using idx_cached_polylines_geom` (good - using spatial index)
+- Execution time under 50ms (good)
+
+If slow, check indexes exist:
+```sql
+\d cached_polylines
+```
+
+## Rollback (If Needed)
+
+If something goes wrong:
+
+```sql
+-- Remove added columns
+ALTER TABLE cached_polylines DROP COLUMN geometry;
+ALTER TABLE cached_polylines DROP COLUMN bearing;
+
+-- Remove functions
+DROP FUNCTION calculate_bearing;
+DROP FUNCTION polyline_bearing;
+DROP FUNCTION bearings_similar;
+
+-- (Optional) Remove PostGIS
+DROP EXTENSION postgis CASCADE;
+```
+
+Then redeploy old worker.js and server.js from git history.
+
+## Success Criteria
+
+✅ All polylines have geometry and bearing (100%)
+✅ Deduplication query returns fewer polylines than non-deduplicated
+✅ Map looks cleaner with less visual clutter
+✅ Opposite-direction traffic still visible
+✅ API response time under 100ms
+✅ Worker logs show bearing calculations
+
+## Metrics to Track
+
+Save these from before/after comparison:
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| Total polylines (24h) | ___ | ___ | ___% |
+| Total polylines (7d) | ___ | ___ | ___% |
+| API response time | ___ | ___ | ___ms |
+| Polylines removed | N/A | ___ | ___% |
+| Map visual clutter | ___ | ___ | subjective |
+
+## Troubleshooting
+
+**Migration fails with "PostGIS not found":**
+```sql
+CREATE EXTENSION postgis;
+```
+
+**Geometry population fails:**
+- Check encoded_polyline data is valid
+- Script will skip corrupt entries and continue
+- Check script output for failed IDs
+
+**Deduplication not working:**
+- Verify geometry IS NOT NULL for polylines
+- Check bearing values are calculated
+- Test with `deduplicate=false` to confirm data exists
+
+**Too many polylines still showing:**
+- Lower overlap_threshold to 0.3
+- Increase bearing_tolerance to 45
+
+**Too few polylines (over-aggressive):**
+- Raise overlap_threshold to 0.7
+- Decrease bearing_tolerance to 20
+
+**Query is slow:**
+- Check spatial index exists: `\d cached_polylines`
+- Run VACUUM ANALYZE cached_polylines
+
+## Files Reference
+
+- `/db/migrations/003_add_postgis_deduplication.sql` - Database migration
+- `/db/scripts/migrate-polylines-to-postgis.js` - Populate geometry
+- `/db/scripts/measure-deduplication-impact.sql` - Metrics queries
+- `/db/scripts/capture-metrics.sh` - Automated metrics capture
+- `/db/scripts/test-deduplication.sql` - Testing queries
+- `/db/scripts/README-DEDUPLICATION.md` - Detailed documentation
+- `/worker/worker.js` - Updated worker
+- `/backend/server.js` - Updated backend

@@ -1,0 +1,277 @@
+# PostGIS Deduplication Implementation
+
+## Overview
+
+This implementation adds PostGIS-based spatial deduplication to the MudMaps backend. When a plow drives the same route multiple times, older polylines are automatically filtered out, keeping only the most recent path for each road segment.
+
+## What's New
+
+### Database Changes
+- **PostGIS extension** for spatial queries
+- **geometry column** in `cached_polylines` (LINESTRING)
+- **bearing column** to distinguish northbound vs southbound traffic
+- **Spatial indexes** for fast intersection queries
+- **Helper functions** for bearing calculations and similarity checks
+
+### Processing Changes
+- Worker now calculates and stores geometry + bearing when creating polylines
+- Backend API filters out "superseded" polylines using spatial queries
+- Deduplication happens at query time (no data loss - all polylines kept in DB)
+
+### API Changes
+- Renamed `username` parameter to `device_id` throughout (legacy support maintained)
+- Added `deduplicate=true|false` parameter to `/paths/encoded`
+- Added `overlap_threshold` and `bearing_tolerance` parameters for tuning
+
+## Implementation Steps
+
+### 1. Run Database Migration
+
+```bash
+# SSH to your server
+ssh your-server
+
+# Navigate to project
+cd /path/to/mudmaps
+
+# Run migration
+docker compose exec postgres psql -U $PGUSER -d $PGDATABASE -f /migrations/003_add_postgis_deduplication.sql
+```
+
+Or copy the SQL file to server and run manually:
+
+```bash
+psql -U mudmaps -d mudmaps -f 003_add_postgis_deduplication.sql
+```
+
+### 2. Populate Geometry for Existing Polylines
+
+The migration script is already on your local machine. You need to run it with access to the production database.
+
+**Option A: Run locally pointing to production DB**
+```bash
+cd /Users/jamesfreeman/Desktop/Mudmaps-Docker/db/scripts
+
+# Make sure .env has production DB credentials
+node migrate-polylines-to-postgis.js
+```
+
+**Option B: Copy script to server and run there**
+```bash
+# Copy script to server
+scp migrate-polylines-to-postgis.js your-server:/tmp/
+
+# SSH to server
+ssh your-server
+cd /tmp
+
+# Install dependencies
+npm install pg @mapbox/polyline dotenv
+
+# Set environment variables and run
+export PGUSER=mudmaps
+export PGHOST=localhost
+export PGDATABASE=mudmaps
+export PGPASSWORD=your_password
+export PGPORT=5432
+
+node migrate-polylines-to-postgis.js
+```
+
+Expected output:
+```
+🔄 Starting polyline geometry migration...
+📊 Found 1234 polylines to migrate
+   Progress: 100/1234 (8.1%) - ✓100 ✗0 ⊘0
+   Progress: 200/1234 (16.2%) - ✓200 ✗0 ⊘0
+   ...
+✅ All polylines have geometry! Migration successful.
+```
+
+### 3. Deploy Updated Worker
+
+The worker now generates geometry and bearing for new polylines.
+
+```bash
+# Your Raycast deployment script should handle this
+# Or manually:
+docker compose up -d --build worker
+```
+
+Verify worker logs:
+```bash
+docker compose logs worker --tail 50
+```
+
+Look for: `✅ Batch processed successfully (123ms, bearing: 45.2°)`
+
+### 4. Deploy Updated Backend
+
+The backend now supports deduplication queries.
+
+```bash
+# Deploy via Raycast or:
+docker compose up -d --build backend
+```
+
+### 5. Test Deduplication
+
+Run the test queries:
+
+```bash
+# SSH to server
+docker compose exec postgres psql -U mudmaps -d mudmaps
+
+# Then paste queries from test-deduplication.sql one by one
+```
+
+Key queries to run:
+1. Check PostGIS version
+2. Verify all polylines have geometry (should be 100%)
+3. Count superseded polylines
+4. Compare deduplicated vs non-deduplicated counts
+
+### 6. Test API
+
+Test the API endpoint:
+
+```bash
+# Without deduplication (all polylines)
+curl "https://your-domain.com/api/paths/encoded?hours=24&deduplicate=false"
+
+# With deduplication (default)
+curl "https://your-domain.com/api/paths/encoded?hours=24&deduplicate=true"
+
+# Custom thresholds
+curl "https://your-domain.com/api/paths/encoded?hours=24&deduplicate=true&overlap_threshold=0.7&bearing_tolerance=45"
+```
+
+Compare the `polylines` count in responses - deduplicated should return fewer.
+
+## How Deduplication Works
+
+### Spatial Overlap Detection
+
+1. For each polyline P1, find newer polylines P2 where:
+   - P2's start_time > P1's end_time (newer)
+   - P2 intersects P1 spatially (uses PostGIS GIST index)
+   - Overlap > threshold (default 50% of P1's length)
+   - Bearings are similar (within ±30° tolerance)
+
+2. If such a P2 exists, mark P1 as "superseded" (hidden from results)
+
+### Performance
+
+- **Spatial index (GIST)** makes intersection queries fast
+- Without index: Check 9,000 polylines = 1-2 seconds
+- With index: Check ~20 relevant polylines = 5-10ms
+
+### Direction Detection
+
+Bearing calculation distinguishes:
+- Northbound: bearing 315° - 45° (northwest to northeast)
+- Eastbound: bearing 45° - 135°
+- Southbound: bearing 135° - 225°
+- Westbound: bearing 225° - 315°
+
+Tolerance of ±30° means:
+- 0° and 25° = same direction ✓
+- 0° and 90° = different direction ✗
+- 10° and 350° = same direction ✓ (handles wraparound)
+
+## Tuning Parameters
+
+### overlap_threshold (default: 0.5)
+- How much overlap to consider "duplicate"
+- 0.5 = 50% overlap required
+- Lower = more aggressive deduplication
+- Higher = more conservative (keeps more polylines)
+
+### bearing_tolerance (default: 30 degrees)
+- How similar bearings must be
+- 30° = distinguishes perpendicular roads
+- Lower = stricter (only very parallel paths deduplicated)
+- Higher = more lenient (wider angle considered "same direction")
+
+**Recommended settings:**
+- Urban areas with grid streets: `overlap_threshold=0.5, bearing_tolerance=30`
+- Rural areas with winding roads: `overlap_threshold=0.6, bearing_tolerance=45`
+
+## Troubleshooting
+
+### Migration fails with "function PostGIS_version() does not exist"
+PostGIS isn't installed. Run in psql:
+```sql
+CREATE EXTENSION postgis;
+```
+
+### Geometry population fails with "cannot decode polyline"
+Some encoded_polylines may be corrupt. The script skips these and reports them.
+
+### Deduplication query is slow
+Check if spatial index exists:
+```sql
+\d cached_polylines
+-- Look for: idx_cached_polylines_geom GIST (geometry)
+```
+
+If missing:
+```sql
+CREATE INDEX idx_cached_polylines_geom ON cached_polylines USING GIST(geometry);
+```
+
+### Too many polylines still showing (not enough deduplication)
+Try more aggressive settings:
+```
+?overlap_threshold=0.3&bearing_tolerance=45
+```
+
+### Too few polylines (over-aggressive deduplication)
+Try more conservative settings:
+```
+?overlap_threshold=0.7&bearing_tolerance=20
+```
+
+## Rollback Plan
+
+If something goes wrong:
+
+```sql
+-- Remove geometry/bearing columns
+ALTER TABLE cached_polylines DROP COLUMN geometry;
+ALTER TABLE cached_polylines DROP COLUMN bearing;
+
+-- Remove helper functions
+DROP FUNCTION calculate_bearing;
+DROP FUNCTION polyline_bearing;
+DROP FUNCTION bearings_similar;
+
+-- Remove PostGIS (optional - only if causing issues)
+DROP EXTENSION postgis CASCADE;
+```
+
+Then redeploy old worker and backend code.
+
+## Next Steps
+
+1. Monitor deduplication effectiveness in production
+2. Adjust thresholds based on map appearance
+3. Consider adding deduplication stats to admin dashboard
+4. Update frontend to request deduplicated data by default
+
+## Performance Expectations
+
+With PostGIS deduplication:
+- **Query time**: 10-50ms for 24 hours of data
+- **Data reduction**: 40-60% fewer polylines (varies by route repetition)
+- **API response**: 200-500KB (down from 500KB-1MB)
+- **Map rendering**: Faster due to fewer features
+
+## Files Changed
+
+- `/db/migrations/003_add_postgis_deduplication.sql` - Database migration
+- `/db/scripts/migrate-polylines-to-postgis.js` - Data migration script
+- `/db/scripts/test-deduplication.sql` - Testing queries
+- `/worker/worker.js` - Updated to generate geometry and bearing
+- `/backend/server.js` - Updated with deduplication logic and device_id naming
+- `/db/scripts/README-DEDUPLICATION.md` - This file

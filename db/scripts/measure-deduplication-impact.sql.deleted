@@ -1,0 +1,250 @@
+-- ============================================
+-- Deduplication Impact Analysis
+-- ============================================
+-- Run this BEFORE and AFTER implementing deduplication to measure impact
+
+-- ============================================
+-- BASELINE METRICS (Run BEFORE implementation)
+-- ============================================
+
+\echo '=========================================='
+\echo 'BASELINE METRICS - BEFORE DEDUPLICATION'
+\echo '=========================================='
+\echo ''
+
+-- Overall counts
+\echo 'Overall Counts:'
+SELECT 
+    COUNT(*) as total_polylines,
+    COUNT(DISTINCT device_id) as unique_devices,
+    MIN(start_time) as oldest_polyline,
+    MAX(start_time) as newest_polyline,
+    SUM(point_count) as total_gps_points
+FROM cached_polylines;
+
+\echo ''
+
+-- Polylines by time window
+\echo 'Polylines by Time Window:'
+SELECT 
+    '24 hours' as time_window,
+    COUNT(*) as polyline_count,
+    COUNT(DISTINCT device_id) as device_count
+FROM cached_polylines
+WHERE start_time > NOW() - INTERVAL '24 hours'
+UNION ALL
+SELECT 
+    '7 days' as time_window,
+    COUNT(*) as polyline_count,
+    COUNT(DISTINCT device_id) as device_count
+FROM cached_polylines
+WHERE start_time > NOW() - INTERVAL '7 days'
+UNION ALL
+SELECT 
+    '30 days' as time_window,
+    COUNT(*) as polyline_count,
+    COUNT(DISTINCT device_id) as device_count
+FROM cached_polylines
+WHERE start_time > NOW() - INTERVAL '30 days'
+ORDER BY 
+    CASE time_window
+        WHEN '24 hours' THEN 1
+        WHEN '7 days' THEN 2
+        WHEN '30 days' THEN 3
+    END;
+
+\echo ''
+
+-- Per-device breakdown
+\echo 'Per-Device Breakdown (Last 7 Days):'
+SELECT 
+    device_id,
+    COUNT(*) as polyline_count,
+    MIN(start_time) as first_polyline,
+    MAX(start_time) as last_polyline,
+    SUM(point_count) as total_points
+FROM cached_polylines
+WHERE start_time > NOW() - INTERVAL '7 days'
+GROUP BY device_id
+ORDER BY polyline_count DESC;
+
+\echo ''
+\echo '=========================================='
+\echo 'Save these numbers for comparison!'
+\echo '=========================================='
+\echo ''
+
+-- ============================================
+-- AFTER DEDUPLICATION METRICS
+-- ============================================
+-- Run this AFTER implementing deduplication
+
+\echo '=========================================='
+\echo 'AFTER DEDUPLICATION - IMPACT ANALYSIS'
+\echo '=========================================='
+\echo ''
+
+-- Check if PostGIS is installed
+\echo 'PostGIS Status:'
+SELECT 
+    CASE 
+        WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis') 
+        THEN '✓ PostGIS installed: ' || PostGIS_version()
+        ELSE '✗ PostGIS NOT installed'
+    END as status;
+
+\echo ''
+
+-- Check geometry population
+\echo 'Geometry Population:'
+SELECT 
+    COUNT(*) as total_polylines,
+    COUNT(geometry) as with_geometry,
+    COUNT(bearing) as with_bearing,
+    ROUND(COUNT(geometry)::numeric / NULLIF(COUNT(*), 0)::numeric * 100, 1) as geometry_pct,
+    ROUND(COUNT(bearing)::numeric / NULLIF(COUNT(*), 0)::numeric * 100, 1) as bearing_pct
+FROM cached_polylines;
+
+\echo ''
+
+-- Count visible vs superseded polylines
+\echo 'Deduplication Impact (Last 24 Hours):'
+WITH dedup_analysis AS (
+    SELECT 
+        p1.id,
+        p1.device_id,
+        CASE 
+            WHEN p1.geometry IS NULL THEN NULL
+            WHEN EXISTS(
+                SELECT 1 
+                FROM cached_polylines p2
+                WHERE p2.start_time > p1.end_time
+                AND p2.start_time <= NOW()
+                AND p2.geometry IS NOT NULL
+                AND p1.geometry IS NOT NULL
+                AND ST_Intersects(p1.geometry, p2.geometry)
+                AND ST_Length(
+                    ST_Intersection(p1.geometry, p2.geometry)::geography
+                ) / NULLIF(ST_Length(p1.geometry::geography), 0) > 0.5
+                AND bearings_similar(p1.bearing, p2.bearing, 30)
+            ) THEN 'superseded'
+            ELSE 'visible'
+        END as status
+    FROM cached_polylines p1
+    WHERE p1.start_time > NOW() - INTERVAL '24 hours'
+)
+SELECT 
+    COUNT(*) as total_polylines_24h,
+    COUNT(*) FILTER (WHERE status = 'visible') as visible_polylines,
+    COUNT(*) FILTER (WHERE status = 'superseded') as superseded_polylines,
+    COUNT(*) FILTER (WHERE status IS NULL) as no_geometry,
+    ROUND(
+        COUNT(*) FILTER (WHERE status = 'visible')::numeric / 
+        NULLIF(COUNT(*), 0)::numeric * 100, 
+        1
+    ) as visible_percentage,
+    COUNT(*) - COUNT(*) FILTER (WHERE status = 'visible') as polylines_removed
+FROM dedup_analysis;
+
+\echo ''
+
+-- Per-device deduplication impact (last 7 days)
+\echo 'Per-Device Impact (Last 7 Days):'
+WITH device_dedup AS (
+    SELECT 
+        p1.device_id,
+        p1.id,
+        CASE 
+            WHEN p1.geometry IS NULL THEN NULL
+            WHEN EXISTS(
+                SELECT 1 
+                FROM cached_polylines p2
+                WHERE p2.device_id = p1.device_id
+                AND p2.start_time > p1.end_time
+                AND p2.geometry IS NOT NULL
+                AND p1.geometry IS NOT NULL
+                AND ST_Intersects(p1.geometry, p2.geometry)
+                AND ST_Length(
+                    ST_Intersection(p1.geometry, p2.geometry)::geography
+                ) / NULLIF(ST_Length(p1.geometry::geography), 0) > 0.5
+                AND bearings_similar(p1.bearing, p2.bearing, 30)
+            ) THEN 'superseded'
+            ELSE 'visible'
+        END as status
+    FROM cached_polylines p1
+    WHERE p1.start_time > NOW() - INTERVAL '7 days'
+)
+SELECT 
+    device_id,
+    COUNT(*) as total,
+    COUNT(*) FILTER (WHERE status = 'visible') as visible,
+    COUNT(*) FILTER (WHERE status = 'superseded') as superseded,
+    ROUND(
+        COUNT(*) FILTER (WHERE status = 'superseded')::numeric / 
+        NULLIF(COUNT(*), 0)::numeric * 100,
+        1
+    ) as superseded_pct
+FROM device_dedup
+GROUP BY device_id
+ORDER BY superseded_pct DESC;
+
+\echo ''
+
+-- Compare time windows
+\echo 'Comparison Across Time Windows:'
+WITH time_windows AS (
+    SELECT '24 hours' as window, NOW() - INTERVAL '24 hours' as cutoff
+    UNION ALL SELECT '7 days', NOW() - INTERVAL '7 days'
+    UNION ALL SELECT '30 days', NOW() - INTERVAL '30 days'
+),
+dedup_by_window AS (
+    SELECT 
+        tw.window,
+        COUNT(p1.id) as total,
+        COUNT(p1.id) FILTER (
+            WHERE NOT EXISTS(
+                SELECT 1 
+                FROM cached_polylines p2
+                WHERE p2.start_time > p1.end_time
+                AND p2.start_time <= NOW()
+                AND p2.geometry IS NOT NULL
+                AND p1.geometry IS NOT NULL
+                AND ST_Intersects(p1.geometry, p2.geometry)
+                AND ST_Length(
+                    ST_Intersection(p1.geometry, p2.geometry)::geography
+                ) / NULLIF(ST_Length(p1.geometry::geography), 0) > 0.5
+                AND bearings_similar(p1.bearing, p2.bearing, 30)
+            )
+        ) as visible
+    FROM time_windows tw
+    LEFT JOIN cached_polylines p1 ON p1.start_time > tw.cutoff
+    WHERE p1.geometry IS NOT NULL
+    GROUP BY tw.window
+)
+SELECT 
+    window,
+    total as before_dedup,
+    visible as after_dedup,
+    total - visible as removed,
+    ROUND((visible::numeric / NULLIF(total, 0)::numeric * 100), 1) as retention_pct,
+    ROUND(((total - visible)::numeric / NULLIF(total, 0)::numeric * 100), 1) as reduction_pct
+FROM dedup_by_window
+ORDER BY 
+    CASE window
+        WHEN '24 hours' THEN 1
+        WHEN '7 days' THEN 2
+        WHEN '30 days' THEN 3
+    END;
+
+\echo ''
+\echo '=========================================='
+\echo 'SUMMARY'
+\echo '=========================================='
+\echo 'Compare these numbers with baseline metrics'
+\echo 'Key metrics:'
+\echo '  - Retention %: How many polylines remain visible'
+\echo '  - Reduction %: How many polylines were filtered out'
+\echo '  - Lower reduction = less repetitive routes'
+\echo '  - Higher reduction = more route overlap (good deduplication)'
+\echo '=========================================='
+\echo ''

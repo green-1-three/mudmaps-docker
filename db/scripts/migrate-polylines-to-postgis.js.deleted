@@ -1,0 +1,172 @@
+#!/usr/bin/env node
+
+/**
+ * Data Migration Script: Populate PostGIS Geometry for Existing Polylines
+ * 
+ * This script decodes existing encoded_polyline values and populates
+ * the geometry and bearing columns in cached_polylines table.
+ * 
+ * Run this AFTER running migration 003_add_postgis_deduplication.sql
+ */
+
+const { Pool } = require('pg');
+const polyline = require('@mapbox/polyline');
+require('dotenv').config();
+
+const pool = new Pool({
+    user: process.env.PGUSER,
+    host: process.env.PGHOST,
+    database: process.env.PGDATABASE,
+    password: process.env.PGPASSWORD,
+    port: parseInt(process.env.PGPORT) || 5432,
+});
+
+// Calculate bearing between two points
+function calculateBearing(lat1, lon1, lat2, lon2) {
+    if (lat1 === lat2 && lon1 === lon2) {
+        return null;
+    }
+    
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const lat1Rad = lat1 * Math.PI / 180;
+    const lat2Rad = lat2 * Math.PI / 180;
+    
+    const y = Math.sin(dLon) * Math.cos(lat2Rad);
+    const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - 
+              Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+    
+    let bearing = Math.atan2(y, x) * 180 / Math.PI;
+    
+    // Normalize to 0-360
+    bearing = (bearing + 360) % 360;
+    
+    return bearing;
+}
+
+// Convert decoded polyline to WKT LINESTRING
+function coordinatesToWKT(coords) {
+    // coords is array of [lat, lon] from polyline.decode()
+    // WKT needs "lon lat" format
+    const wktCoords = coords.map(coord => `${coord[1]} ${coord[0]}`).join(', ');
+    return `LINESTRING(${wktCoords})`;
+}
+
+async function migratePolylines() {
+    const client = await pool.connect();
+    
+    try {
+        console.log('🔄 Starting polyline geometry migration...\n');
+        
+        // Get polylines that need geometry
+        const result = await client.query(`
+            SELECT id, encoded_polyline, device_id, start_time
+            FROM cached_polylines
+            WHERE geometry IS NULL AND encoded_polyline IS NOT NULL
+            ORDER BY start_time ASC
+        `);
+        
+        const polylines = result.rows;
+        console.log(`📊 Found ${polylines.length} polylines to migrate\n`);
+        
+        if (polylines.length === 0) {
+            console.log('✅ No polylines need migration. All done!');
+            return;
+        }
+        
+        let successful = 0;
+        let failed = 0;
+        let skipped = 0;
+        
+        // Process in batches to show progress
+        const batchSize = 100;
+        for (let i = 0; i < polylines.length; i += batchSize) {
+            const batch = polylines.slice(i, i + batchSize);
+            
+            for (const poly of batch) {
+                try {
+                    // Decode polyline
+                    const coords = polyline.decode(poly.encoded_polyline);
+                    
+                    if (coords.length < 2) {
+                        console.log(`⚠️  Polyline ${poly.id}: Too few points (${coords.length}), skipping`);
+                        skipped++;
+                        continue;
+                    }
+                    
+                    // Convert to WKT
+                    const wkt = coordinatesToWKT(coords);
+                    
+                    // Calculate bearing
+                    const firstPoint = coords[0];
+                    const lastPoint = coords[coords.length - 1];
+                    const bearing = calculateBearing(
+                        firstPoint[0], firstPoint[1],
+                        lastPoint[0], lastPoint[1]
+                    );
+                    
+                    // Update database
+                    await client.query(`
+                        UPDATE cached_polylines
+                        SET geometry = ST_GeomFromText($1, 4326),
+                            bearing = $2
+                        WHERE id = $3
+                    `, [wkt, bearing, poly.id]);
+                    
+                    successful++;
+                    
+                } catch (error) {
+                    console.error(`❌ Failed to migrate polyline ${poly.id}:`, error.message);
+                    failed++;
+                }
+            }
+            
+            // Progress update
+            const processed = Math.min(i + batchSize, polylines.length);
+            const percent = ((processed / polylines.length) * 100).toFixed(1);
+            console.log(`   Progress: ${processed}/${polylines.length} (${percent}%) - ✓${successful} ✗${failed} ⊘${skipped}`);
+        }
+        
+        console.log('\n' + '='.repeat(60));
+        console.log('MIGRATION COMPLETE');
+        console.log('='.repeat(60));
+        console.log(`✅ Successful: ${successful}`);
+        console.log(`❌ Failed: ${failed}`);
+        console.log(`⊘  Skipped: ${skipped}`);
+        console.log(`📊 Total: ${polylines.length}`);
+        console.log('='.repeat(60) + '\n');
+        
+        // Verify
+        const verifyResult = await client.query(`
+            SELECT 
+                COUNT(*) as total,
+                COUNT(geometry) as with_geometry,
+                COUNT(bearing) as with_bearing
+            FROM cached_polylines
+        `);
+        
+        const stats = verifyResult.rows[0];
+        console.log('VERIFICATION:');
+        console.log(`  Total polylines: ${stats.total}`);
+        console.log(`  With geometry: ${stats.with_geometry}`);
+        console.log(`  With bearing: ${stats.with_bearing}`);
+        
+        if (parseInt(stats.with_geometry) === parseInt(stats.total)) {
+            console.log('\n✅ All polylines have geometry! Migration successful.\n');
+        } else {
+            console.log('\n⚠️  Some polylines still missing geometry.\n');
+        }
+        
+    } catch (error) {
+        console.error('❌ Migration failed:', error);
+        throw error;
+    } finally {
+        client.release();
+        await pool.end();
+    }
+}
+
+// Run migration
+migratePolylines().catch(error => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+});
