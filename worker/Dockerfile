@@ -7,4 +7,4 @@ RUN npm install --production
 
 COPY . .
 
-CMD ["node", "worker.js"]
+CMD ["node", "index.js"]

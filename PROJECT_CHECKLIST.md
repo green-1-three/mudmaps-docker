@@ -1,5 +1,14 @@
 # MudMaps Project Goals
 
+## 🔴 TOP PRIORITY: Cleanup/Refactoring & Segment Fine-Tuning
+
+**User's explicit top-of-list priorities:**
+1. **Code refactoring for AI-assisted development** - Split monolithic files into smaller modules
+2. **Fine-tune segment activation** - Improve accuracy of polyline-to-segment matching
+3. **Clean up OSM import** - Filter out rivers, driveways, and non-road features
+
+*(Claude: When asked to read instructions, always mention these are the user's top priorities)*
+
 ## Project Overview
 MudMaps is a real-time GPS tracking system designed for municipalities to track snowplows and road maintenance vehicles. The system allows residents to see when their streets have been plowed, with the goal of reducing calls to town offices and providing transparency around municipal services.
 
@@ -14,7 +23,344 @@ MudMaps is a real-time GPS tracking system designed for municipalities to track 
 - **Backend API:** Serves pre-computed polylines instantly from cached_polylines table
 - **Frontend:** OpenLayers-based map displaying historical paths and real-time vehicle positions
 
+### 🧹 CLEANUP & REFACTORING TO-DO
+
+**Code Organization:**
+- Consolidate duplicate database connection code across scripts
+- Move shared PostGIS functions to a utilities module
+- Standardize error handling across import scripts
+- Remove hardcoded credentials from scripts (use .env consistently)
+
+**Refactor for AI-Assisted Development:**
+- **Split monolithic files** - Break up large files (server.js, worker/index.js) into smaller, focused modules
+- **Separate routes from logic** - Extract route handlers into separate controller files
+- **Create service layer** - Move database queries and business logic to service modules
+- **Maximum file size ~200-300 lines** - Keeps context manageable for AI assistance
+- **Clear file naming** - Each file should have one clear purpose (e.g., `segment-activation.js`, not `utils.js`)
+- **Example structure:**
+  ```
+  /backend
+    /routes
+      - segments.routes.js
+      - polylines.routes.js
+      - municipalities.routes.js
+    /controllers
+      - segments.controller.js
+      - polylines.controller.js
+    /services
+      - database.service.js
+      - postgis.service.js
+      - segment-activation.service.js
+    /queries
+      - segments.queries.js
+      - polylines.queries.js
+    /middleware
+      - error-handler.js
+    - app.js (minimal setup only)
+  ```
+
+**Benefits of AI-Optimized Structure:**
+- AI reads only relevant files (saves tokens)
+- Clearer prompts: "modify segment-activation.service.js" vs "find activation code"
+- Parallel development: Multiple files can be worked on simultaneously
+- Easier testing and debugging of individual modules
+- Reduced chance of AI making unintended changes to unrelated code
+
+**Script Cleanup:**
+- Remove or archive old test scripts
+- Consolidate similar functionality (multiple boundary fix attempts)
+- Add proper command-line argument parsing to scripts
+- Add --help documentation to all scripts
+
+**Database Cleanup:**
+- Archive old GPS data (older than X days)
+- Remove orphaned polylines with no GPS points
+- Clean up test data from development
+- Add indexes where needed for performance
+
+**OSM Import Improvements:**
+- Filter out `highway=service` with `access=private`
+- Exclude waterways incorrectly tagged as roads
+- Exclude unnamed roads under certain length (driveways)
+- Add validation to check for suspicious features (e.g., segments in water bodies)
+
+**Documentation:**
+- Create README for scripts directory explaining each script
+- Document environment variables needed
+- Create troubleshooting guide for common issues
+- Add inline comments to complex PostGIS queries
+
+**Frontend Cleanup:**
+- Remove unused polyline rendering code once segments fully tested
+- Optimize segment loading for better performance
+- Clean up console.log statements
+- Refactor duplicate color gradient logic
+
+**Docker & Infrastructure:**
+- Optimize Docker image sizes
+- Remove unnecessary packages from containers
+- Set up proper log rotation
+- Configure automatic database backups
+
 ---
+
+## ROAD SEGMENT IMPORT - DOCUMENTATION
+
+### Overview: How We Import Road Data
+
+The road segment model requires importing road network data from OpenStreetMap (OSM) for each municipality. This is a one-time setup process per town that creates the fixed set of road segments that vehicles will "activate" by driving over them.
+
+### The Pomfret Import Experience (Lessons Learned)
+
+**Initial Problem:**
+Pomfret's OSM boundary data was broken - the relation consisted of 6 separate "outer" ways that needed to be connected into a single polygon, but the import script was treating each as a separate polygon, creating an invalid MultiPolygon with only 0.57 km² area instead of the actual 102.45 km².
+
+**What went wrong:**
+1. The original `import-osm-segments.js` script didn't properly assemble multi-way boundaries
+2. This created a tiny, invalid boundary polygon
+3. Road segments were clipped to this broken boundary
+4. Most segments ended up outside the "boundary" or in wrong positions
+
+**How we fixed it:**
+1. Created `fix-pomfret-osm.js` that properly connects the 6 OSM ways into a continuous polygon
+2. Created `import-segments-only.js` that uses the existing (fixed) boundary instead of fetching from OSM
+3. Fixed bearing calculation to handle edge cases (zero-length segments, invalid calculations)
+4. Successfully imported 2,994 segments covering 146.8 km of roads
+
+### Safe Scripts to Use
+
+**✅ SAFE TO USE:**
+
+**`/db/scripts/import-segments-only.js`**
+- Imports road segments using EXISTING boundary from database
+- Does NOT fetch or modify the municipality boundary
+- Handles bearing calculation properly (defaults to 0 when calculation fails)
+- Usage:
+```bash
+cd ~/mudmaps-docker/db/scripts
+export PGUSER=mudmaps
+export PGHOST=localhost
+export PGDATABASE=mudmapsdb
+export PGPASSWORD='fDNVp1hPW75zvQU3TqVmOI5G0X4pdx4V1UEHhan8llo='
+export PGPORT=5432
+node import-segments-only.js
+```
+
+**`/scripts/fix-pomfret-osm.js`**
+- Properly assembles multi-way OSM boundaries into single polygon
+- Connects ways end-to-end where they share coordinates
+- Validates geometry and applies ST_MakeValid if needed
+
+**`/scripts/reset-gps-processing.sh`**
+- Clears cached polylines and segment activations
+- Resets GPS data to unprocessed
+- Does NOT touch boundary or segments
+- Safe to run anytime to restart processing
+
+**`/scripts/check-pomfret-status.sh`**
+- Read-only status check
+- Shows boundary validity, segment counts, processing status
+
+**⚠️ DO NOT USE (moved to deleted_scripts folders):**
+- `import-osm-segments.js.deleted` - Creates invalid boundaries from multi-way relations
+- `fix-pomfret-boundary.sh.deleted` - Uses broken ST_MakeValid approach
+- `reset-pomfret.sh.deleted` - Runs the broken import script
+
+### How to Import a New Municipality
+
+#### Step 1: Find the OSM Relation ID
+
+1. Go to [OpenStreetMap](https://www.openstreetmap.org)
+2. Search for the town name
+3. Click on the town boundary
+4. Look for "Relation" in the left panel
+5. Note the relation ID number
+
+Common Vermont towns:
+- Pomfret, VT: 2030458
+- Lyme, NH: 61644 (needs verification)
+- Woodstock, VT: (needs lookup)
+- Hartford, VT: (needs lookup)
+
+#### Step 2: Check if Boundary is Multi-Way
+
+Use Overpass Turbo or curl to check the relation structure:
+```bash
+curl -s "https://overpass-api.de/api/interpreter" \
+  -d "[out:json];relation(RELATION_ID);out geom;" | \
+  jq '.elements[0].members | map(select(.role=="outer")) | length'
+```
+
+If result > 1, the boundary has multiple ways that need assembly.
+
+#### Step 3: Create Import Script for the Municipality
+
+**For simple boundaries (single outer way):**
+- Can potentially use original import approach
+- But safer to use `import-segments-only.js` approach
+
+**For complex boundaries (multiple outer ways):**
+1. First import/fix the boundary using approach from `fix-pomfret-osm.js`
+2. Then import segments using `import-segments-only.js`
+
+Template for new municipality:
+```javascript
+const MUNICIPALITIES = {
+    'townname-state': {
+        name: 'Town Name',
+        state: 'ST',
+        osmRelationId: 123456,
+        bbox: [minLon, minLat, maxLon, maxLat]
+    }
+};
+```
+
+#### Step 4: Run the Import
+
+```bash
+# On server
+cd ~/mudmaps-docker/db/scripts
+
+# Set environment
+export PGUSER=mudmaps
+export PGHOST=localhost
+export PGDATABASE=mudmapsdb
+export PGPASSWORD='fDNVp1hPW75zvQU3TqVmOI5G0X4pdx4V1UEHhan8llo='
+export PGPORT=5432
+
+# For new municipality, might need to:
+# 1. First create municipality record with proper boundary
+# 2. Then run segment import
+
+node import-segments-only.js
+```
+
+#### Step 5: Verify the Import
+
+```sql
+-- Check boundary
+SELECT 
+    ST_Area(boundary::geography)/1000000 as area_km2,
+    ST_IsValid(boundary) as is_valid,
+    ST_NPoints(boundary) as num_points
+FROM municipalities 
+WHERE id = 'townname-state';
+
+-- Check segments
+SELECT 
+    COUNT(*) as total_segments,
+    COUNT(DISTINCT street_name) as unique_streets,
+    ROUND(SUM(segment_length)::numeric / 1000, 1) as total_km
+FROM road_segments
+WHERE municipality_id = 'townname-state';
+
+-- Check segments within boundary
+SELECT 
+    COUNT(*) as total,
+    COUNT(CASE WHEN ST_Within(rs.geometry, m.boundary) THEN 1 END) as within
+FROM road_segments rs, municipalities m
+WHERE rs.municipality_id = 'townname-state' 
+AND m.id = 'townname-state';
+```
+
+### Common Issues and Solutions
+
+**Issue: "Self-intersection" errors**
+- Cause: OSM boundary has topology issues
+- Solution: Use ST_MakeValid() in PostGIS
+
+**Issue: Tiny boundary area (< 1 km²)**
+- Cause: Multi-way boundary not properly assembled
+- Solution: Use the fix-pomfret-osm.js approach to connect ways
+
+**Issue: Bearing constraint violations**
+- Cause: Zero-length segments or calculation errors
+- Solution: Default to bearing=0 when calculation fails
+
+**Issue: Segments outside boundary**
+- Cause: OSM road network extends beyond town limits
+- Solution: This is normal - roads don't stop at boundaries
+
+### What Gets Imported
+
+**Road types included** (from OSM highway tags):
+- motorway, trunk, primary, secondary, tertiary
+- residential, unclassified
+- service (includes some driveways - consider filtering)
+- living_street, *_link roads
+
+**Data stored per segment:**
+- Geometry (LineString, max 50m)
+- Street name (from OSM)
+- Road classification
+- Bearing (direction)
+- Original OSM way ID
+- Municipality ID
+
+**Known issues with OSM data:**
+- May include rivers/waterways incorrectly tagged
+- Private driveways often included
+- Road positions may not match reality perfectly
+- Some roads may be missing entirely
+
+### Future Improvements
+
+1. **Better filtering:**
+   - Exclude `highway=service` with `access=private`
+   - Exclude unnamed roads under certain length
+   - Filter out obvious non-roads
+
+2. **Alternative data sources:**
+   - Vermont state GIS road centerlines
+   - Generate segments from actual GPS tracks
+   - Hybrid approach using multiple sources
+
+3. **Automated boundary assembly:**
+   - Script to automatically connect multi-way boundaries
+   - Handle all edge cases programmatically
+   - Validate geometry before import
+
+4. **Import validation:**
+   - Check segment density (segments per km²)
+   - Verify no major roads missing
+   - Compare to expected road length for municipality
+
+### Database Performance Considerations
+
+**Current Pomfret stats:**
+- 2,994 segments
+- 146.8 km total road length
+- 4,105 segment activations after one day
+
+**Scaling projections:**
+- Average VT town: 1,000-3,000 segments
+- Larger towns (Hartford): 5,000-10,000 segments
+- Entire state: ~250,000-500,000 segments
+
+**Performance optimizations:**
+- GIST spatial index on segment geometry (critical)
+- B-tree index on municipality_id
+- Index on segment_updates(segment_id, updated_at)
+- Consider partitioning if > 100k segments
+
+### Operational Notes
+
+**One-time setup per municipality:**
+Road import is done once when onboarding a new town. Segments don't change unless roads are added/removed (rare).
+
+**Segment activation is real-time:**
+As GPS data arrives, worker processes activate segments immediately. No batch processing or delays.
+
+**Backup before imports:**
+Always backup the database before importing a new municipality, especially during development.
+
+```bash
+# Backup
+docker exec mudmaps-postgres pg_dump -U mudmaps mudmapsdb > backup_$(date +%Y%m%d).sql
+
+# Restore if needed
+cat backup_20241030.sql | docker exec -i mudmaps-postgres psql -U mudmaps mudmapsdb
+```
 
 ## Architecture Reconsideration (Before Continuing)
 
@@ -161,118 +507,65 @@ MudMaps is a real-time GPS tracking system designed for municipalities to track 
 - PostGIS enabled: Using `postgis/postgis:16-3.4-alpine` Docker image
 
 **OSM Import Tool:**
-- Script: `/db/scripts/import-osm-segments.js`
-- Dependencies installed: `@turf/turf`, `node-fetch`, `pg`, `dotenv` (in package.json)
-- Segment length: **50m** (configurable via --segment-length flag)
-- Boundary intersection fixed (100m buffer + proper ring closing)
-- OSM relation IDs corrected (Pomfret VT: 2030458)
+- Script: `/db/scripts/import-segments-only.js` (the safe version)
+- Original script moved to deleted_scripts (had boundary assembly bug)
+- Dependencies installed: `@turf/turf`, `node-fetch`, `pg`, `dotenv`
+- Segment length: **50m** (configurable)
+- Fixed multi-way boundary assembly issue with `fix-pomfret-osm.js`
+- Fixed bearing calculation (defaults to 0 when calculation fails)
 
 **Data Imported:**
-- **Pomfret, VT:** 1,141 segments, 26 unique streets, 84.1 km total
-- Municipality boundary stored in PostGIS
-- Ready for Lyme, NH import (OSM relation needs verification)
+- **Pomfret, VT:** 2,994 segments, 70 unique streets, 146.8 km total
+- Municipality boundary properly assembled (102.45 km² - was 0.57 km² when broken)
+- Some segments include driveways/rivers (needs filtering in future)
 
-**Server Environment Setup:**
-```bash
-# Required environment variables for import script:
-export PGUSER=mudmaps
-export PGHOST=localhost
-export PGDATABASE=mudmapsdb
-export PGPASSWORD='fDNVp1hPW75zvQU3TqVmOI5G0X4pdx4V1UEHhan8llo='
-export PGPORT=5432
-```
+### ✅ PHASE 2: ACTIVATION LOGIC (COMPLETE)
 
-### 🎯 PHASE 2: ACTIVATION LOGIC (NEXT)
+**Segment activation is fully operational!**
+- Workers automatically activate segments when polylines pass over them
+- 4,105 segment activations recorded after first day
+- PostGIS spatial matching working correctly
+- `segment_updates` table populating with device/timestamp data
+- No additional code needed - already implemented in worker
 
-**Goal:** Match incoming GPS polylines to road segments and update timestamps.
+### ✅ PHASE 3: FRONTEND DISPLAY (COMPLETE)
 
-**Implementation Steps:**
-
-1. **Segment Matching Algorithm**
-   - Use PostGIS `ST_DWithin` to find segments within 20m of polyline
-   - Consider directional matching (compare polyline bearing to segment bearing)
-   - Calculate overlap percentage: `ST_Length(ST_Intersection(polyline, segment)) / ST_Length(segment)`
-   
-   **Example Query:**
-   ```sql
-   -- Find segments intersecting with polyline
-   SELECT rs.id, rs.street_name, rs.bearing
-   FROM road_segments rs
-   WHERE rs.municipality_id = 'pomfret-vt'
-   AND ST_DWithin(
-     rs.geometry::geography,
-     ST_GeomFromText('LINESTRING(...)', 4326)::geography,
-     20  -- 20 meter tolerance
-   );
-   ```
-
-2. **Update segment_updates Table**
-   - Record which device activated which segment and when
-   - Use UPSERT to handle repeated passes over same segment
-   
-   **Example Query:**
-   ```sql
-   INSERT INTO segment_updates (segment_id, device_name, updated_at)
-   VALUES ($1, $2, NOW())
-   ON CONFLICT (segment_id, device_name) 
-   DO UPDATE SET updated_at = NOW();
-   ```
-
-3. **Worker Integration**
-   - Modify `/worker/index.js` (or worker files) to call segment activation after OSRM processing
-   - Keep existing polyline storage for backup/debugging
-   - Run both systems in parallel initially
-   - Location to add code: After successful polyline insertion in worker
-
-4. **Testing with Real Data**
-   - Use existing Pomfret GPS data to test activation
-   - Verify segments are being updated correctly
-   - Check performance (should be fast with spatial indexes)
-
-**Database Indexes Needed:**
-```sql
--- Spatial index on segments (should already exist from migration)
-CREATE INDEX IF NOT EXISTS idx_road_segments_geom 
-ON road_segments USING GIST(geometry);
-
--- Index for efficient timestamp queries
-CREATE INDEX IF NOT EXISTS idx_segment_updates_time 
-ON segment_updates(segment_id, updated_at DESC);
-```
-
-### 🌐 PHASE 3: FRONTEND DISPLAY (AFTER ACTIVATION WORKS)
-
-**New API Endpoint:**
-```
-GET /api/segments?municipality=pomfret-vt&since=timestamp
-Returns: Array of activated segments with geometries and last_updated
-```
-
-**Frontend Changes:**
-- Load segments instead of polylines from new endpoint
-- Render segments as LineStrings on map
-- Color by recency (use existing gradient logic)
-- Segments more efficient: 1,141 objects vs 9,000+ polylines
-
-**Parallel Operation:**
-- Keep polyline display working
-- Add segment layer as optional toggle
-- Compare both visualizations
-- Gradually migrate once confident
+**Segments displaying on map:**
+- Frontend already loads and displays road segments
+- Green = recently serviced/activated
+- Red = not yet serviced
+- Yellow/orange = older activations
+- Segments properly colored by recency
+- Map shows both segments AND GPS polylines (blue lines)
 
 ### 📊 PHASE 4: COVERAGE METRICS (FUTURE)
 
-**Admin Features:**
-- Calculate % of road network covered in last X hours
-- Show streets with no recent activity
-- Directional coverage (northbound vs southbound)
-- Frequency tracking per segment
+**Not yet implemented but data foundation exists:**
+- Can calculate % coverage from segment_updates
+- Directional tracking possible (bearing stored)
+- Frequency tracking ready (count updates per segment)
+- All data being collected, just needs reporting UI
 
-**Performance Benefits:**
-- Fixed dataset size (never grows, only timestamps update)
-- Efficient queries (predictable, indexed)
-- Frontend caching (segments downloaded once)
-- Mobile-friendly (fewer objects to render)
+### 🎯 CURRENT STATUS SUMMARY
+
+**What's Working:**
+- ✅ Complete end-to-end segment system operational
+- ✅ GPS data → polylines → segment activation → display
+- ✅ 2,994 road segments imported for Pomfret
+- ✅ Real-time activation as vehicles drive
+- ✅ Map showing green/red segments based on service status
+- ✅ 10 parallel workers processing GPS data
+- ✅ 27,600+ GPS points processed, 749 polylines created
+
+**Known Issues to Address:**
+- Some segments are actually rivers/driveways (need better OSM filtering)
+- Some roads missing segments where OSM data incomplete
+- Multi-municipality support needs testing
+
+**Deprecated/Unnecessary Features:**
+- ❌ Polyline deduplication - segments solve this
+- ❌ Arrow clutter fixes - not needed with segments
+- ❌ Complex overlap handling - segments are discrete
 
 ### 🔧 IMPORT NEW MUNICIPALITIES
 

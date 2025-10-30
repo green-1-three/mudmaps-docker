@@ -1,0 +1,54 @@
+#!/bin/bash
+
+#####################################################################
+# Cleanup Dangerous Scripts
+# 
+# This script removes or renames scripts that could break the
+# fixed Pomfret boundary and segments
+#####################################################################
+
+echo "═══════════════════════════════════════════════════════════"
+echo "  CLEANUP DANGEROUS SCRIPTS"
+echo "═══════════════════════════════════════════════════════════"
+echo ""
+echo "This will rename dangerous scripts to prevent accidental use."
+echo ""
+
+# Rename dangerous scripts in /scripts/ directory
+cd ~/mudmaps-docker/scripts
+
+echo "Renaming dangerous scripts in /scripts/..."
+[ -f "fix-pomfret-boundary.sh" ] && mv fix-pomfret-boundary.sh fix-pomfret-boundary.sh.DANGEROUS
+[ -f "fix-pomfret-boundary-manual.sh" ] && mv fix-pomfret-boundary-manual.sh fix-pomfret-boundary-manual.sh.DANGEROUS
+[ -f "replace-pomfret-boundary.sh" ] && mv replace-pomfret-boundary.sh replace-pomfret-boundary.sh.DANGEROUS
+[ -f "reset-pomfret.sh" ] && mv reset-pomfret.sh reset-pomfret.sh.DANGEROUS
+
+echo "✓ Renamed 4 dangerous scripts in /scripts/"
+
+# Rename dangerous scripts in /db/scripts/ directory
+cd ~/mudmaps-docker/db/scripts
+
+echo ""
+echo "Renaming dangerous scripts in /db/scripts/..."
+[ -f "import-osm-segments.js" ] && mv import-osm-segments.js import-osm-segments.js.DANGEROUS
+
+echo "✓ Renamed 1 dangerous script in /db/scripts/"
+
+echo ""
+echo "═══════════════════════════════════════════════════════════"
+echo "  SAFE SCRIPTS REMAINING:"
+echo "═══════════════════════════════════════════════════════════"
+echo ""
+echo "/scripts/:"
+echo "  ✅ check-pomfret-status.sh - Check boundary/segment status"
+echo "  ✅ fix-pomfret-osm.js - Properly fix boundary from OSM"
+echo "  ✅ reset-gps-processing.sh - Reset GPS without touching boundary"
+echo ""
+echo "/db/scripts/:"
+echo "  ✅ import-segments-only.js - Import segments using existing boundary"
+echo ""
+echo "═══════════════════════════════════════════════════════════"
+echo ""
+echo "Dangerous scripts have been renamed with .DANGEROUS extension"
+echo "to prevent accidental execution."
+echo ""
