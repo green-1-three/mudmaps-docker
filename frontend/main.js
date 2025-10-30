@@ -569,11 +569,6 @@ function createUI() {
                     <span id="gradientRight">1 day</span>
                 </div>
             </div>
-            
-            <div class="layer-info">
-                <div style="color: #4444ff;">━━━ Polylines (blue)</div>
-                <div style="color: #00ff00;">━━━ Segments (gradient)</div>
-            </div>
         </div>
     `;
     document.body.appendChild(controlsDiv);
