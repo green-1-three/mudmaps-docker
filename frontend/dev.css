@@ -167,14 +167,14 @@ body:has(.dev-panel.collapsed) #map {
     line-height: 1.5;
 }
 
-/* Search Bar - Top Left (Google Maps style, positioned to avoid zoom buttons) */
+/* Search Bar - Top Left (positioned within map, avoiding zoom buttons) */
 #search-bar {
     position: absolute;
     top: 10px;
     left: 60px;
     z-index: 1000;
     width: 350px;
-    max-width: calc(100vw - 120px);
+    max-width: calc(100% - 120px);
 }
 
 .search-input-wrapper {
