@@ -226,8 +226,21 @@ function createPolylineStyleWithFilter(feature) {
     });
 }
 
-// Style for segments - gradient colors, thicker, on top
+// Style for segments - gradient colors for activated, red for unactivated, thicker, on top
 function createSegmentStyleWithFilter(feature) {
+    const isActivated = feature.get('is_activated');
+    
+    // Unactivated segments: always show in red
+    if (!isActivated) {
+        return new Style({
+            stroke: new Stroke({
+                color: '#ff0000',  // Red
+                width: 3
+            })
+        });
+    }
+    
+    // Activated segments: apply time filter and gradient
     if (isSliderDragging) {
         const lastPlowed = feature.get('last_plowed');
         if (lastPlowed) {
@@ -401,7 +414,7 @@ async function loadSegments() {
         showStatus('Loading road segments...');
         const startTime = performance.now();
 
-        const url = `${API_BASE}/segments?municipality=pomfret-vt`;
+        const url = `${API_BASE}/segments?municipality=pomfret-vt&all=true`;
         console.log(`🛣️  Fetching segments from: ${url}`);
         
         const data = await fetchJSON(url);
@@ -410,7 +423,7 @@ async function loadSegments() {
         console.log('📦 Segment response:', data);
 
         if (!data.features || data.features.length === 0) {
-            showStatus('No activated segments found');
+            showStatus('No segments found');
             console.log('⚠️ No segments in response');
             return;
         }
@@ -420,6 +433,7 @@ async function loadSegments() {
         segmentsSource.clear();
 
         let totalSegments = 0;
+        let activatedSegments = 0;
         let segmentsWithinTimeRange = 0;
 
         data.features.forEach(segment => {
@@ -436,10 +450,14 @@ async function loadSegments() {
                 : 0;
             const lastPlowed = Math.max(forwardTime, reverseTime);
             const lastPlowedISO = lastPlowed > 0 ? new Date(lastPlowed).toISOString() : null;
+            const isActivated = lastPlowed > 0;
 
-            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-            if (lastPlowed >= cutoffTime) {
-                segmentsWithinTimeRange++;
+            if (isActivated) {
+                activatedSegments++;
+                const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+                if (lastPlowed >= cutoffTime) {
+                    segmentsWithinTimeRange++;
+                }
             }
 
             const coordinates = segment.geometry.coordinates.map(coord => fromLonLat(coord));
@@ -456,6 +474,7 @@ async function loadSegments() {
                 plow_count_today: segment.properties.plow_count_today,
                 plow_count_total: segment.properties.plow_count_total,
                 segment_length: segment.properties.segment_length,
+                is_activated: isActivated,
                 type: 'segment'
             });
 
@@ -465,9 +484,9 @@ async function loadSegments() {
 
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total segment load time: ${totalTime.toFixed(0)}ms`);
-        console.log(`📊 Segments: ${totalSegments} total, ${segmentsWithinTimeRange} within ${currentTimeHours}h range`);
+        console.log(`📊 Segments: ${totalSegments} total, ${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated, ${segmentsWithinTimeRange} within ${currentTimeHours}h range`);
 
-        showStatus(`Loaded ${totalSegments} segments (${segmentsWithinTimeRange} active)`);
+        showStatus(`Loaded ${totalSegments} segments (${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated)`);
 
     } catch (err) {
         console.error('Failed to load segments:', err);

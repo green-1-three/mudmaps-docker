@@ -152,9 +152,9 @@ app.get('/cache/stats', async (req, res) => {
 // Get activated road segments (UNCHANGED - working correctly)
 app.get('/api/segments', async (req, res) => {
     try {
-        const { municipality = 'pomfret-vt', since } = req.query;
+        const { municipality = 'pomfret-vt', since, all } = req.query;
         
-        console.log(`🛣️  Fetching segments for ${municipality}${since ? ` since ${since}` : ''}`);
+        console.log(`🛣️  Fetching segments for ${municipality}${since ? ` since ${since}` : ''}${all ? ' (ALL segments)' : ''}`);
         
         let query = `
             SELECT 
@@ -175,8 +175,11 @@ app.get('/api/segments', async (req, res) => {
         
         const params = [municipality];
         
-        // Optional time filter
-        if (since) {
+        // Optional time filter or all segments
+        if (all === 'true') {
+            // Return ALL segments regardless of activation status
+            console.log('  📦 Returning ALL segments (including unactivated)');
+        } else if (since) {
             query += ` AND (last_plowed_forward > $2 OR last_plowed_reverse > $2)`;
             params.push(new Date(since));
         } else {
