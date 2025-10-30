@@ -896,6 +896,9 @@ function initDevPanel() {
         const deltaX = startX - e.clientX;
         const newWidth = Math.max(200, Math.min(window.innerWidth - 50, startWidth + deltaX));
         panel.style.width = newWidth + 'px';
+        
+        // Update map size while dragging
+        map.updateSize();
     });
     
     document.addEventListener('mouseup', () => {
@@ -904,13 +907,22 @@ function initDevPanel() {
             resizeHandle.classList.remove('dragging');
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
+            
+            // Final map size update
+            map.updateSize();
         }
     });
     
     // Collapse functionality
     collapseBtn.addEventListener('click', () => {
         panel.classList.toggle('collapsed');
-        collapseBtn.textContent = panel.classList.contains('collapsed') ? '☰' : '×';
+        collapseBtn.innerHTML = panel.classList.contains('collapsed') ? '&larr;' : '&rarr;';
+        collapseBtn.title = panel.classList.contains('collapsed') ? 'Expand Panel' : 'Collapse Panel';
+        
+        // Update map size after collapse/expand animation
+        setTimeout(() => {
+            map.updateSize();
+        }, 300);
     });
     
     // Tab switching
