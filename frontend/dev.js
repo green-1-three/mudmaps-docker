@@ -903,6 +903,12 @@ function initDevPanel() {
             mapElement.style.right = newWidth + 'px';
         }
         
+        // Update controls position to match panel width
+        const controlsElement = document.getElementById('controls');
+        if (controlsElement) {
+            controlsElement.style.right = (newWidth + 10) + 'px';
+        }
+        
         // Update map size while dragging
         map.updateSize();
     });

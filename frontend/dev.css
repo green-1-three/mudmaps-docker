@@ -169,12 +169,13 @@ body:has(.dev-panel.collapsed) #map {
 
 /* Search Bar - Top Left (positioned within map, avoiding zoom buttons) */
 #search-bar {
-    position: absolute;
+    position: fixed;
     top: 10px;
     left: 60px;
     z-index: 1000;
     width: 350px;
     max-width: calc(100% - 120px);
+    transition: left 0.3s ease;
 }
 
 .search-input-wrapper {
@@ -250,15 +251,20 @@ body:has(.dev-panel.collapsed) #map {
 
 /* Control Panel - Top Right (positioned within map viewport) */
 #controls {
-    position: absolute;
+    position: fixed;
     top: 10px;
-    right: 10px;
+    right: 410px;
     background: rgba(255, 255, 255, 0.95);
     border-radius: 8px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     max-width: 250px;
     z-index: 1000;
     transition: right 0.3s ease;
+}
+
+/* Move controls when panel is collapsed */
+body:has(.dev-panel.collapsed) #controls {
+    right: 50px;
 }
 
 .control-panel {
