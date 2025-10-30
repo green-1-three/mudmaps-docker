@@ -88,6 +88,10 @@ const segmentsSource = new VectorSource();
 const userLocationSource = new VectorSource();
 const searchResultSource = new VectorSource();
 
+// Layer references for toggling
+let polylinesLayer;
+let segmentsLayer;
+
 // Add layers to map (order matters for display)
 // Boundary at bottom (zIndex: 0.1)
 map.addLayer(new VectorLayer({
@@ -106,18 +110,20 @@ map.addLayer(new VectorLayer({
 }));
 
 // Polylines behind (zIndex: 0.5)
-map.addLayer(new VectorLayer({
+polylinesLayer = new VectorLayer({
     source: polylinesSource,
     zIndex: 0.5,
     style: createPolylineStyleWithFilter
-}));
+});
+map.addLayer(polylinesLayer);
 
 // Segments on top (zIndex: 1)
-map.addLayer(new VectorLayer({
+segmentsLayer = new VectorLayer({
     source: segmentsSource,
     zIndex: 1,
     style: createSegmentStyleWithFilter
-}));
+});
+map.addLayer(segmentsLayer);
 
 map.addLayer(new VectorLayer({
     source: userLocationSource,
@@ -953,6 +959,43 @@ function initDevPanel() {
             document.querySelector(`[data-tab-content="${tabName}"]`).classList.add('active');
         });
     });
+    
+    // Layer visibility toggles
+    const togglePolylines = document.getElementById('toggle-polylines');
+    const toggleActiveSegments = document.getElementById('toggle-active-segments');
+    const toggleInactiveSegments = document.getElementById('toggle-inactive-segments');
+    
+    if (togglePolylines) {
+        togglePolylines.addEventListener('change', (e) => {
+            polylinesLayer.setVisible(e.target.checked);
+        });
+    }
+    
+    if (toggleActiveSegments || toggleInactiveSegments) {
+        const updateSegmentVisibility = () => {
+            const showActive = toggleActiveSegments ? toggleActiveSegments.checked : true;
+            const showInactive = toggleInactiveSegments ? toggleInactiveSegments.checked : true;
+            
+            // Update the style function to filter segments
+            segmentsLayer.setStyle((feature) => {
+                const isActivated = feature.get('is_activated');
+                
+                // Filter based on toggle states
+                if (isActivated && !showActive) return null;
+                if (!isActivated && !showInactive) return null;
+                
+                // Apply the normal style
+                return createSegmentStyleWithFilter(feature);
+            });
+        };
+        
+        if (toggleActiveSegments) {
+            toggleActiveSegments.addEventListener('change', updateSegmentVisibility);
+        }
+        if (toggleInactiveSegments) {
+            toggleInactiveSegments.addEventListener('change', updateSegmentVisibility);
+        }
+    }
 }
 
 initDevPanel();
