@@ -867,3 +867,68 @@ console.log('🗺️ Initializing MudMaps (POLYLINES + SEGMENTS)...');
 createUI();
 updateGradientLabels(currentTimeHours);
 loadAllData();
+
+// Developer Panel Functionality
+function initDevPanel() {
+    const panel = document.getElementById('dev-panel');
+    const resizeHandle = document.querySelector('.dev-panel-resize-handle');
+    const collapseBtn = document.querySelector('.dev-panel-collapse');
+    const tabs = document.querySelectorAll('.dev-tab');
+    
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+    
+    // Resize functionality
+    resizeHandle.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = panel.offsetWidth;
+        resizeHandle.classList.add('dragging');
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        
+        const deltaX = startX - e.clientX;
+        const newWidth = Math.max(200, Math.min(window.innerWidth - 50, startWidth + deltaX));
+        panel.style.width = newWidth + 'px';
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            resizeHandle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+    });
+    
+    // Collapse functionality
+    collapseBtn.addEventListener('click', () => {
+        panel.classList.toggle('collapsed');
+        collapseBtn.textContent = panel.classList.contains('collapsed') ? '☰' : '×';
+    });
+    
+    // Tab switching
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.dataset.tab;
+            
+            // Update active tab
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            // Update active content
+            document.querySelectorAll('.dev-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.querySelector(`[data-tab-content="${tabName}"]`).classList.add('active');
+        });
+    });
+}
+
+initDevPanel();
