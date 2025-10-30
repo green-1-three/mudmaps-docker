@@ -52,10 +52,7 @@ body:has(.dev-panel.collapsed) #map {
     right: 40px;
 }
 
-/* Lighten the dark basemap tiles for better road visibility */
-#map .ol-layer canvas {
-    filter: brightness(1.3) contrast(0.9);
-}
+/* No filter needed for light basemap */
 
 /* Developer Panel */
 .dev-panel {

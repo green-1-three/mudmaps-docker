@@ -15,10 +15,7 @@ html, body {
     height: 100%;
 }
 
-/* Lighten the dark basemap tiles for better road visibility */
-#map .ol-layer canvas {
-    filter: brightness(1.3) contrast(0.9);
-}
+/* No filter needed for light basemap */
 
 /* Search Bar - Top Left (Google Maps style, positioned to avoid zoom buttons) */
 #search-bar {
