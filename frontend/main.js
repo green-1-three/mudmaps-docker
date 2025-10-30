@@ -69,13 +69,13 @@ async function fetchJSON(url) {
     return r.json();
 }
 
-// Map setup with CartoDB Voyager (colorful, readable basemap)
+// Map setup with OpenStreetMap (clean, readable basemap similar to Google Maps)
 const map = new Map({
     target: 'map',
     layers: [new TileLayer({ 
         source: new XYZ({
-            url: 'https://{a-d}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-            attributions: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>'
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            attributions: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         })
     })],
     view: new View({ center: fromLonLat([0, 0]), zoom: 2 })
