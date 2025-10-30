@@ -38,9 +38,12 @@ html, body {
     transform: translateX(calc(100% - 40px));
 }
 
-.dev-panel.collapsed .dev-panel-content {
-    opacity: 0;
-    pointer-events: none;
+.dev-panel.collapsed .dev-panel-body {
+    display: none;
+}
+
+.dev-panel.collapsed .dev-panel-tabs {
+    display: none;
 }
 
 .dev-panel-resize-handle {
@@ -120,11 +123,17 @@ html, body {
     justify-content: center;
     border-radius: 4px;
     transition: all 0.2s;
+    flex-shrink: 0;
 }
 
 .dev-panel-collapse:hover {
     background: rgba(0, 0, 0, 0.1);
     color: #333;
+}
+
+.dev-panel.collapsed .dev-panel-collapse {
+    background: #f8f9fa;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.2);
 }
 
 .dev-panel-body {
