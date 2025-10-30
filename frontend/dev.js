@@ -209,18 +209,15 @@ function getColorByAge(timestamp, maxHours = currentTimeHours) {
 
 // Global variable to store current time range
 let currentTimeHours = 24;
-let isSliderDragging = false;
 
 // Style for polylines - blue, thin, behind segments
 function createPolylineStyleWithFilter(feature) {
-    if (isSliderDragging) {
-        const endTime = feature.get('end_time');
-        if (endTime) {
-            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-            const polylineTime = new Date(endTime).getTime();
-            if (polylineTime < cutoffTime) {
-                return null;
-            }
+    const endTime = feature.get('end_time');
+    if (endTime) {
+        const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+        const polylineTime = new Date(endTime).getTime();
+        if (polylineTime < cutoffTime) {
+            return null;
         }
     }
     
@@ -247,18 +244,15 @@ function createSegmentStyleWithFilter(feature) {
     }
     
     // Activated segments: apply time filter and gradient
-    if (isSliderDragging) {
-        const lastPlowed = feature.get('last_plowed');
-        if (lastPlowed) {
-            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-            const plowTime = new Date(lastPlowed).getTime();
-            if (plowTime < cutoffTime) {
-                return null;
-            }
+    const lastPlowed = feature.get('last_plowed');
+    if (lastPlowed) {
+        const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+        const plowTime = new Date(lastPlowed).getTime();
+        if (plowTime < cutoffTime) {
+            return null;  // Hide segments older than the time range
         }
     }
     
-    const lastPlowed = feature.get('last_plowed');
     const color = lastPlowed ? getColorByAge(lastPlowed) : '#0066cc';
     
     return new Style({
@@ -513,10 +507,8 @@ async function loadAllData() {
         ]);
 
         // Fit map to show all features
-        isSliderDragging = true;
         polylinesSource.changed();
         segmentsSource.changed();
-        isSliderDragging = false;
 
         const allFeatures = [
             ...polylinesSource.getFeatures(),
@@ -613,16 +605,16 @@ function setupTimeSlider() {
         updateTimeDisplay(hours);
         currentTimeHours = hours;
         
-        isSliderDragging = true;
+        // Trigger re-render of layers
         polylinesSource.changed();
         segmentsSource.changed();
     });
 
     slider.addEventListener('change', (e) => {
-        isSliderDragging = false;
-        
         const index = parseInt(e.target.value);
         currentTimeHours = TIME_INTERVALS[index];
+        
+        // Final re-render
         polylinesSource.changed();
         segmentsSource.changed();
         
