@@ -956,10 +956,21 @@ function initDevPanel() {
     const togglePolylines = document.getElementById('toggle-polylines');
     const toggleActiveSegments = document.getElementById('toggle-active-segments');
     const toggleInactiveSegments = document.getElementById('toggle-inactive-segments');
+    const toggleSegmentBorders = document.getElementById('toggle-segment-borders');
+    
+    // Global state for segment borders
+    let showSegmentBorders = false;
     
     if (togglePolylines) {
         togglePolylines.addEventListener('change', (e) => {
             polylinesLayer.setVisible(e.target.checked);
+        });
+    }
+    
+    if (toggleSegmentBorders) {
+        toggleSegmentBorders.addEventListener('change', (e) => {
+            showSegmentBorders = e.target.checked;
+            updateSegmentVisibility();
         });
     }
     
@@ -976,8 +987,8 @@ function initDevPanel() {
                 if (isActivated && !showActive) return null;
                 if (!isActivated && !showInactive) return null;
                 
-                // Apply the normal style
-                return createSegmentStyleWithFilter(feature);
+                // Apply the normal style with optional borders
+                return createSegmentStyleWithBorders(feature);
             });
         };
         
@@ -987,6 +998,33 @@ function initDevPanel() {
         if (toggleInactiveSegments) {
             toggleInactiveSegments.addEventListener('change', updateSegmentVisibility);
         }
+    }
+    
+    // Helper function to create segment style with optional borders
+    function createSegmentStyleWithBorders(feature) {
+        const baseStyle = createSegmentStyleWithFilter(feature);
+        
+        if (!baseStyle || !showSegmentBorders) {
+            return baseStyle;
+        }
+        
+        // Add a white border around segments when borders are enabled
+        const isActivated = feature.get('is_activated');
+        const baseColor = isActivated 
+            ? (feature.get('last_plowed') ? getColorByAge(feature.get('last_plowed')) : '#0066cc')
+            : '#ff0000';
+        
+        return [
+            // White border (drawn first, underneath)
+            new Style({
+                stroke: new Stroke({
+                    color: '#ffffff',
+                    width: isActivated ? 6 : 5
+                })
+            }),
+            // Original colored stroke on top
+            baseStyle
+        ];
     }
 }
 
