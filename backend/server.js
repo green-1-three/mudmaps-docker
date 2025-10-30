@@ -339,7 +339,7 @@ app.get('/markers/enhanced', async (req, res) => {
 });
 
 // IMPROVED: Generate encoded paths with caching
-app.get('/paths/encoded', async (req, res) => {
+app.get('/api/paths/encoded', async (req, res) => {
     try {
         const { username, hours = 24 } = req.query;
 
