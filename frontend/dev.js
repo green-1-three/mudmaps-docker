@@ -467,6 +467,7 @@ async function loadSegments() {
                 segment_id: segment.id,
                 street_name: segment.properties.street_name,
                 road_classification: segment.properties.road_classification,
+                bearing: segment.properties.bearing,
                 last_plowed: lastPlowedISO,
                 last_plowed_forward: segment.properties.last_plowed_forward,
                 last_plowed_reverse: segment.properties.last_plowed_reverse,
@@ -939,6 +940,7 @@ map.on('pointermove', (event) => {
                 <div style="color: #00ff88; font-weight: bold; margin-bottom: 6px;">🛣️ SEGMENT #${props.segment_id}</div>
                 <div><span style="color: #888;">Street:</span> ${props.street_name || 'Unknown'}</div>
                 <div><span style="color: #888;">Classification:</span> ${props.road_classification || 'Unknown'}</div>
+                <div><span style="color: #888;">Bearing:</span> ${props.bearing !== null && props.bearing !== undefined ? props.bearing + '°' : 'Unknown'}</div>
                 <div><span style="color: #888;">Length:</span> ${props.segment_length ? props.segment_length.toFixed(1) + 'm' : 'Unknown'}</div>
                 <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
                     <span style="color: #888;">Status:</span> ${props.is_activated ? '<span style="color: #00ff00;">✓ Activated</span>' : '<span style="color: #ff4444;">✗ Not Activated</span>'}
@@ -1066,12 +1068,36 @@ function initDevPanel() {
     
     // Layer visibility toggles
     const togglePolylines = document.getElementById('toggle-polylines');
+    const togglePolylineBorders = document.getElementById('toggle-polyline-borders');
     const toggleActiveSegments = document.getElementById('toggle-active-segments');
     const toggleInactiveSegments = document.getElementById('toggle-inactive-segments');
     const toggleSegmentBorders = document.getElementById('toggle-segment-borders');
     
-    // Global state for segment borders
+    // Global state for borders
+    let showPolylineBorders = false;
     let showSegmentBorders = false;
+    
+    // Helper function to create polyline style with optional borders
+    function createPolylineStyleWithBorders(feature) {
+        const baseStyle = createPolylineStyleWithFilter(feature);
+        
+        if (!baseStyle || !showPolylineBorders) {
+            return baseStyle;
+        }
+        
+        // Add a white border around polylines when borders are enabled
+        return [
+            // White border (drawn first, underneath)
+            new Style({
+                stroke: new Stroke({
+                    color: '#ffffff',
+                    width: 4
+                })
+            }),
+            // Original blue stroke on top
+            baseStyle
+        ];
+    }
     
     // Helper function to create segment style with optional borders
     function createSegmentStyleWithBorders(feature) {
@@ -1121,6 +1147,14 @@ function initDevPanel() {
     if (togglePolylines) {
         togglePolylines.addEventListener('change', (e) => {
             polylinesLayer.setVisible(e.target.checked);
+        });
+    }
+    
+    if (togglePolylineBorders) {
+        togglePolylineBorders.addEventListener('change', (e) => {
+            showPolylineBorders = e.target.checked;
+            // Update polyline layer style
+            polylinesLayer.setStyle(createPolylineStyleWithBorders);
         });
     }
     

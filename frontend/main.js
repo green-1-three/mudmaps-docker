@@ -461,6 +461,7 @@ async function loadSegments() {
                 segment_id: segment.id,
                 street_name: segment.properties.street_name,
                 road_classification: segment.properties.road_classification,
+                bearing: segment.properties.bearing,
                 last_plowed: lastPlowedISO,
                 last_plowed_forward: segment.properties.last_plowed_forward,
                 last_plowed_reverse: segment.properties.last_plowed_reverse,
