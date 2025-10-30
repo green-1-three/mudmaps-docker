@@ -107,8 +107,22 @@ echo "────────────────────────�
 echo "STEP 4: Re-importing road segments from OpenStreetMap"
 echo "───────────────────────────────────────────────────────────"
 
-# Navigate to scripts directory
+# Navigate to scripts directory and load environment
 cd ~/mudmaps-docker/db/scripts
+
+# Source environment variables from docker-compose
+echo "Loading database credentials..."
+export PGUSER=mudmaps
+export PGHOST=localhost
+export PGDATABASE=mudmapsdb
+export PGPASSWORD='fDNVp1hPW75zvQU3TqVmOI5G0X4pdx4V1UEHhan8llo='
+export PGPORT=5432
+
+# Check if npm packages are installed, install if missing
+if [ ! -d "node_modules" ] || [ ! -d "node_modules/@turf" ]; then
+    echo "Installing required npm packages..."
+    npm install
+fi
 
 echo "Running OSM import for Pomfret..."
 node import-osm-segments.js pomfret-vt --segment-length=50
