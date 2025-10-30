@@ -4,7 +4,7 @@ import TileLayer from 'ol/layer/Tile';
 import XYZ from 'ol/source/XYZ';
 import { fromLonLat, toLonLat } from 'ol/proj';
 import { Feature } from 'ol';
-import { Point, LineString } from 'ol/geom';
+import { Point, LineString, Polygon } from 'ol/geom';
 import { Vector as VectorLayer } from 'ol/layer';
 import { Vector as VectorSource } from 'ol/source';
 import { Style, Icon, Stroke, Fill, Text } from 'ol/style';
@@ -82,12 +82,29 @@ const map = new Map({
 });
 
 // Vector sources for different layers
+const boundarySource = new VectorSource();
 const polylinesSource = new VectorSource();
 const segmentsSource = new VectorSource();
 const userLocationSource = new VectorSource();
 const searchResultSource = new VectorSource();
 
 // Add layers to map (order matters for display)
+// Boundary at bottom (zIndex: 0.1)
+map.addLayer(new VectorLayer({
+    source: boundarySource,
+    zIndex: 0.1,
+    style: new Style({
+        stroke: new Stroke({
+            color: 'rgba(255, 255, 255, 0.4)',
+            width: 2,
+            lineDash: [5, 5]
+        }),
+        fill: new Fill({
+            color: 'rgba(255, 255, 255, 0.02)'
+        })
+    })
+}));
+
 // Polylines behind (zIndex: 0.5)
 map.addLayer(new VectorLayer({
     source: polylinesSource,
@@ -321,6 +338,63 @@ async function loadPolylines() {
     }
 }
 
+// Load municipality boundary
+async function loadBoundary() {
+    try {
+        showStatus('Loading boundary...');
+        const url = `${API_BASE}/boundary?municipality=pomfret-vt`;
+        console.log(`🗺️  Fetching boundary from: ${url}`);
+        
+        const data = await fetchJSON(url);
+        console.log('✅ Boundary loaded:', data);
+
+        if (!data.geometry || !data.geometry.coordinates) {
+            console.warn('⚠️ Boundary missing geometry');
+            return;
+        }
+
+        boundarySource.clear();
+
+        // Handle MultiPolygon geometry
+        if (data.geometry.type === 'MultiPolygon') {
+            data.geometry.coordinates.forEach(polygonCoords => {
+                // Each polygon is an array of rings (first is outer, rest are holes)
+                const rings = polygonCoords.map(ring => 
+                    ring.map(coord => fromLonLat(coord))
+                );
+                
+                const feature = new Feature({
+                    geometry: new Polygon(rings),
+                    name: data.properties.name,
+                    state: data.properties.state,
+                    type: 'boundary'
+                });
+                
+                boundarySource.addFeature(feature);
+            });
+        } else if (data.geometry.type === 'Polygon') {
+            const rings = data.geometry.coordinates.map(ring => 
+                ring.map(coord => fromLonLat(coord))
+            );
+            
+            const feature = new Feature({
+                geometry: new Polygon(rings),
+                name: data.properties.name,
+                state: data.properties.state,
+                type: 'boundary'
+            });
+            
+            boundarySource.addFeature(feature);
+        }
+
+        console.log(`🗺️  Boundary loaded for ${data.properties.name}, ${data.properties.state}`);
+
+    } catch (err) {
+        console.error('Failed to load boundary:', err);
+        // Don't show error to user - boundary is optional
+    }
+}
+
 // Load and display road segments
 async function loadSegments() {
     try {
@@ -408,6 +482,7 @@ async function loadAllData() {
         
         // Load in parallel
         await Promise.all([
+            loadBoundary(),
             loadPolylines(),
             loadSegments()
         ]);

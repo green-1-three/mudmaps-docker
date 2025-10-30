@@ -221,6 +221,46 @@ app.get('/api/segments', async (req, res) => {
     }
 });
 
+// Get municipality boundary
+app.get('/api/boundary', async (req, res) => {
+    try {
+        const { municipality = 'pomfret-vt' } = req.query;
+        
+        console.log(`🗺️  Fetching boundary for ${municipality}`);
+        
+        const { rows } = await pool.query(`
+            SELECT 
+                id,
+                name,
+                state,
+                ST_AsGeoJSON(boundary) as geometry
+            FROM municipalities
+            WHERE id = $1
+        `, [municipality]);
+        
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Municipality not found' });
+        }
+        
+        const boundary = rows[0];
+        console.log(`✅ Returning boundary for ${boundary.name}, ${boundary.state}`);
+        
+        res.json({
+            type: 'Feature',
+            id: boundary.id,
+            geometry: JSON.parse(boundary.geometry),
+            properties: {
+                name: boundary.name,
+                state: boundary.state
+            }
+        });
+        
+    } catch (error) {
+        console.error('GET /api/boundary error:', error);
+        res.status(500).json({ error: 'db_error', message: error.message });
+    }
+});
+
 // Health check endpoint
 app.get('/health', async (req, res) => {
     try {
