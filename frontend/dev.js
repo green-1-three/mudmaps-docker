@@ -897,6 +897,12 @@ function initDevPanel() {
         const newWidth = Math.max(200, Math.min(window.innerWidth - 50, startWidth + deltaX));
         panel.style.width = newWidth + 'px';
         
+        // Update map right margin to match panel width
+        const mapElement = document.getElementById('map');
+        if (mapElement) {
+            mapElement.style.right = newWidth + 'px';
+        }
+        
         // Update map size while dragging
         map.updateSize();
     });
