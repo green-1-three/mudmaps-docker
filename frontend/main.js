@@ -257,17 +257,35 @@ async function loadPolylines() {
         let totalPolylines = 0;
 
         for (const device of data.devices) {
-            if (device.polylines && device.polylines.length > 0) {
-                for (const polyline of device.polylines) {
-                    if (polyline.encoded_polyline) {
-                        const coords = decodePolyline(polyline.encoded_polyline);
+            // Handle single encoded path
+            if (device.encoded_path) {
+                const coords = decodePolyline(device.encoded_path);
+                const projectedCoords = coords.map(coord => fromLonLat(coord));
+                
+                const feature = new Feature({
+                    geometry: new LineString(projectedCoords),
+                    device: device.device,
+                    start_time: device.start_time,
+                    end_time: device.end_time,
+                    type: 'polyline'
+                });
+                
+                polylinesSource.addFeature(feature);
+                totalPolylines++;
+            }
+            
+            // Handle batched paths
+            if (device.batches && device.batches.length > 0) {
+                for (const batch of device.batches) {
+                    if (batch.success && batch.encoded_polyline) {
+                        const coords = decodePolyline(batch.encoded_polyline);
                         const projectedCoords = coords.map(coord => fromLonLat(coord));
                         
                         const feature = new Feature({
                             geometry: new LineString(projectedCoords),
                             device: device.device,
-                            start_time: polyline.start_time,
-                            end_time: polyline.end_time,
+                            start_time: device.start_time,
+                            end_time: device.end_time,
                             type: 'polyline'
                         });
                         
@@ -275,6 +293,23 @@ async function loadPolylines() {
                         totalPolylines++;
                     }
                 }
+            }
+            
+            // Handle raw coordinates fallback (when OSRM fails)
+            if (device.raw_coordinates && device.raw_coordinates.length > 0) {
+                const projectedCoords = device.raw_coordinates.map(coord => fromLonLat(coord));
+                
+                const feature = new Feature({
+                    geometry: new LineString(projectedCoords),
+                    device: device.device,
+                    start_time: device.start_time,
+                    end_time: device.end_time,
+                    type: 'polyline',
+                    raw: true  // Mark as unmatched
+                });
+                
+                polylinesSource.addFeature(feature);
+                totalPolylines++;
             }
         }
 
