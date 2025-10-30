@@ -465,11 +465,18 @@ Before approaching municipalities for sales, the system should:
 
 ## Instructions for Claude (Working on This Project)
 
+### Server Information
+
+**Production Server:**
+- IP: 142.93.193.102
+- Provider: DigitalOcean Droplet
+- Access: SSH with user's key
+
 ### Workflow & Environment
 
 **Local vs Remote:**
 - App files are on local machine at `/Users/jamesfreeman/Desktop/Mudmaps-Docker`
-- Production server is DigitalOcean Droplet (remote)
+- Production server is DigitalOcean Droplet at IP: **142.93.193.102** (remote)
 - **Prefer local changes:** Make all code changes, create files, edit configurations locally when practical
 - **Deployment:** User deploys via Raycast scripts (filesystem access granted to `/Users/jamesfreeman/Raycast Scripts`)
 - **Remote terminal:** User can SSH to server and run commands, but prefer scripted approaches
