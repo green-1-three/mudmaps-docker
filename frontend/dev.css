@@ -1,0 +1,244 @@
+@import "node_modules/ol/ol.css";
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: Arial, sans-serif;
+}
+
+#map {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Lighten the dark basemap tiles for better road visibility */
+#map .ol-layer canvas {
+    filter: brightness(1.3) contrast(0.9);
+}
+
+/* Search Bar - Top Left (Google Maps style, positioned to avoid zoom buttons) */
+#search-bar {
+    position: absolute;
+    top: 10px;
+    left: 60px;
+    z-index: 1000;
+    width: 350px;
+    max-width: calc(100vw - 120px);
+}
+
+.search-input-wrapper {
+    position: relative;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    height: 44px;
+}
+
+.search-icon {
+    font-size: 18px;
+    color: #5f6368;
+    margin-right: 12px;
+}
+
+.search-input-wrapper input[type="text"] {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 15px;
+    background: transparent;
+    color: #202124;
+}
+
+.search-input-wrapper input[type="text"]::placeholder {
+    color: #5f6368;
+}
+
+.search-results {
+    margin-top: 8px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.search-result-item {
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #e8eaed;
+    transition: background 0.15s;
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-result-item:hover {
+    background: #f1f3f4;
+}
+
+.result-name {
+    font-size: 14px;
+    color: #202124;
+    line-height: 1.4;
+}
+
+.search-loading, .search-no-results, .search-error {
+    padding: 12px 16px;
+    text-align: center;
+    font-size: 14px;
+    color: #5f6368;
+}
+
+.search-error {
+    color: #d93025;
+}
+
+/* Control Panel - Top Right (original design) */
+#controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    max-width: 250px;
+    z-index: 1000;
+}
+
+.control-panel {
+    padding: 15px;
+}
+
+.control-panel h3 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 16px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.control-group {
+    margin-bottom: 15px;
+}
+
+.control-group input[type="range"] {
+    width: 100%;
+    margin: 8px 0;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 3px;
+    background: #ddd;
+    outline: none;
+}
+
+.control-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.control-group input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.time-display {
+    text-align: center;
+    margin: 8px 0;
+    font-weight: 500;
+    color: #333;
+    font-size: 13px;
+}
+
+.legend {
+    margin-bottom: 15px;
+}
+
+.legend-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #333;
+}
+
+.gradient-bar {
+    height: 20px;
+    background: linear-gradient(to right, #00ff00 0%, #ffff00 50%, #ff8800 75%, #808080 100%);
+    border-radius: 4px;
+    margin: 8px 0;
+}
+
+.gradient-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+.gradient-labels span {
+    text-align: center;
+}
+
+.gradient-labels #gradientCenter {
+    position: relative;
+    left: 0;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    #search-bar {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        width: auto;
+        max-width: none;
+    }
+
+    .search-input-wrapper {
+        height: 40px;
+        padding: 0 12px;
+    }
+
+    .search-input-wrapper input[type="text"] {
+        font-size: 14px;
+    }
+
+    #controls {
+        position: relative;
+        top: auto;
+        right: auto;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: none;
+        border-radius: 0;
+    }
+
+    #map {
+        height: 70vh;
+    }
+
+    .control-panel {
+        padding: 10px;
+    }
+}

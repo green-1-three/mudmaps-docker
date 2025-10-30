@@ -4,12 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="781d814b-6897-4d0d-8f84-a8ad56d33b6b" name="Changes" comment="Ports blocked from public">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PROJECT_CHECKLIST.md" beforeDir="false" afterPath="$PROJECT_DIR$/PROJECT_CHECKLIST.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/markers_backup.sql" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/markers_dump.csv" beforeDir="false" />
-    </list>
+    <list default="true" id="781d814b-6897-4d0d-8f84-a8ad56d33b6b" name="Changes" comment="Ports blocked from public" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -99,7 +94,7 @@
       <workItem from="1755132931680" duration="6109000" />
       <workItem from="1755352945538" duration="13639000" />
       <workItem from="1761579154538" duration="11071000" />
-      <workItem from="1761597116465" duration="10179000" />
+      <workItem from="1761597116465" duration="10843000" />
     </task>
     <task id="LOCAL-00001" summary="First commit, reworked into Docker setup.">
       <option name="closed" value="true" />
