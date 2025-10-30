@@ -28,7 +28,7 @@ const MUNICIPALITIES = {
     'pomfret-vt': {
         name: 'Pomfret',
         state: 'VT',
-        osmRelationId: 61701,  // OpenStreetMap relation ID for Pomfret, VT
+        osmRelationId: 2030458,  // OpenStreetMap relation ID for Pomfret, VT
         // Bounding box: [minLon, minLat, maxLon, maxLat]
         bbox: [-72.6, 43.6, -72.4, 43.8]
     },
