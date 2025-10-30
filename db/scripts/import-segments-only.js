@@ -127,13 +127,38 @@ async function importSegmentsOnly() {
                     .join(', ');
                 const wkt = `LINESTRING(${coords})`;
                 
-                // Calculate bearing
+                // Calculate bearing with better error handling
                 const coords_array = segment.geometry.coordinates;
-                const bearing = coords_array.length >= 2 ? 
-                    turf.bearing(
-                        turf.point(coords_array[0]),
-                        turf.point(coords_array[coords_array.length - 1])
-                    ) : null;
+                let bearing = null;
+                
+                if (coords_array.length >= 2) {
+                    const start = coords_array[0];
+                    const end = coords_array[coords_array.length - 1];
+                    
+                    // Only calculate bearing if points are different
+                    if (start[0] !== end[0] || start[1] !== end[1]) {
+                        try {
+                            const bearingValue = turf.bearing(
+                                turf.point(start),
+                                turf.point(end)
+                            );
+                            
+                            // Normalize bearing to 0-360 range
+                            bearing = bearingValue < 0 ? bearingValue + 360 : bearingValue;
+                            
+                            // Validate bearing is a number and in valid range
+                            if (isNaN(bearing) || bearing < 0 || bearing > 360) {
+                                bearing = 0;  // Default to north if calculation fails
+                            }
+                        } catch (e) {
+                            bearing = 0;  // Default to north if calculation fails
+                        }
+                    } else {
+                        bearing = 0;  // Default to north for zero-length segments
+                    }
+                } else {
+                    bearing = 0;  // Default to north if not enough points
+                }
                 
                 await client.query(`
                     INSERT INTO road_segments (
