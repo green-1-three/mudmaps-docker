@@ -54,8 +54,10 @@ export function initDatabaseTab(apiBase, mapSources) {
     
     setupDatabaseEventListeners();
     
-    // Load initial data for the default table
-    loadTableData(databaseState.activeTable);
+    // Load initial data for all tables
+    Object.keys(databaseState.tables).forEach(tableName => {
+        loadTableData(tableName);
+    });
     
     return {
         refreshTable: (tableName) => loadTableData(tableName),
@@ -75,42 +77,93 @@ function createDatabaseTabHTML() {
     tabContent.innerHTML = `
         <h3>Database Inspector</h3>
         
-        <div class="db-controls">
-            <div class="db-table-selector">
-                <label>Table:</label>
-                <select id="db-table-select">
-                    <option value="gps_raw_data">GPS Raw Data</option>
-                    <option value="cached_polylines">Cached Polylines</option>
-                    <option value="road_segments">Road Segments</option>
-                    <option value="segment_updates">Segment Updates</option>
-                </select>
+        <div class="db-actions" style="margin-bottom: 15px;">
+            <button id="db-refresh-btn" class="db-btn">🔄 Refresh All</button>
+            <button id="db-auto-refresh-btn" class="db-btn">Auto-Refresh: OFF</button>
+        </div>
+        
+        <!-- Road Segments Table -->
+        <div class="db-table-section">
+            <h4>Road Segments</h4>
+            <div class="db-stats">
+                <span id="db-row-count-road_segments">Rows: 0</span>
+                <span id="db-last-updated-road_segments">Last Updated: Never</span>
             </div>
-            <div class="db-actions">
-                <button id="db-refresh-btn" class="db-btn">🔄 Refresh</button>
-                <button id="db-auto-refresh-btn" class="db-btn">Auto-Refresh: OFF</button>
+            <div class="db-table-container" data-table="road_segments">
+                <table class="db-table">
+                    <thead id="db-table-head-road_segments">
+                        <tr></tr>
+                    </thead>
+                    <tbody id="db-table-body-road_segments">
+                        <tr>
+                            <td colspan="100%" class="db-loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
         
-        <div class="db-stats">
-            <span id="db-row-count">Rows: 0</span>
-            <span id="db-last-updated">Last Updated: Never</span>
+        <!-- Cached Polylines Table -->
+        <div class="db-table-section">
+            <h4>Cached Polylines</h4>
+            <div class="db-stats">
+                <span id="db-row-count-cached_polylines">Rows: 0</span>
+                <span id="db-last-updated-cached_polylines">Last Updated: Never</span>
+            </div>
+            <div class="db-table-container" data-table="cached_polylines">
+                <table class="db-table">
+                    <thead id="db-table-head-cached_polylines">
+                        <tr></tr>
+                    </thead>
+                    <tbody id="db-table-body-cached_polylines">
+                        <tr>
+                            <td colspan="100%" class="db-loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
         
-        <div class="db-table-container">
-            <table id="db-table" class="db-table">
-                <thead id="db-table-head">
-                    <tr></tr>
-                </thead>
-                <tbody id="db-table-body">
-                    <tr>
-                        <td colspan="100%" class="db-loading">Select a table to view data</td>
-                    </tr>
-                </tbody>
-            </table>
+        <!-- GPS Raw Data Table -->
+        <div class="db-table-section">
+            <h4>GPS Raw Data</h4>
+            <div class="db-stats">
+                <span id="db-row-count-gps_raw_data">Rows: 0</span>
+                <span id="db-last-updated-gps_raw_data">Last Updated: Never</span>
+            </div>
+            <div class="db-table-container" data-table="gps_raw_data">
+                <table class="db-table">
+                    <thead id="db-table-head-gps_raw_data">
+                        <tr></tr>
+                    </thead>
+                    <tbody id="db-table-body-gps_raw_data">
+                        <tr>
+                            <td colspan="100%" class="db-loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
         
-        <div class="db-scroll-loader" id="db-scroll-loader" style="display: none;">
-            Loading more rows...
+        <!-- Segment Updates Table -->
+        <div class="db-table-section">
+            <h4>Segment Updates</h4>
+            <div class="db-stats">
+                <span id="db-row-count-segment_updates">Rows: 0</span>
+                <span id="db-last-updated-segment_updates">Last Updated: Never</span>
+            </div>
+            <div class="db-table-container" data-table="segment_updates">
+                <table class="db-table">
+                    <thead id="db-table-head-segment_updates">
+                        <tr></tr>
+                    </thead>
+                    <tbody id="db-table-body-segment_updates">
+                        <tr>
+                            <td colspan="100%" class="db-loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     `;
     
@@ -125,26 +178,19 @@ function createDatabaseTabHTML() {
  * Setup event listeners for database controls
  */
 function setupDatabaseEventListeners() {
-    // Table selector
-    const tableSelect = document.getElementById('db-table-select');
-    if (tableSelect) {
-        tableSelect.addEventListener('change', (e) => {
-            databaseState.activeTable = e.target.value;
-            resetTableState(databaseState.activeTable);
-            loadTableData(databaseState.activeTable);
-        });
-    }
-    
-    // Refresh button
+    // Refresh button - refresh all tables
     const refreshBtn = document.getElementById('db-refresh-btn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
-            resetTableState(databaseState.activeTable);
-            loadTableData(databaseState.activeTable);
+            // Reset and reload all tables
+            Object.keys(databaseState.tables).forEach(tableName => {
+                resetTableState(tableName);
+                loadTableData(tableName);
+            });
         });
     }
     
-    // Auto-refresh toggle
+    // Auto-refresh toggle - refresh all tables
     let autoRefreshInterval = null;
     const autoRefreshBtn = document.getElementById('db-auto-refresh-btn');
     if (autoRefreshBtn) {
@@ -156,7 +202,9 @@ function setupDatabaseEventListeners() {
                 autoRefreshBtn.classList.remove('active');
             } else {
                 autoRefreshInterval = setInterval(() => {
-                    loadTableData(databaseState.activeTable, true);
+                    Object.keys(databaseState.tables).forEach(tableName => {
+                        loadTableData(tableName, true);
+                    });
                 }, 30000); // Refresh every 30 seconds
                 autoRefreshBtn.textContent = 'Auto-Refresh: ON';
                 autoRefreshBtn.classList.add('active');
@@ -164,16 +212,16 @@ function setupDatabaseEventListeners() {
         });
     }
     
-    // Infinite scroll
-    const tableContainer = document.querySelector('.db-table-container');
-    if (tableContainer) {
-        tableContainer.addEventListener('scroll', () => {
-            const { scrollTop, scrollHeight, clientHeight } = tableContainer;
-            if (scrollTop + clientHeight >= scrollHeight - 100) {
-                loadMoreRows();
+    // Infinite scroll for each table container
+    document.querySelectorAll('.db-table-container').forEach(container => {
+        const tableName = container.dataset.table;
+        container.addEventListener('scroll', () => {
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            if (scrollTop + clientHeight >= scrollHeight - 50) {
+                loadMoreRows(tableName);
             }
         });
-    }
+    });
 }
 
 /**
@@ -194,20 +242,16 @@ async function loadTableData(tableName, append = false) {
     if (table.loading) return;
     table.loading = true;
     
-    const loader = document.getElementById('db-scroll-loader');
-    const tbody = document.getElementById('db-table-body');
-    const thead = document.getElementById('db-table-head');
+    const tbody = document.getElementById(`db-table-body-${tableName}`);
+    const thead = document.getElementById(`db-table-head-${tableName}`);
     
     if (!append) {
         tbody.innerHTML = '<tr><td colspan="100%" class="db-loading">Loading...</td></tr>';
-        loader.style.display = 'none';
-    } else {
-        loader.style.display = 'block';
     }
     
     try {
         // Construct the API endpoint
-        const url = `${databaseState.API_BASE}/database/${tableName}?limit=10&offset=${table.offset}`;
+        const url = `${databaseState.API_BASE}/database/${tableName}?limit=5&offset=${table.offset}`;
         console.log(`📊 Fetching ${tableName} from: ${url}`);
         
         const response = await fetchJSON(url);
@@ -245,15 +289,11 @@ async function loadTableData(tableName, append = false) {
         tbody.appendChild(fragment);
         
         // Update stats
-        updateTableStats(table.data.length);
-        
-        // Hide loader
-        loader.style.display = 'none';
+        updateTableStats(tableName, table.data.length);
         
     } catch (err) {
         console.error(`Failed to load ${tableName}:`, err);
         tbody.innerHTML = `<tr><td colspan="100%" class="db-error">Error: ${err.message}</td></tr>`;
-        loader.style.display = 'none';
     } finally {
         table.loading = false;
     }
@@ -316,21 +356,21 @@ function handleRowClick(tableName, rowData, rowElement) {
 /**
  * Load more rows when scrolling to bottom
  */
-function loadMoreRows() {
-    const table = databaseState.tables[databaseState.activeTable];
+function loadMoreRows(tableName) {
+    const table = databaseState.tables[tableName];
     
     // Only load more if we're not already loading and we have data
     if (!table.loading && table.data.length > 0) {
-        loadTableData(databaseState.activeTable, true);
+        loadTableData(tableName, true);
     }
 }
 
 /**
  * Update table statistics display
  */
-function updateTableStats(rowCount) {
-    const rowCountEl = document.getElementById('db-row-count');
-    const lastUpdatedEl = document.getElementById('db-last-updated');
+function updateTableStats(tableName, rowCount) {
+    const rowCountEl = document.getElementById(`db-row-count-${tableName}`);
+    const lastUpdatedEl = document.getElementById(`db-last-updated-${tableName}`);
     
     if (rowCountEl) {
         rowCountEl.textContent = `Rows: ${rowCount}`;
@@ -348,27 +388,17 @@ function updateTableStats(rowCount) {
 export async function highlightTableRow(tableName, id) {
     console.log(`🎯 Highlighting ${tableName} row with ID: ${id}`);
     
-    // Switch to the correct table if needed
-    const tableSelect = document.getElementById('db-table-select');
-    const needsTableSwitch = tableSelect && tableSelect.value !== tableName;
-    
-    if (needsTableSwitch) {
-        console.log(`  🔄 Switching from ${tableSelect.value} to ${tableName}`);
-        tableSelect.value = tableName;
-        databaseState.activeTable = tableName;
-    }
-    
-    // Check if row exists in current data (before resetting)
+    // Check if row exists in current data
     const table = databaseState.tables[tableName];
     const existingRow = table.data.find(row => row.id === id);
     
-    if (existingRow && !needsTableSwitch) {
+    if (existingRow) {
         console.log(`  ✅ Row ${id} already exists in table data`);
-        // Row exists and we didn't switch tables, just scroll to it
+        // Row exists, just scroll to it
         scrollToRow(tableName, id);
     } else {
-        console.log(`  🔍 Row ${id} not in current data or table switched, fetching from backend`);
-        // Row doesn't exist OR we switched tables, fetch it from backend and insert it
+        console.log(`  🔍 Row ${id} not in current data, fetching from backend`);
+        // Row doesn't exist, fetch it from backend and insert it
         await fetchAndInsertRow(tableName, id);
     }
 }
@@ -446,11 +476,11 @@ async function fetchAndInsertRow(tableName, id) {
         console.log(`  📦 Received ${rowsToInsert.length} rows`);
         
         // Ensure table has been initialized with headers
-        const tbody = document.getElementById('db-table-body');
-        const thead = document.getElementById('db-table-head');
+        const tbody = document.getElementById(`db-table-body-${tableName}`);
+        const thead = document.getElementById(`db-table-head-${tableName}`);
         const table = databaseState.tables[tableName];
         
-        // ALWAYS initialize headers when fetching new data (even if table has data from different table)
+        // ALWAYS initialize headers when fetching new data
         console.log(`  🔧 Initializing table headers for ${tableName}`);
         const headerRow = thead.querySelector('tr');
         headerRow.innerHTML = table.columns.map(col => 
