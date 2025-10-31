@@ -345,19 +345,85 @@ function updateTableStats(rowCount) {
  * Highlight a specific row in the table
  * Called from map click events
  */
-export function highlightTableRow(tableName, id) {
+export async function highlightTableRow(tableName, id) {
     // Switch to the correct table if needed
     const tableSelect = document.getElementById('db-table-select');
     if (tableSelect && tableSelect.value !== tableName) {
         tableSelect.value = tableName;
         databaseState.activeTable = tableName;
         resetTableState(tableName);
-        loadTableData(tableName).then(() => {
-            // After loading, find and highlight the row
-            scrollToRow(tableName, id);
-        });
-    } else {
+        await loadTableData(tableName);
+    }
+    
+    // Check if row exists in current data
+    const table = databaseState.tables[tableName];
+    const existingRow = table.data.find(row => row.id === id);
+    
+    if (existingRow) {
+        // Row exists, just scroll to it
         scrollToRow(tableName, id);
+    } else {
+        // Row doesn't exist, fetch it from backend
+        await fetchAndInsertRow(tableName, id);
+    }
+}
+
+/**
+ * Fetch a single row from backend and insert it into the table
+ */
+async function fetchAndInsertRow(tableName, id) {
+    console.log(`🔍 Fetching ${tableName} row with ID: ${id}`);
+    
+    try {
+        let rowData = null;
+        
+        // Fetch from appropriate endpoint
+        if (tableName === 'cached_polylines') {
+            const url = `${databaseState.API_BASE}/api/polylines/${id}`;
+            rowData = await fetchJSON(url);
+        } else if (tableName === 'road_segments') {
+            const url = `${databaseState.API_BASE}/api/segments/${id}`;
+            const segment = await fetchJSON(url);
+            // Transform segment data to match table format
+            rowData = {
+                id: segment.id,
+                street_name: segment.properties.street_name,
+                municipality_id: segment.properties.municipality_id,
+                last_plowed_forward: segment.properties.last_plowed_forward,
+                last_plowed_reverse: segment.properties.last_plowed_reverse,
+                plow_count_total: segment.properties.plow_count_total
+            };
+        } else {
+            console.warn(`⚠️ Cannot fetch individual row for table: ${tableName}`);
+            return;
+        }
+        
+        if (!rowData) {
+            console.warn(`⚠️ Row ${id} not found in ${tableName}`);
+            return;
+        }
+        
+        // Add to table data at the top
+        const table = databaseState.tables[tableName];
+        table.data.unshift(rowData);
+        
+        // Create and insert the row element at the top of the table
+        const tbody = document.getElementById('db-table-body');
+        const tr = createTableRow(tableName, rowData, 0);
+        tbody.insertBefore(tr, tbody.firstChild);
+        
+        // Update all row indices
+        tbody.querySelectorAll('tr').forEach((row, index) => {
+            row.dataset.index = index;
+        });
+        
+        // Scroll to and highlight the new row
+        scrollToRow(tableName, id);
+        
+        console.log(`✅ Inserted row ${id} into ${tableName}`);
+        
+    } catch (err) {
+        console.error(`Failed to fetch row ${id} from ${tableName}:`, err);
     }
 }
 

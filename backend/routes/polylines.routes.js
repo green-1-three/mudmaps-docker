@@ -20,8 +20,30 @@ function createPolylinesRoutes(polylinesService) {
         }
     });
 
+    // Get a single polyline by ID
+    router.get('/api/polylines/:id', async (req, res) => {
+        try {
+            const id = parseInt(req.params.id);
+            
+            if (isNaN(id)) {
+                return res.status(400).json({ error: 'Invalid polyline ID' });
+            }
+            
+            const polyline = await polylinesService.getPolylineById(id);
+            
+            if (!polyline) {
+                return res.status(404).json({ error: 'Polyline not found' });
+            }
+            
+            res.json(polyline);
+        } catch (error) {
+            console.error('GET /api/polylines/:id error:', error);
+            res.status(500).json({ error: 'db_error', message: error.message });
+        }
+    });
+
     // Cache statistics
-    router.get('/cache/stats', async (req, res) => {
+    router.get('/api/cache/stats', async (req, res) => {
         try {
             const stats = await polylinesService.getCacheStats();
             res.json(stats);

@@ -260,24 +260,7 @@ async function loadPolylines() {
         let totalPolylines = 0;
 
         for (const device of data.devices) {
-            // Handle single encoded path
-            if (device.encoded_path) {
-                const coords = decodePolyline(device.encoded_path);
-                const projectedCoords = coords.map(coord => fromLonLat(coord));
-                
-                const feature = new Feature({
-                    geometry: new LineString(projectedCoords),
-                    device: device.device,
-                    start_time: device.start_time,
-                    end_time: device.end_time,
-                    type: 'polyline'
-                });
-                
-                polylinesSource.addFeature(feature);
-                totalPolylines++;
-            }
-            
-            // Handle batched paths
+            // Handle batched paths (these have IDs from database)
             if (device.batches && device.batches.length > 0) {
                 for (const batch of device.batches) {
                     if (batch.success && batch.encoded_polyline) {
@@ -290,7 +273,7 @@ async function loadPolylines() {
                             start_time: device.start_time,
                             end_time: device.end_time,
                             type: 'polyline',
-                            polyline_id: batch.id
+                            polyline_id: batch.id  // Use database ID
                         });
                         
                         polylinesSource.addFeature(feature);
@@ -298,9 +281,25 @@ async function loadPolylines() {
                     }
                 }
             }
-            
-            // Handle raw coordinates fallback (when OSRM fails)
-            if (device.raw_coordinates && device.raw_coordinates.length > 0) {
+            // Handle single encoded path (fallback - no database ID available)
+            else if (device.encoded_path) {
+                const coords = decodePolyline(device.encoded_path);
+                const projectedCoords = coords.map(coord => fromLonLat(coord));
+                
+                const feature = new Feature({
+                    geometry: new LineString(projectedCoords),
+                    device: device.device,
+                    start_time: device.start_time,
+                    end_time: device.end_time,
+                    type: 'polyline',
+                    polyline_id: null  // No database ID for single encoded paths
+                });
+                
+                polylinesSource.addFeature(feature);
+                totalPolylines++;
+            }
+            // Handle raw coordinates fallback (when OSRM fails - no database ID)
+            else if (device.raw_coordinates && device.raw_coordinates.length > 0) {
                 const projectedCoords = device.raw_coordinates.map(coord => fromLonLat(coord));
                 
                 const feature = new Feature({
@@ -309,7 +308,8 @@ async function loadPolylines() {
                     start_time: device.start_time,
                     end_time: device.end_time,
                     type: 'polyline',
-                    raw: true  // Mark as unmatched
+                    raw: true,  // Mark as unmatched
+                    polyline_id: null  // No database ID for raw coordinates
                 });
                 
                 polylinesSource.addFeature(feature);
@@ -960,6 +960,15 @@ map.on('pointermove', (event) => {
     }
 });
 
+// Helper function to switch to database tab
+function switchToDatabaseTab() {
+    // Find and click the database tab
+    const databaseTab = document.querySelector('.dev-tab[data-tab="database"]');
+    if (databaseTab && !databaseTab.classList.contains('active')) {
+        databaseTab.click();
+    }
+}
+
 // Map click handler
 map.on('click', (event) => {
     const features = map.getFeaturesAtPixel(event.pixel);
@@ -981,8 +990,9 @@ map.on('click', (event) => {
             showStatus(info);
             console.log('📍 Segment clicked:', info);
             
-            // Highlight in database view if available
-            if (window.databaseTab) {
+            // Switch to database tab and highlight row
+            if (window.databaseTab && segmentId) {
+                switchToDatabaseTab();
                 highlightTableRow('road_segments', segmentId);
             }
         } else if (type === 'polyline') {
@@ -995,9 +1005,13 @@ map.on('click', (event) => {
             showStatus(info);
             console.log('📍 Polyline clicked:', info);
             
-            // Highlight in database view if available
+            // Switch to database tab and highlight row (only if polyline has an ID)
             if (window.databaseTab && polylineId) {
+                switchToDatabaseTab();
                 highlightTableRow('cached_polylines', polylineId);
+            } else if (!polylineId) {
+                console.warn('⚠️ Polyline has no database ID - cannot show in database inspector');
+                showStatus('⚠️ This polyline has no database record');
             }
         }
     }

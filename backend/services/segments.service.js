@@ -81,6 +81,60 @@ class SegmentsService {
     }
 
     /**
+     * Get a single segment by ID
+     * @param {number} id - Segment ID
+     * @returns {Promise<Object>} Segment data
+     */
+    async getSegmentById(id) {
+        console.log(`🔍 Fetching segment by ID: ${id}`);
+        
+        const { rows } = await this.db.query(`
+            SELECT 
+                id,
+                ST_AsGeoJSON(geometry) as geometry,
+                street_name,
+                road_classification,
+                bearing,
+                last_plowed_forward,
+                last_plowed_reverse,
+                last_plowed_device_id,
+                plow_count_today,
+                plow_count_total,
+                segment_length,
+                municipality_id
+            FROM road_segments
+            WHERE id = $1
+        `, [id]);
+        
+        if (rows.length === 0) {
+            return null;
+        }
+        
+        const row = rows[0];
+        console.log(`✅ Found segment ${id}: ${row.street_name}`);
+        
+        return {
+            id: row.id,
+            geometry: JSON.parse(row.geometry),
+            properties: {
+                street_name: row.street_name,
+                road_classification: row.road_classification,
+                bearing: row.bearing,
+                last_plowed_forward: row.last_plowed_forward,
+                last_plowed_reverse: row.last_plowed_reverse,
+                last_plowed: row.last_plowed_forward > row.last_plowed_reverse 
+                    ? row.last_plowed_forward 
+                    : row.last_plowed_reverse,
+                device_id: row.last_plowed_device_id,
+                plow_count_today: row.plow_count_today,
+                plow_count_total: row.plow_count_total,
+                segment_length: row.segment_length,
+                municipality_id: row.municipality_id
+            }
+        };
+    }
+
+    /**
      * Get municipality boundary
      * @param {string} municipalityId - Municipality ID
      * @returns {Promise<Object>} GeoJSON Feature of boundary

@@ -19,9 +19,10 @@ class PolylinesService {
         
         const startTime = performance.now();
         
-        // Build query
+        // Build query - now including ID
         let query = `
             SELECT 
+                id,
                 device_id,
                 start_time,
                 end_time,
@@ -57,6 +58,7 @@ class PolylinesService {
                 deviceMap[row.device_id] = [];
             }
             deviceMap[row.device_id].push({
+                id: row.id,
                 start_time: row.start_time,
                 end_time: row.end_time,
                 encoded_polyline: row.encoded_polyline,
@@ -75,6 +77,7 @@ class PolylinesService {
                 end_time: polylines[polylines.length - 1].end_time,
                 coordinate_count: polylines.reduce((sum, p) => sum + p.point_count, 0),
                 batches: polylines.map(p => ({
+                    id: p.id,  // Include polyline ID
                     success: true,
                     encoded_polyline: p.encoded_polyline,
                     confidence: p.osrm_confidence
@@ -90,6 +93,36 @@ class PolylinesService {
         console.log(`⚡ Total time: ${totalTime.toFixed(0)}ms for ${devices.length} device(s)\n`);
         
         return { devices };
+    }
+
+    /**
+     * Get a single polyline by ID
+     * @param {number} id - Polyline ID
+     * @returns {Promise<Object>} Polyline data
+     */
+    async getPolylineById(id) {
+        console.log(`🔍 Fetching polyline by ID: ${id}`);
+        
+        const { rows } = await this.db.query(`
+            SELECT 
+                id,
+                device_id,
+                start_time,
+                end_time,
+                encoded_polyline,
+                osrm_confidence,
+                point_count,
+                created_at
+            FROM cached_polylines
+            WHERE id = $1
+        `, [id]);
+        
+        if (rows.length === 0) {
+            return null;
+        }
+        
+        console.log(`✅ Found polyline ${id}`);
+        return rows[0];
     }
 
     /**

@@ -30,6 +30,28 @@ function createSegmentsRoutes(segmentsService) {
         }
     });
 
+    // Get a single segment by ID
+    router.get('/api/segments/:id', async (req, res) => {
+        try {
+            const id = parseInt(req.params.id);
+            
+            if (isNaN(id)) {
+                return res.status(400).json({ error: 'Invalid segment ID' });
+            }
+            
+            const segment = await segmentsService.getSegmentById(id);
+            
+            if (!segment) {
+                return res.status(404).json({ error: 'Segment not found' });
+            }
+            
+            res.json(segment);
+        } catch (error) {
+            console.error('GET /api/segments/:id error:', error);
+            res.status(500).json({ error: 'db_error', message: error.message });
+        }
+    });
+
     // Get municipality boundary
     router.get('/api/boundary', async (req, res) => {
         try {
