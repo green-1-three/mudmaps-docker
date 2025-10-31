@@ -263,6 +263,61 @@ function createSegmentStyleWithFilter(feature) {
     });
 }
 
+// Function to update statistics display
+function updateStatistics() {
+    // Polyline statistics
+    const totalPolylines = polylinesSource.getFeatures().length;
+    const visiblePolylines = polylinesSource.getFeatures().filter(f => {
+        const endTime = f.get('end_time');
+        if (!endTime) return false;
+        const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+        return new Date(endTime).getTime() >= cutoffTime;
+    }).length;
+    
+    // Segment statistics
+    const allSegments = segmentsSource.getFeatures();
+    const totalSegments = allSegments.length;
+    const activeSegments = allSegments.filter(f => f.get('is_activated')).length;
+    const inactiveSegments = totalSegments - activeSegments;
+    const visibleSegments = allSegments.filter(f => {
+        const lastPlowed = f.get('last_plowed');
+        if (!lastPlowed) return false;
+        const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+        return new Date(lastPlowed).getTime() >= cutoffTime;
+    }).length;
+    
+    // Coverage statistics
+    const activationRate = totalSegments > 0 
+        ? ((activeSegments / totalSegments) * 100).toFixed(1) 
+        : '0.0';
+    
+    // Count unique streets covered
+    const streetsSet = new Set();
+    allSegments.forEach(f => {
+        const street = f.get('street_name');
+        if (street && f.get('is_activated')) {
+            streetsSet.add(street);
+        }
+    });
+    const streetsCovered = streetsSet.size;
+    
+    // Update DOM elements
+    const updateElement = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+    
+    updateElement('stat-polylines-total', totalPolylines);
+    updateElement('stat-polylines-visible', visiblePolylines);
+    updateElement('stat-segments-total', totalSegments);
+    updateElement('stat-segments-active', activeSegments);
+    updateElement('stat-segments-inactive', inactiveSegments);
+    updateElement('stat-segments-visible', visibleSegments);
+    updateElement('stat-activation-rate', `${activationRate}%`);
+    updateElement('stat-streets-covered', streetsCovered);
+    updateElement('stat-last-updated', new Date().toLocaleTimeString());
+}
+
 // Load polylines from backend
 async function loadPolylines() {
     try {
@@ -345,6 +400,9 @@ async function loadPolylines() {
 
         console.log(`📊 Loaded ${totalPolylines} polylines`);
         showStatus(`Loaded ${totalPolylines} polylines`);
+        
+        // Update statistics
+        updateStatistics();
 
     } catch (err) {
         console.error('Failed to load polylines:', err);
@@ -488,6 +546,9 @@ async function loadSegments() {
         console.log(`📊 Segments: ${totalSegments} total, ${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated, ${segmentsWithinTimeRange} within ${currentTimeHours}h range`);
 
         showStatus(`Loaded ${totalSegments} segments (${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated)`);
+        
+        // Update statistics
+        updateStatistics();
 
     } catch (err) {
         console.error('Failed to load segments:', err);
@@ -604,6 +665,9 @@ function setupTimeSlider() {
         // Trigger re-render of layers
         polylinesSource.changed();
         segmentsSource.changed();
+        
+        // Update statistics when time range changes
+        updateStatistics();
     });
 
     slider.addEventListener('change', (e) => {
@@ -629,6 +693,9 @@ function setupTimeSlider() {
         }).length;
         
         showStatus(`Showing ${visiblePolylines} polylines, ${visibleSegments} segments`);
+        
+        // Update statistics after time range change
+        updateStatistics();
     });
 }
 
@@ -856,14 +923,14 @@ map.on('click', (event) => {
     }
 });
 
-// Hover functionality for segments
-let hoveredSegment = null;
+// Hover functionality for segments and polylines
+let hoveredFeature = null;
 let hoverPopup = null;
 
 // Create hover popup element
 function createHoverPopup() {
     const popup = document.createElement('div');
-    popup.id = 'segment-hover-popup';
+    popup.id = 'feature-hover-popup';
     popup.style.cssText = `
         position: fixed;
         background: rgba(0, 0, 0, 0.9);
@@ -885,75 +952,135 @@ function createHoverPopup() {
 
 hoverPopup = createHoverPopup();
 
-// Hover style for segments - makes them "pop"
+// Hover style for features - makes them "pop"
 function createHoverStyle(feature) {
-    const isActivated = feature.get('is_activated');
-    const lastPlowed = feature.get('last_plowed');
-    const color = isActivated && lastPlowed ? getColorByAge(lastPlowed) : (isActivated ? '#0066cc' : '#ff0000');
+    const featureType = feature.get('type');
     
-    return [
-        // Glow effect (underneath)
-        new Style({
-            stroke: new Stroke({
-                color: 'rgba(255, 255, 255, 0.8)',
-                width: 10
+    if (featureType === 'segment') {
+        const isActivated = feature.get('is_activated');
+        const lastPlowed = feature.get('last_plowed');
+        const color = isActivated && lastPlowed ? getColorByAge(lastPlowed) : (isActivated ? '#0066cc' : '#ff0000');
+        
+        return [
+            // Glow effect (underneath)
+            new Style({
+                stroke: new Stroke({
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    width: 10
+                })
+            }),
+            // Main stroke (on top, thicker)
+            new Style({
+                stroke: new Stroke({
+                    color: color,
+                    width: 6
+                })
             })
-        }),
-        // Main stroke (on top, thicker)
-        new Style({
-            stroke: new Stroke({
-                color: color,
-                width: 6
+        ];
+    } else if (featureType === 'polyline') {
+        return [
+            // Glow effect (underneath)
+            new Style({
+                stroke: new Stroke({
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    width: 8
+                })
+            }),
+            // Main stroke (on top, thicker)
+            new Style({
+                stroke: new Stroke({
+                    color: '#4444ff',
+                    width: 4
+                })
             })
-        })
-    ];
+        ];
+    }
+    
+    return null;
 }
 
 // Map hover handler
 map.on('pointermove', (event) => {
-    // Check if we're over a segment
-    const features = map.getFeaturesAtPixel(event.pixel, {
+    // Check if we're over a segment first (higher priority)
+    let features = map.getFeaturesAtPixel(event.pixel, {
         layerFilter: (layer) => layer === segmentsLayer
     });
+    
+    let featureType = 'segment';
+    
+    // If no segment, check for polylines
+    if (features.length === 0) {
+        features = map.getFeaturesAtPixel(event.pixel, {
+            layerFilter: (layer) => layer === polylinesLayer
+        });
+        featureType = 'polyline';
+    }
     
     if (features.length > 0) {
         const feature = features[0];
         
-        // Only process if it's a different segment
-        if (hoveredSegment !== feature) {
-            // Reset previous hovered segment
-            if (hoveredSegment) {
-                hoveredSegment.setStyle(undefined); // Reset to default style
+        // Only process if it's a different feature
+        if (hoveredFeature !== feature) {
+            // Reset previous hovered feature
+            if (hoveredFeature) {
+                hoveredFeature.setStyle(undefined); // Reset to default style
             }
             
-            // Set new hovered segment
-            hoveredSegment = feature;
-            hoveredSegment.setStyle(createHoverStyle(feature));
+            // Set new hovered feature
+            hoveredFeature = feature;
+            hoveredFeature.setStyle(createHoverStyle(feature));
             
-            // Update popup content
+            // Update popup content based on feature type
             const props = feature.getProperties();
-            const lastPlowed = props.last_plowed ? new Date(props.last_plowed).toLocaleString() : 'Never';
-            const lastPlowedFwd = props.last_plowed_forward ? new Date(props.last_plowed_forward).toLocaleString() : 'Never';
-            const lastPlowedRev = props.last_plowed_reverse ? new Date(props.last_plowed_reverse).toLocaleString() : 'Never';
             
-            hoverPopup.innerHTML = `
-                <div style="color: #00ff88; font-weight: bold; margin-bottom: 6px;">🛣️ SEGMENT #${props.segment_id}</div>
-                <div><span style="color: #888;">Street:</span> ${props.street_name || 'Unknown'}</div>
-                <div><span style="color: #888;">Classification:</span> ${props.road_classification || 'Unknown'}</div>
-                <div><span style="color: #888;">Bearing:</span> ${props.bearing !== null && props.bearing !== undefined ? props.bearing + '°' : 'Unknown'}</div>
-                <div><span style="color: #888;">Length:</span> ${props.segment_length ? props.segment_length.toFixed(1) + 'm' : 'Unknown'}</div>
-                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
-                    <span style="color: #888;">Status:</span> ${props.is_activated ? '<span style="color: #00ff00;">✓ Activated</span>' : '<span style="color: #ff4444;">✗ Not Activated</span>'}
-                </div>
-                <div><span style="color: #888;">Last Plowed:</span> ${lastPlowed}</div>
-                <div style="font-size: 10px; color: #666; margin-left: 12px;">Forward: ${lastPlowedFwd}</div>
-                <div style="font-size: 10px; color: #666; margin-left: 12px;">Reverse: ${lastPlowedRev}</div>
-                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
-                    <span style="color: #888;">Device ID:</span> ${props.device_id || 'Unknown'}
-                </div>
-                <div><span style="color: #888;">Plow Count Today:</span> ${props.plow_count_today || 0}</div>
-                <div><span style="color: #888;">Plow Count Total:</span> ${props.plow_count_total || 0}</div>
-            `;
+            if (featureType === 'segment') {
+                const lastPlowed = props.last_plowed ? new Date(props.last_plowed).toLocaleString() : 'Never';
+                const lastPlowedFwd = props.last_plowed_forward ? new Date(props.last_plowed_forward).toLocaleString() : 'Never';
+                const lastPlowedRev = props.last_plowed_reverse ? new Date(props.last_plowed_reverse).toLocaleString() : 'Never';
+                
+                hoverPopup.innerHTML = `
+                    <div style="color: #00ff88; font-weight: bold; margin-bottom: 6px;">🛣️ SEGMENT #${props.segment_id}</div>
+                    <div><span style="color: #888;">Street:</span> ${props.street_name || 'Unknown'}</div>
+                    <div><span style="color: #888;">Classification:</span> ${props.road_classification || 'Unknown'}</div>
+                    <div><span style="color: #888;">Bearing:</span> ${props.bearing !== null && props.bearing !== undefined ? props.bearing + '°' : 'Unknown'}</div>
+                    <div><span style="color: #888;">Length:</span> ${props.segment_length ? props.segment_length.toFixed(1) + 'm' : 'Unknown'}</div>
+                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                        <span style="color: #888;">Status:</span> ${props.is_activated ? '<span style="color: #00ff00;">✓ Activated</span>' : '<span style="color: #ff4444;">✗ Not Activated</span>'}
+                    </div>
+                    <div><span style="color: #888;">Last Plowed:</span> ${lastPlowed}</div>
+                    <div style="font-size: 10px; color: #666; margin-left: 12px;">Forward: ${lastPlowedFwd}</div>
+                    <div style="font-size: 10px; color: #666; margin-left: 12px;">Reverse: ${lastPlowedRev}</div>
+                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                        <span style="color: #888;">Device ID:</span> ${props.device_id || 'Unknown'}
+                    </div>
+                    <div><span style="color: #888;">Plow Count Today:</span> ${props.plow_count_today || 0}</div>
+                    <div><span style="color: #888;">Plow Count Total:</span> ${props.plow_count_total || 0}</div>
+                `;
+            } else if (featureType === 'polyline') {
+                const startTime = props.start_time ? new Date(props.start_time).toLocaleString() : 'Unknown';
+                const endTime = props.end_time ? new Date(props.end_time).toLocaleString() : 'Unknown';
+                const duration = props.start_time && props.end_time 
+                    ? ((new Date(props.end_time) - new Date(props.start_time)) / 60000).toFixed(1) 
+                    : 'Unknown';
+                const isRaw = props.raw ? ' (Unmatched GPS points)' : '';
+                
+                hoverPopup.innerHTML = `
+                    <div style="color: #6688ff; font-weight: bold; margin-bottom: 6px;">📍 POLYLINE${isRaw}</div>
+                    <div><span style="color: #888;">Device:</span> ${props.device || 'Unknown'}</div>
+                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                        <span style="color: #888;">Start Time:</span><br>
+                        <span style="margin-left: 12px; font-size: 12px;">${startTime}</span>
+                    </div>
+                    <div style="margin-top: 6px;">
+                        <span style="color: #888;">End Time:</span><br>
+                        <span style="margin-left: 12px; font-size: 12px;">${endTime}</span>
+                    </div>
+                    <div style="margin-top: 6px;">
+                        <span style="color: #888;">Duration:</span> ${duration} minutes
+                    </div>
+                    ${isRaw ? '<div style="margin-top: 6px; color: #ff8844;">⚠️ OSRM matching failed for this path</div>' : ''}
+                `;
+            }
         }
         
         // Position popup near cursor (offset to avoid blocking)
@@ -964,10 +1091,10 @@ map.on('pointermove', (event) => {
         // Change cursor
         map.getTargetElement().style.cursor = 'pointer';
     } else {
-        // Reset when not hovering over segment
-        if (hoveredSegment) {
-            hoveredSegment.setStyle(undefined);
-            hoveredSegment = null;
+        // Reset when not hovering over any feature
+        if (hoveredFeature) {
+            hoveredFeature.setStyle(undefined);
+            hoveredFeature = null;
         }
         hoverPopup.style.display = 'none';
         map.getTargetElement().style.cursor = '';
@@ -1049,7 +1176,7 @@ function initDevPanel() {
         }, 300);
     });
     
-    // Tab switching
+    // Tab switching (keeping for potential future tabs)
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             const tabName = tab.dataset.tab;
@@ -1062,7 +1189,10 @@ function initDevPanel() {
             document.querySelectorAll('.dev-tab-content').forEach(content => {
                 content.classList.remove('active');
             });
-            document.querySelector(`[data-tab-content="${tabName}"]`).classList.add('active');
+            const targetContent = document.querySelector(`[data-tab-content="${tabName}"]`);
+            if (targetContent) {
+                targetContent.classList.add('active');
+            }
         });
     });
     
@@ -1142,6 +1272,9 @@ function initDevPanel() {
             // Apply the normal style with optional borders
             return createSegmentStyleWithBorders(feature);
         });
+        
+        // Update statistics when visibility changes
+        updateStatistics();
     };
     
     if (togglePolylines) {

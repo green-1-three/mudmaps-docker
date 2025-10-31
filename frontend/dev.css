@@ -249,6 +249,68 @@ body:has(.dev-panel.collapsed) #map {
     font-size: 14px;
 }
 
+/* Statistics Tab Styles */
+.stats-section {
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.stats-section:last-child {
+    border-bottom: none;
+}
+
+.stats-section h4 {
+    margin: 0 0 12px 0;
+    color: #555;
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 14px;
+}
+
+.stat-label {
+    color: #666;
+}
+
+.stat-value {
+    font-weight: 600;
+    color: #333;
+    font-family: 'Courier New', monospace;
+    background: #f0f0f0;
+    padding: 2px 8px;
+    border-radius: 4px;
+    min-width: 60px;
+    text-align: right;
+}
+
+#stat-activation-rate {
+    color: #007bff;
+}
+
+#stat-segments-active {
+    color: #28a745;
+}
+
+#stat-segments-inactive {
+    color: #dc3545;
+}
+
+#stat-last-updated {
+    font-size: 12px;
+    background: none;
+    padding: 0;
+    color: #999;
+}
+
 /* Search Bar - Top Left (positioned within map, avoiding zoom buttons) */
 #search-bar {
     position: fixed;

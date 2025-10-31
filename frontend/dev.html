@@ -67,6 +67,59 @@
                         <span class="toggle-text">Show Segment Borders (debug)</span>
                     </label>
                 </div>
+                
+                <h3 style="margin-top: 30px;">Data Statistics</h3>
+                
+                <div class="stats-section">
+                    <h4>Polylines</h4>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Loaded:</span>
+                        <span class="stat-value" id="stat-polylines-total">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Visible (in time range):</span>
+                        <span class="stat-value" id="stat-polylines-visible">0</span>
+                    </div>
+                </div>
+                
+                <div class="stats-section">
+                    <h4>Segments</h4>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Loaded:</span>
+                        <span class="stat-value" id="stat-segments-total">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Active:</span>
+                        <span class="stat-value" id="stat-segments-active">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Inactive:</span>
+                        <span class="stat-value" id="stat-segments-inactive">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Visible (in time range):</span>
+                        <span class="stat-value" id="stat-segments-visible">0</span>
+                    </div>
+                </div>
+                
+                <div class="stats-section">
+                    <h4>Coverage</h4>
+                    <div class="stat-item">
+                        <span class="stat-label">Activation Rate:</span>
+                        <span class="stat-value" id="stat-activation-rate">0%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Streets Covered:</span>
+                        <span class="stat-value" id="stat-streets-covered">0</span>
+                    </div>
+                </div>
+                
+                <div class="stats-section">
+                    <h4>Last Updated</h4>
+                    <div class="stat-item">
+                        <span class="stat-value" id="stat-last-updated">Never</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
