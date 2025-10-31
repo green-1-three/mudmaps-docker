@@ -1007,12 +1007,17 @@ function switchToDatabaseTab() {
 
 // Map click handler
 map.on('click', (event) => {
-    const features = map.getFeaturesAtPixel(event.pixel);
-    if (features.length > 0) {
-        const feature = features[0];
-        const type = feature.get('type');
+    // Get all features at click point (both segments and polylines)
+    const allFeatures = map.getFeaturesAtPixel(event.pixel);
+    
+    if (allFeatures.length > 0) {
+        // Separate segments and polylines
+        const segments = allFeatures.filter(f => f.get('type') === 'segment');
+        const polylines = allFeatures.filter(f => f.get('type') === 'polyline');
         
-        if (type === 'segment') {
+        // Handle segment
+        if (segments.length > 0) {
+            const feature = segments[0];
             const streetName = feature.get('street_name');
             const lastPlowed = feature.get('last_plowed');
             const deviceId = feature.get('device_id');
@@ -1026,12 +1031,16 @@ map.on('click', (event) => {
             showStatus(info);
             console.log('📍 Segment clicked:', info);
             
-            // Switch to database tab and highlight row
+            // Highlight segment in database tab
             if (window.databaseTab && segmentId) {
                 switchToDatabaseTab();
                 highlightTableRow('road_segments', segmentId);
             }
-        } else if (type === 'polyline') {
+        }
+        
+        // Handle polyline (if also present)
+        if (polylines.length > 0) {
+            const feature = polylines[0];
             const device = feature.get('device');
             const startTime = feature.get('start_time');
             const endTime = feature.get('end_time');
@@ -1041,13 +1050,12 @@ map.on('click', (event) => {
             showStatus(info);
             console.log('📍 Polyline clicked:', info);
             
-            // Switch to database tab and highlight row (only if polyline has an ID)
+            // Highlight polyline in database tab (only if polyline has an ID)
             if (window.databaseTab && polylineId) {
                 switchToDatabaseTab();
                 highlightTableRow('cached_polylines', polylineId);
             } else if (!polylineId) {
                 console.warn('⚠️ Polyline has no database ID - cannot show in database inspector');
-                showStatus('⚠️ This polyline has no database record');
             }
         }
     }
