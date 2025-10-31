@@ -304,10 +304,12 @@ async function loadPolylines() {
                         const feature = new Feature({
                             geometry: new LineString(projectedCoords),
                             device: device.device,
-                            start_time: device.start_time,
-                            end_time: device.end_time,
+                            start_time: batch.start_time,
+                            end_time: batch.end_time,
+                            bearing: batch.bearing,
+                            confidence: batch.confidence,
                             type: 'polyline',
-                            polyline_id: batch.id  // Use database ID
+                            polyline_id: batch.id
                         });
                         
                         polylinesSource.addFeature(feature);
@@ -951,17 +953,21 @@ map.on('pointermove', (event) => {
             const polyline = polylineFeatures[0];
             if (polyline) {
                 const props = polyline.getProperties();
+                const polylineId = props.polyline_id || 'Unknown';
+                const device = props.device || 'Unknown';
+                const bearing = props.bearing ? `${Math.round(props.bearing)}°` : 'Unknown';
+                const confidence = props.confidence ? `${(props.confidence * 100).toFixed(1)}%` : 'Unknown';
                 const startTime = props.start_time ? new Date(props.start_time).toLocaleString() : 'Unknown';
                 const endTime = props.end_time ? new Date(props.end_time).toLocaleString() : 'Unknown';
                 const duration = calculateDuration(props.start_time, props.end_time) || 'Unknown';
                 const isRaw = props.raw ? ' (Unmatched GPS points)' : '';
-                const polylineId = props.polyline_id ? `<div><span style="color: #888;">Polyline ID:</span> ${props.polyline_id}</div>` : '';
                 
                 popupHTML += `
                     <div style="background: rgba(0, 0, 0, 0.9); color: white; padding: 12px; border-radius: 6px; font-size: 12px; font-family: monospace; line-height: 1.4; min-width: 300px;">
-                        <div style="color: #6688ff; font-weight: bold; margin-bottom: 6px;">📍 POLYLINE${isRaw}</div>
-                        <div><span style="color: #888;">Device:</span> ${props.device || 'Unknown'}</div>
-                        ${polylineId}
+                        <div style="color: #6688ff; font-weight: bold; margin-bottom: 6px;">📍 POLYLINE #${polylineId}${isRaw}</div>
+                        <div><span style="color: #888;">Device:</span> ${device}</div>
+                        <div><span style="color: #888;">Bearing:</span> ${bearing}</div>
+                        <div><span style="color: #888;">Confidence:</span> ${confidence}</div>
                         <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
                             <span style="color: #888;">Start Time:</span><br>
                             <span style="margin-left: 12px; font-size: 12px;">${startTime}</span>
@@ -1045,12 +1051,19 @@ map.on('click', (event) => {
         // Handle polyline (if also present)
         if (polylines.length > 0) {
             const feature = polylines[0];
+            const polylineId = feature.get('polyline_id');
             const device = feature.get('device');
+            const bearing = feature.get('bearing');
+            const confidence = feature.get('confidence');
             const startTime = feature.get('start_time');
             const endTime = feature.get('end_time');
-            const polylineId = feature.get('polyline_id');
             
-            const info = `POLYLINE: Device ${device} from ${new Date(startTime).toLocaleString()} to ${new Date(endTime).toLocaleString()}`;
+            const startText = startTime ? new Date(startTime).toLocaleString() : 'Unknown';
+            const endText = endTime ? new Date(endTime).toLocaleString() : 'Unknown';
+            const bearingText = bearing ? `${Math.round(bearing)}°` : 'Unknown';
+            const confidenceText = confidence ? `${(confidence * 100).toFixed(1)}%` : 'Unknown';
+            
+            const info = `POLYLINE #${polylineId || 'Unknown'} - Device: ${device || 'Unknown'}, Bearing: ${bearingText}, Confidence: ${confidenceText}, Start: ${startText}, End: ${endText}`;
             showStatus(info);
             console.log('📍 Polyline clicked:', info);
             
