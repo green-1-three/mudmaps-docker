@@ -12,25 +12,25 @@ let databaseState = {
             offset: 0, 
             data: [], 
             loading: false,
-            columns: ['id', 'device_id', 'longitude', 'latitude', 'recorded_at', 'processed']
+            columns: ['id', 'device_id', 'longitude', 'latitude', 'recorded_at', 'received_at', 'processed', 'batch_id', 'altitude', 'accuracy', 'speed', 'bearing']
         },
         cached_polylines: { 
             offset: 0, 
             data: [], 
             loading: false,
-            columns: ['id', 'device_id', 'start_time', 'end_time', 'point_count', 'created_at']
+            columns: ['id', 'device_id', 'start_time', 'end_time', 'osrm_confidence', 'point_count', 'osrm_duration_ms', 'batch_id', 'created_at', 'last_accessed', 'access_count', 'bearing']
         },
         road_segments: { 
             offset: 0, 
             data: [], 
             loading: false,
-            columns: ['id', 'street_name', 'municipality_id', 'last_plowed_forward', 'last_plowed_reverse', 'plow_count_total']
+            columns: ['id', 'segment_length', 'bearing', 'municipality_id', 'street_name', 'road_classification', 'osm_way_id', 'last_plowed_forward', 'last_plowed_reverse', 'last_plowed_device_id', 'plow_count_today', 'plow_count_total', 'last_reset_date', 'created_at', 'updated_at']
         },
         segment_updates: { 
             offset: 0, 
             data: [], 
             loading: false,
-            columns: ['id', 'segment_id', 'device_id', 'direction', 'timestamp']
+            columns: ['id', 'segment_id', 'polyline_id', 'device_id', 'direction', 'overlap_percentage', 'timestamp']
         }
     },
     activeTable: 'gps_raw_data',
@@ -414,11 +414,20 @@ async function fetchAndInsertRow(tableName, id) {
                 if (segment) {
                     rowsToInsert = [{
                         id: segment.id,
-                        street_name: segment.properties.street_name,
+                        segment_length: segment.properties.segment_length,
+                        bearing: segment.properties.bearing,
                         municipality_id: segment.properties.municipality_id,
+                        street_name: segment.properties.street_name,
+                        road_classification: segment.properties.road_classification,
+                        osm_way_id: segment.properties.osm_way_id,
                         last_plowed_forward: segment.properties.last_plowed_forward,
                         last_plowed_reverse: segment.properties.last_plowed_reverse,
-                        plow_count_total: segment.properties.plow_count_total
+                        last_plowed_device_id: segment.properties.last_plowed_device_id,
+                        plow_count_today: segment.properties.plow_count_today,
+                        plow_count_total: segment.properties.plow_count_total,
+                        last_reset_date: segment.properties.last_reset_date,
+                        created_at: segment.properties.created_at,
+                        updated_at: segment.properties.updated_at
                     }];
                 }
             }

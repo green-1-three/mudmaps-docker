@@ -92,16 +92,20 @@ class SegmentsService {
             SELECT 
                 id,
                 ST_AsGeoJSON(geometry) as geometry,
+                segment_length,
+                bearing,
+                municipality_id,
                 street_name,
                 road_classification,
-                bearing,
+                osm_way_id,
                 last_plowed_forward,
                 last_plowed_reverse,
                 last_plowed_device_id,
                 plow_count_today,
                 plow_count_total,
-                segment_length,
-                municipality_id
+                last_reset_date,
+                created_at,
+                updated_at
             FROM road_segments
             WHERE id = $1
         `, [id]);
@@ -117,19 +121,24 @@ class SegmentsService {
             id: row.id,
             geometry: JSON.parse(row.geometry),
             properties: {
+                segment_length: row.segment_length,
+                bearing: row.bearing,
+                municipality_id: row.municipality_id,
                 street_name: row.street_name,
                 road_classification: row.road_classification,
-                bearing: row.bearing,
+                osm_way_id: row.osm_way_id,
                 last_plowed_forward: row.last_plowed_forward,
                 last_plowed_reverse: row.last_plowed_reverse,
                 last_plowed: row.last_plowed_forward > row.last_plowed_reverse 
                     ? row.last_plowed_forward 
                     : row.last_plowed_reverse,
                 device_id: row.last_plowed_device_id,
+                last_plowed_device_id: row.last_plowed_device_id,
                 plow_count_today: row.plow_count_today,
                 plow_count_total: row.plow_count_total,
-                segment_length: row.segment_length,
-                municipality_id: row.municipality_id
+                last_reset_date: row.last_reset_date,
+                created_at: row.created_at,
+                updated_at: row.updated_at
             }
         };
     }
