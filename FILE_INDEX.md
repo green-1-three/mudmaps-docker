@@ -5,7 +5,8 @@ Quick reference for file locations and purposes. Keep this high-level for token 
 ## Root Directory
 
 ### Documentation
-- `PROJECT_CHECKLIST.md` - Main instructions, priorities, and project roadmap
+- `CLAUDE_INSTRUCTIONS.md` - Instructions for Claude on how to work with this codebase
+- `PROJECT_ROADMAP.md` - Project roadmap, features, todos, and timeline
 - `ARCHITECTURE.md` - System design and technical details
 - `OSM_OPERATIONS.md` - OSM import guide and troubleshooting
 - `NOTES.md` - Technical debt and business notes

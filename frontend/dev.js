@@ -39,6 +39,23 @@ console.log('Using API_BASE:', API_BASE);
 // Discrete time intervals mapping: index -> hours
 const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
 
+// Create SVG pattern for crosshatch (out-of-range segments)
+function createCrosshatchPattern() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'crosshatch-pattern');
+    svg.innerHTML = `
+        <defs>
+            <pattern id="crosshatch" patternUnits="userSpaceOnUse" width="8" height="8">
+                <path d="M0,0 l8,8 M8,0 l-8,8" stroke="#999" stroke-width="1" />
+            </pattern>
+        </defs>
+    `;
+    document.body.appendChild(svg);
+}
+
+// Create crosshatch pattern on load
+createCrosshatchPattern();
+
 // Map setup with OpenStreetMap
 const map = new Map({
     target: 'map',
@@ -151,7 +168,7 @@ function createPolylineStyleWithFilter(feature) {
     });
 }
 
-// Style for segments - gradient colors for activated, red for unactivated, thicker, on top
+// Style for segments - gradient colors for activated, red for unactivated, gray crosshatch for out-of-range
 function createSegmentStyleWithFilter(feature) {
     const isActivated = feature.get('is_activated');
     
@@ -165,13 +182,39 @@ function createSegmentStyleWithFilter(feature) {
         });
     }
     
-    // Activated segments: apply time filter and gradient
+    // Activated segments: check if within time range
     const lastPlowed = feature.get('last_plowed');
     if (lastPlowed) {
         const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
         const plowTime = new Date(lastPlowed).getTime();
+        
+        // Out of range: show in gray with crosshatch pattern
         if (plowTime < cutoffTime) {
-            return null;  // Hide segments older than the time range
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const pixelRatio = window.devicePixelRatio || 1;
+            canvas.width = 8 * pixelRatio;
+            canvas.height = 8 * pixelRatio;
+            context.scale(pixelRatio, pixelRatio);
+            
+            // Draw crosshatch pattern
+            context.strokeStyle = '#999';
+            context.lineWidth = 1;
+            context.beginPath();
+            context.moveTo(0, 0);
+            context.lineTo(8, 8);
+            context.moveTo(8, 0);
+            context.lineTo(0, 8);
+            context.stroke();
+            
+            const pattern = context.createPattern(canvas, 'repeat');
+            
+            return new Style({
+                stroke: new Stroke({
+                    color: pattern,
+                    width: 4
+                })
+            });
         }
     }
     
@@ -783,7 +826,7 @@ function updateTimeDisplay(hours) {
 }
 
 // Hover functionality for segments and polylines
-let hoveredFeature = null;
+let hoveredFeatures = [];
 let hoverPopup = null;
 
 // Create hover popup element
@@ -792,18 +835,10 @@ function createHoverPopup() {
     popup.id = 'feature-hover-popup';
     popup.style.cssText = `
         position: fixed;
-        background: rgba(0, 0, 0, 0.9);
-        color: white;
-        padding: 12px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-family: monospace;
+        display: none;
         pointer-events: none;
         z-index: 10000;
-        max-width: 350px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-        display: none;
-        line-height: 1.4;
+        gap: 10px;
     `;
     document.body.appendChild(popup);
     return popup;
@@ -858,102 +893,112 @@ function createHoverStyle(feature) {
     return null;
 }
 
-// Map hover handler
+// Map hover handler - detects both segments and polylines
 map.on('pointermove', (event) => {
-    // Check if we're over a segment first (higher priority)
-    let features = map.getFeaturesAtPixel(event.pixel, {
+    // Get all features at pixel (both segments and polylines)
+    const segmentFeatures = map.getFeaturesAtPixel(event.pixel, {
         layerFilter: (layer) => layer === segmentsLayer
     });
     
-    let featureType = 'segment';
+    const polylineFeatures = map.getFeaturesAtPixel(event.pixel, {
+        layerFilter: (layer) => layer === polylinesLayer
+    });
     
-    // If no segment, check for polylines
-    if (features.length === 0) {
-        features = map.getFeaturesAtPixel(event.pixel, {
-            layerFilter: (layer) => layer === polylinesLayer
-        });
-        featureType = 'polyline';
-    }
+    const allFeatures = [...segmentFeatures, ...polylineFeatures];
     
-    if (features.length > 0) {
-        const feature = features[0];
+    if (allFeatures.length > 0) {
+        // Check if features have changed
+        const featuresChanged = hoveredFeatures.length !== allFeatures.length || 
+            !hoveredFeatures.every((f, i) => f === allFeatures[i]);
         
-        // Only process if it's a different feature
-        if (hoveredFeature !== feature) {
-            // Reset previous hovered feature
-            if (hoveredFeature) {
-                hoveredFeature.setStyle(undefined); // Reset to default style
-            }
+        if (featuresChanged) {
+            // Reset previous hovered features
+            hoveredFeatures.forEach(f => f.setStyle(undefined));
             
-            // Set new hovered feature
-            hoveredFeature = feature;
-            hoveredFeature.setStyle(createHoverStyle(feature));
+            // Set new hovered features
+            hoveredFeatures = allFeatures;
+            hoveredFeatures.forEach(f => f.setStyle(createHoverStyle(f)));
             
-            // Update popup content based on feature type
-            const props = feature.getProperties();
+            // Build popup content with boxes side by side
+            let popupHTML = '<div style="display: flex; gap: 10px;">';
             
-            if (featureType === 'segment') {
+            // Segment box (left)
+            const segment = segmentFeatures[0];
+            if (segment) {
+                const props = segment.getProperties();
                 const lastPlowed = props.last_plowed ? new Date(props.last_plowed).toLocaleString() : 'Never';
                 const lastPlowedFwd = props.last_plowed_forward ? new Date(props.last_plowed_forward).toLocaleString() : 'Never';
                 const lastPlowedRev = props.last_plowed_reverse ? new Date(props.last_plowed_reverse).toLocaleString() : 'Never';
                 
-                hoverPopup.innerHTML = `
-                    <div style="color: #00ff88; font-weight: bold; margin-bottom: 6px;">🛣️ SEGMENT #${props.segment_id}</div>
-                    <div><span style="color: #888;">Street:</span> ${props.street_name || 'Unknown'}</div>
-                    <div><span style="color: #888;">Classification:</span> ${props.road_classification || 'Unknown'}</div>
-                    <div><span style="color: #888;">Bearing:</span> ${props.bearing !== null && props.bearing !== undefined ? props.bearing + '°' : 'Unknown'}</div>
-                    <div><span style="color: #888;">Length:</span> ${props.segment_length ? props.segment_length.toFixed(1) + 'm' : 'Unknown'}</div>
-                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
-                        <span style="color: #888;">Status:</span> ${props.is_activated ? '<span style="color: #00ff00;">✓ Activated</span>' : '<span style="color: #ff4444;">✗ Not Activated</span>'}
+                popupHTML += `
+                    <div style="background: rgba(0, 0, 0, 0.9); color: white; padding: 12px; border-radius: 6px; font-size: 12px; font-family: monospace; line-height: 1.4; min-width: 300px;">
+                        <div style="color: #00ff88; font-weight: bold; margin-bottom: 6px;">🛣️ SEGMENT #${props.segment_id}</div>
+                        <div><span style="color: #888;">Street:</span> ${props.street_name || 'Unknown'}</div>
+                        <div><span style="color: #888;">Classification:</span> ${props.road_classification || 'Unknown'}</div>
+                        <div><span style="color: #888;">Bearing:</span> ${props.bearing !== null && props.bearing !== undefined ? props.bearing + '°' : 'Unknown'}</div>
+                        <div><span style="color: #888;">Length:</span> ${props.segment_length ? props.segment_length.toFixed(1) + 'm' : 'Unknown'}</div>
+                        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                            <span style="color: #888;">Status:</span> ${props.is_activated ? '<span style="color: #00ff00;">✓ Activated</span>' : '<span style="color: #ff4444;">✗ Not Activated</span>'}
+                        </div>
+                        <div><span style="color: #888;">Last Plowed:</span> ${lastPlowed}</div>
+                        <div style="font-size: 10px; color: #666; margin-left: 12px;">Forward: ${lastPlowedFwd}</div>
+                        <div style="font-size: 10px; color: #666; margin-left: 12px;">Reverse: ${lastPlowedRev}</div>
+                        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                            <span style="color: #888;">Device ID:</span> ${props.device_id || 'Unknown'}
+                        </div>
+                        <div><span style="color: #888;">Plow Count Today:</span> ${props.plow_count_today || 0}</div>
+                        <div><span style="color: #888;">Plow Count Total:</span> ${props.plow_count_total || 0}</div>
                     </div>
-                    <div><span style="color: #888;">Last Plowed:</span> ${lastPlowed}</div>
-                    <div style="font-size: 10px; color: #666; margin-left: 12px;">Forward: ${lastPlowedFwd}</div>
-                    <div style="font-size: 10px; color: #666; margin-left: 12px;">Reverse: ${lastPlowedRev}</div>
-                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
-                        <span style="color: #888;">Device ID:</span> ${props.device_id || 'Unknown'}
-                    </div>
-                    <div><span style="color: #888;">Plow Count Today:</span> ${props.plow_count_today || 0}</div>
-                    <div><span style="color: #888;">Plow Count Total:</span> ${props.plow_count_total || 0}</div>
                 `;
-            } else if (featureType === 'polyline') {
+            }
+            
+            // Polyline box (right)
+            const polyline = polylineFeatures[0];
+            if (polyline) {
+                const props = polyline.getProperties();
                 const startTime = props.start_time ? new Date(props.start_time).toLocaleString() : 'Unknown';
                 const endTime = props.end_time ? new Date(props.end_time).toLocaleString() : 'Unknown';
                 const duration = calculateDuration(props.start_time, props.end_time) || 'Unknown';
                 const isRaw = props.raw ? ' (Unmatched GPS points)' : '';
                 const polylineId = props.polyline_id ? `<div><span style="color: #888;">Polyline ID:</span> ${props.polyline_id}</div>` : '';
                 
-                hoverPopup.innerHTML = `
-                    <div style="color: #6688ff; font-weight: bold; margin-bottom: 6px;">📍 POLYLINE${isRaw}</div>
-                    <div><span style="color: #888;">Device:</span> ${props.device || 'Unknown'}</div>
-                    ${polylineId}
-                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
-                        <span style="color: #888;">Start Time:</span><br>
-                        <span style="margin-left: 12px; font-size: 12px;">${startTime}</span>
+                popupHTML += `
+                    <div style="background: rgba(0, 0, 0, 0.9); color: white; padding: 12px; border-radius: 6px; font-size: 12px; font-family: monospace; line-height: 1.4; min-width: 300px;">
+                        <div style="color: #6688ff; font-weight: bold; margin-bottom: 6px;">📍 POLYLINE${isRaw}</div>
+                        <div><span style="color: #888;">Device:</span> ${props.device || 'Unknown'}</div>
+                        ${polylineId}
+                        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                            <span style="color: #888;">Start Time:</span><br>
+                            <span style="margin-left: 12px; font-size: 12px;">${startTime}</span>
+                        </div>
+                        <div style="margin-top: 6px;">
+                            <span style="color: #888;">End Time:</span><br>
+                            <span style="margin-left: 12px; font-size: 12px;">${endTime}</span>
+                        </div>
+                        <div style="margin-top: 6px;">
+                            <span style="color: #888;">Duration:</span> ${duration} minutes
+                        </div>
+                        ${isRaw ? '<div style="margin-top: 6px; color: #ff8844;">⚠️ OSRM matching failed for this path</div>' : ''}
                     </div>
-                    <div style="margin-top: 6px;">
-                        <span style="color: #888;">End Time:</span><br>
-                        <span style="margin-left: 12px; font-size: 12px;">${endTime}</span>
-                    </div>
-                    <div style="margin-top: 6px;">
-                        <span style="color: #888;">Duration:</span> ${duration} minutes
-                    </div>
-                    ${isRaw ? '<div style="margin-top: 6px; color: #ff8844;">⚠️ OSRM matching failed for this path</div>' : ''}
                 `;
             }
+            
+            popupHTML += '</div>';
+            hoverPopup.innerHTML = popupHTML;
         }
         
         // Position popup near cursor (offset to avoid blocking)
         hoverPopup.style.left = (event.pixel[0] + 20) + 'px';
         hoverPopup.style.top = (event.pixel[1] + 20) + 'px';
-        hoverPopup.style.display = 'block';
+        hoverPopup.style.display = 'flex';
         
         // Change cursor
         map.getTargetElement().style.cursor = 'pointer';
     } else {
         // Reset when not hovering over any feature
-        if (hoveredFeature) {
-            hoveredFeature.setStyle(undefined);
-            hoveredFeature = null;
+        if (hoveredFeatures.length > 0) {
+            hoveredFeatures.forEach(f => f.setStyle(undefined));
+            hoveredFeatures = [];
         }
         hoverPopup.style.display = 'none';
         map.getTargetElement().style.cursor = '';
