@@ -9,9 +9,11 @@ const config = require('./config/config');
 const DatabaseService = require('./services/database.service');
 const PolylinesService = require('./services/polylines.service');
 const SegmentsService = require('./services/segments.service');
+const DatabaseInspectionService = require('./services/database-inspection.service');
 const createPolylinesRoutes = require('./routes/polylines.routes');
 const createSegmentsRoutes = require('./routes/segments.routes');
 const createHealthRoutes = require('./routes/health.routes');
+const createDatabaseRoutes = require('./routes/database.routes');
 const errorHandler = require('./middleware/error-handler');
 
 // Create Express app
@@ -29,11 +31,13 @@ function createApp() {
     const database = new DatabaseService(config.postgres);
     const polylinesService = new PolylinesService(database);
     const segmentsService = new SegmentsService(database);
+    const databaseInspectionService = new DatabaseInspectionService(database);
 
     // Mount routes
     app.use(createPolylinesRoutes(polylinesService));
     app.use(createSegmentsRoutes(segmentsService));
     app.use(createHealthRoutes(database));
+    app.use(createDatabaseRoutes(databaseInspectionService));
 
     // Error handler (must be last)
     app.use(errorHandler);

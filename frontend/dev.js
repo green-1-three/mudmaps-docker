@@ -9,6 +9,21 @@ import { Vector as VectorLayer } from 'ol/layer';
 import { Vector as VectorSource } from 'ol/source';
 import { Style, Icon, Stroke, Fill, Text } from 'ol/style';
 
+// Import modules
+import { 
+    decodePolyline, 
+    fetchJSON, 
+    interpolateColor, 
+    getColorByAge,
+    formatTimeLabel,
+    showStatus,
+    formatTimestamp,
+    calculateDuration
+} from './dev-common.js';
+import { initStatistics, updateStatistics } from './dev-stats.js';
+import { initUIControls, setStyleCreators } from './dev-ui-controls.js';
+import { initDatabaseTab, highlightTableRow } from './dev-database.js';
+
 // Configuration
 let API_BASE = import.meta.env.VITE_API_BASE;
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -24,52 +39,7 @@ console.log('Using API_BASE:', API_BASE);
 // Discrete time intervals mapping: index -> hours
 const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
 
-// Polyline decoder with caching
-const polylineCache = {};
-
-function decodePolyline(str, precision = 5) {
-    if (polylineCache[str]) {
-        return polylineCache[str];
-    }
-
-    let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null;
-    const factor = Math.pow(10, precision);
-
-    while (index < str.length) {
-        byte = null; shift = 0; result = 0;
-        do {
-            byte = str.charCodeAt(index++) - 63;
-            result |= (byte & 0x1f) << shift;
-            shift += 5;
-        } while (byte >= 0x20);
-        lat += ((result & 1) ? ~(result >> 1) : (result >> 1));
-
-        byte = null; shift = 0; result = 0;
-        do {
-            byte = str.charCodeAt(index++) - 63;
-            result |= (byte & 0x1f) << shift;
-            shift += 5;
-        } while (byte >= 0x20);
-        lng += ((result & 1) ? ~(result >> 1) : (result >> 1));
-
-        coordinates.push([lng / factor, lat / factor]);
-    }
-
-    polylineCache[str] = coordinates;
-    return coordinates;
-}
-
-async function fetchJSON(url) {
-    const r = await fetch(url);
-    const ct = (r.headers.get('content-type') || '').toLowerCase();
-    if (!r.ok || !ct.includes('application/json')) {
-        const head = await r.text().then(t => t.slice(0, 120)).catch(() => '');
-        throw new Error(`Non-JSON from ${url} (${r.status}): ${head}`);
-    }
-    return r.json();
-}
-
-// Map setup with OpenStreetMap (clean, readable basemap similar to Google Maps)
+// Map setup with OpenStreetMap
 const map = new Map({
     target: 'map',
     layers: [new TileLayer({ 
@@ -91,6 +61,9 @@ const searchResultSource = new VectorSource();
 // Layer references for toggling
 let polylinesLayer;
 let segmentsLayer;
+
+// Global variable to store current time range
+let currentTimeHours = 24;
 
 // Add layers to map (order matters for display)
 // Boundary at bottom (zIndex: 0.1)
@@ -159,57 +132,6 @@ map.addLayer(new VectorLayer({
     }
 }));
 
-// Helper function to interpolate between two colors
-function interpolateColor(color1, color2, factor) {
-    const r1 = parseInt(color1.slice(1, 3), 16);
-    const g1 = parseInt(color1.slice(3, 5), 16);
-    const b1 = parseInt(color1.slice(5, 7), 16);
-    
-    const r2 = parseInt(color2.slice(1, 3), 16);
-    const g2 = parseInt(color2.slice(3, 5), 16);
-    const b2 = parseInt(color2.slice(5, 7), 16);
-    
-    const r = Math.round(r1 + (r2 - r1) * factor);
-    const g = Math.round(g1 + (g2 - g1) * factor);
-    const b = Math.round(b1 + (b2 - b1) * factor);
-    
-    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-}
-
-// Function to get color based on time recency with smooth gradient
-function getColorByAge(timestamp, maxHours = currentTimeHours) {
-    const now = Date.now();
-    const recordTime = new Date(timestamp).getTime();
-    const ageMinutes = (now - recordTime) / (1000 * 60);
-    const maxMinutes = maxHours * 60;
-    
-    if (ageMinutes >= maxMinutes) return '#808080';
-    
-    const position = ageMinutes / maxMinutes;
-    
-    const stops = [
-        { position: 0.00, color: '#00ff00' },
-        { position: 0.50, color: '#ffff00' },
-        { position: 0.75, color: '#ff8800' },
-        { position: 1.00, color: '#808080' }
-    ];
-    
-    for (let i = 0; i < stops.length - 1; i++) {
-        if (position >= stops[i].position && position <= stops[i + 1].position) {
-            const rangeDuration = stops[i + 1].position - stops[i].position;
-            const positionInRange = position - stops[i].position;
-            const factor = positionInRange / rangeDuration;
-            
-            return interpolateColor(stops[i].color, stops[i + 1].color, factor);
-        }
-    }
-    
-    return '#00ff00';
-}
-
-// Global variable to store current time range
-let currentTimeHours = 24;
-
 // Style for polylines - blue, thin, behind segments
 function createPolylineStyleWithFilter(feature) {
     const endTime = feature.get('end_time');
@@ -253,7 +175,7 @@ function createSegmentStyleWithFilter(feature) {
         }
     }
     
-    const color = lastPlowed ? getColorByAge(lastPlowed) : '#0066cc';
+    const color = lastPlowed ? getColorByAge(lastPlowed, currentTimeHours) : '#0066cc';
     
     return new Style({
         stroke: new Stroke({
@@ -263,59 +185,55 @@ function createSegmentStyleWithFilter(feature) {
     });
 }
 
-// Function to update statistics display
-function updateStatistics() {
-    // Polyline statistics
-    const totalPolylines = polylinesSource.getFeatures().length;
-    const visiblePolylines = polylinesSource.getFeatures().filter(f => {
-        const endTime = f.get('end_time');
-        if (!endTime) return false;
-        const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-        return new Date(endTime).getTime() >= cutoffTime;
-    }).length;
+// Helper function to create polyline style with optional borders
+function createPolylineStyleWithBorders(feature) {
+    const baseStyle = createPolylineStyleWithFilter(feature);
+    const uiState = window.uiControls?.getState();
     
-    // Segment statistics
-    const allSegments = segmentsSource.getFeatures();
-    const totalSegments = allSegments.length;
-    const activeSegments = allSegments.filter(f => f.get('is_activated')).length;
-    const inactiveSegments = totalSegments - activeSegments;
-    const visibleSegments = allSegments.filter(f => {
-        const lastPlowed = f.get('last_plowed');
-        if (!lastPlowed) return false;
-        const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-        return new Date(lastPlowed).getTime() >= cutoffTime;
-    }).length;
+    if (!baseStyle || !uiState?.showPolylineBorders) {
+        return baseStyle;
+    }
     
-    // Coverage statistics
-    const activationRate = totalSegments > 0 
-        ? ((activeSegments / totalSegments) * 100).toFixed(1) 
-        : '0.0';
+    // Add a white border around polylines when borders are enabled
+    return [
+        // White border (drawn first, underneath)
+        new Style({
+            stroke: new Stroke({
+                color: '#ffffff',
+                width: 4
+            })
+        }),
+        // Original blue stroke on top
+        baseStyle
+    ];
+}
+
+// Helper function to create segment style with optional borders
+function createSegmentStyleWithBorders(feature) {
+    const baseStyle = createSegmentStyleWithFilter(feature);
+    const uiState = window.uiControls?.getState();
     
-    // Count unique streets covered
-    const streetsSet = new Set();
-    allSegments.forEach(f => {
-        const street = f.get('street_name');
-        if (street && f.get('is_activated')) {
-            streetsSet.add(street);
-        }
-    });
-    const streetsCovered = streetsSet.size;
+    if (!baseStyle || !uiState?.showSegmentBorders) {
+        return baseStyle;
+    }
     
-    // Update DOM elements
-    const updateElement = (id, value) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = value;
-    };
+    // Add a white border around segments when borders are enabled
+    const isActivated = feature.get('is_activated');
+    const baseColor = isActivated 
+        ? (feature.get('last_plowed') ? getColorByAge(feature.get('last_plowed'), currentTimeHours) : '#0066cc')
+        : '#ff0000';
     
-    updateElement('stat-polylines-total', totalPolylines);
-    updateElement('stat-polylines-visible', visiblePolylines);
-    updateElement('stat-segments-total', totalSegments);
-    updateElement('stat-segments-active', activeSegments);
-    updateElement('stat-segments-inactive', inactiveSegments);
-    updateElement('stat-segments-visible', visibleSegments);
-    updateElement('stat-activation-rate', `${activationRate}%`);
-    updateElement('stat-streets-covered', streetsCovered);
-    updateElement('stat-last-updated', new Date().toLocaleTimeString());
+    return [
+        // White border (drawn first, underneath)
+        new Style({
+            stroke: new Stroke({
+                color: '#ffffff',
+                width: isActivated ? 6 : 5
+            })
+        }),
+        // Original colored stroke on top
+        baseStyle
+    ];
 }
 
 // Load polylines from backend
@@ -371,7 +289,8 @@ async function loadPolylines() {
                             device: device.device,
                             start_time: device.start_time,
                             end_time: device.end_time,
-                            type: 'polyline'
+                            type: 'polyline',
+                            polyline_id: batch.id
                         });
                         
                         polylinesSource.addFeature(feature);
@@ -556,7 +475,7 @@ async function loadSegments() {
     }
 }
 
-// Load both polylines and segments
+// Load all data
 async function loadAllData() {
     try {
         showStatus('Loading map data...');
@@ -827,18 +746,6 @@ function showSearchResult(result) {
     console.log(`📍 Searched location: ${result.place_name}`);
 }
 
-function formatTimeLabel(minutes) {
-    if (minutes < 60) {
-        return `${minutes} min`;
-    } else if (minutes < 1440) {
-        const hours = Math.round(minutes / 60);
-        return hours === 1 ? '1 hour' : `${hours} hours`;
-    } else {
-        const days = Math.round(minutes / 1440);
-        return days === 1 ? '1 day' : `${days} days`;
-    }
-}
-
 function updateGradientLabels(hours) {
     const leftLabel = document.getElementById('gradientLeft');
     const centerLabel = document.getElementById('gradientCenter');
@@ -875,10 +782,6 @@ function updateTimeDisplay(hours) {
     updateGradientLabels(hours);
 }
 
-function showStatus(message) {
-    console.log(message);
-}
-
 // User geolocation
 if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition((pos) => {
@@ -891,37 +794,6 @@ if ('geolocation' in navigator) {
         console.warn('Geolocation error:', error.message);
     }, { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 });
 }
-
-// Map click handler
-map.on('click', (event) => {
-    const features = map.getFeaturesAtPixel(event.pixel);
-    if (features.length > 0) {
-        const feature = features[0];
-        const type = feature.get('type');
-        
-        if (type === 'segment') {
-            const streetName = feature.get('street_name');
-            const lastPlowed = feature.get('last_plowed');
-            const deviceId = feature.get('device_id');
-            const plowCount = feature.get('plow_count_total');
-            
-            const plowedText = lastPlowed 
-                ? new Date(lastPlowed).toLocaleString() 
-                : 'Unknown';
-            const info = `SEGMENT: ${streetName} - Last plowed: ${plowedText} (Device: ${deviceId || 'Unknown'}, Total: ${plowCount || 0}x)`;
-            showStatus(info);
-            console.log('📍 Segment clicked:', info);
-        } else if (type === 'polyline') {
-            const device = feature.get('device');
-            const startTime = feature.get('start_time');
-            const endTime = feature.get('end_time');
-            
-            const info = `POLYLINE: Device ${device} from ${new Date(startTime).toLocaleString()} to ${new Date(endTime).toLocaleString()}`;
-            showStatus(info);
-            console.log('📍 Polyline clicked:', info);
-        }
-    }
-});
 
 // Hover functionality for segments and polylines
 let hoveredFeature = null;
@@ -959,7 +831,7 @@ function createHoverStyle(feature) {
     if (featureType === 'segment') {
         const isActivated = feature.get('is_activated');
         const lastPlowed = feature.get('last_plowed');
-        const color = isActivated && lastPlowed ? getColorByAge(lastPlowed) : (isActivated ? '#0066cc' : '#ff0000');
+        const color = isActivated && lastPlowed ? getColorByAge(lastPlowed, currentTimeHours) : (isActivated ? '#0066cc' : '#ff0000');
         
         return [
             // Glow effect (underneath)
@@ -1059,14 +931,14 @@ map.on('pointermove', (event) => {
             } else if (featureType === 'polyline') {
                 const startTime = props.start_time ? new Date(props.start_time).toLocaleString() : 'Unknown';
                 const endTime = props.end_time ? new Date(props.end_time).toLocaleString() : 'Unknown';
-                const duration = props.start_time && props.end_time 
-                    ? ((new Date(props.end_time) - new Date(props.start_time)) / 60000).toFixed(1) 
-                    : 'Unknown';
+                const duration = calculateDuration(props.start_time, props.end_time) || 'Unknown';
                 const isRaw = props.raw ? ' (Unmatched GPS points)' : '';
+                const polylineId = props.polyline_id ? `<div><span style="color: #888;">Polyline ID:</span> ${props.polyline_id}</div>` : '';
                 
                 hoverPopup.innerHTML = `
                     <div style="color: #6688ff; font-weight: bold; margin-bottom: 6px;">📍 POLYLINE${isRaw}</div>
                     <div><span style="color: #888;">Device:</span> ${props.device || 'Unknown'}</div>
+                    ${polylineId}
                     <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
                         <span style="color: #888;">Start Time:</span><br>
                         <span style="margin-left: 12px; font-size: 12px;">${startTime}</span>
@@ -1101,11 +973,48 @@ map.on('pointermove', (event) => {
     }
 });
 
-// Initialize
-console.log('🗺️ Initializing MudMaps (POLYLINES + SEGMENTS)...');
-createUI();
-updateGradientLabels(currentTimeHours);
-loadAllData();
+// Map click handler
+map.on('click', (event) => {
+    const features = map.getFeaturesAtPixel(event.pixel);
+    if (features.length > 0) {
+        const feature = features[0];
+        const type = feature.get('type');
+        
+        if (type === 'segment') {
+            const streetName = feature.get('street_name');
+            const lastPlowed = feature.get('last_plowed');
+            const deviceId = feature.get('device_id');
+            const plowCount = feature.get('plow_count_total');
+            const segmentId = feature.get('segment_id');
+            
+            const plowedText = lastPlowed 
+                ? new Date(lastPlowed).toLocaleString() 
+                : 'Unknown';
+            const info = `SEGMENT: ${streetName} - Last plowed: ${plowedText} (Device: ${deviceId || 'Unknown'}, Total: ${plowCount || 0}x)`;
+            showStatus(info);
+            console.log('📍 Segment clicked:', info);
+            
+            // Highlight in database view if available
+            if (window.databaseTab) {
+                highlightTableRow('road_segments', segmentId);
+            }
+        } else if (type === 'polyline') {
+            const device = feature.get('device');
+            const startTime = feature.get('start_time');
+            const endTime = feature.get('end_time');
+            const polylineId = feature.get('polyline_id');
+            
+            const info = `POLYLINE: Device ${device} from ${new Date(startTime).toLocaleString()} to ${new Date(endTime).toLocaleString()}`;
+            showStatus(info);
+            console.log('📍 Polyline clicked:', info);
+            
+            // Highlight in database view if available
+            if (window.databaseTab && polylineId) {
+                highlightTableRow('cached_polylines', polylineId);
+            }
+        }
+    }
+});
 
 // Developer Panel Functionality
 function initDevPanel() {
@@ -1176,7 +1085,7 @@ function initDevPanel() {
         }, 300);
     });
     
-    // Tab switching (keeping for potential future tabs)
+    // Tab switching
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             const tabName = tab.dataset.tab;
@@ -1195,116 +1104,113 @@ function initDevPanel() {
             }
         });
     });
-    
-    // Layer visibility toggles
-    const togglePolylines = document.getElementById('toggle-polylines');
-    const togglePolylineBorders = document.getElementById('toggle-polyline-borders');
-    const toggleActiveSegments = document.getElementById('toggle-active-segments');
-    const toggleInactiveSegments = document.getElementById('toggle-inactive-segments');
-    const toggleSegmentBorders = document.getElementById('toggle-segment-borders');
-    
-    // Global state for borders
-    let showPolylineBorders = false;
-    let showSegmentBorders = false;
-    
-    // Helper function to create polyline style with optional borders
-    function createPolylineStyleWithBorders(feature) {
-        const baseStyle = createPolylineStyleWithFilter(feature);
-        
-        if (!baseStyle || !showPolylineBorders) {
-            return baseStyle;
-        }
-        
-        // Add a white border around polylines when borders are enabled
-        return [
-            // White border (drawn first, underneath)
-            new Style({
-                stroke: new Stroke({
-                    color: '#ffffff',
-                    width: 4
-                })
-            }),
-            // Original blue stroke on top
-            baseStyle
-        ];
-    }
-    
-    // Helper function to create segment style with optional borders
-    function createSegmentStyleWithBorders(feature) {
-        const baseStyle = createSegmentStyleWithFilter(feature);
-        
-        if (!baseStyle || !showSegmentBorders) {
-            return baseStyle;
-        }
-        
-        // Add a white border around segments when borders are enabled
-        const isActivated = feature.get('is_activated');
-        const baseColor = isActivated 
-            ? (feature.get('last_plowed') ? getColorByAge(feature.get('last_plowed')) : '#0066cc')
-            : '#ff0000';
-        
-        return [
-            // White border (drawn first, underneath)
-            new Style({
-                stroke: new Stroke({
-                    color: '#ffffff',
-                    width: isActivated ? 6 : 5
-                })
-            }),
-            // Original colored stroke on top
-            baseStyle
-        ];
-    }
-    
-    // Update segment visibility function (needs to be accessible to all toggles)
-    const updateSegmentVisibility = () => {
-        const showActive = toggleActiveSegments ? toggleActiveSegments.checked : true;
-        const showInactive = toggleInactiveSegments ? toggleInactiveSegments.checked : true;
-        
-        // Update the style function to filter segments
-        segmentsLayer.setStyle((feature) => {
-            const isActivated = feature.get('is_activated');
-            
-            // Filter based on toggle states
-            if (isActivated && !showActive) return null;
-            if (!isActivated && !showInactive) return null;
-            
-            // Apply the normal style with optional borders
-            return createSegmentStyleWithBorders(feature);
-        });
-        
-        // Update statistics when visibility changes
-        updateStatistics();
-    };
-    
-    if (togglePolylines) {
-        togglePolylines.addEventListener('change', (e) => {
-            polylinesLayer.setVisible(e.target.checked);
-        });
-    }
-    
-    if (togglePolylineBorders) {
-        togglePolylineBorders.addEventListener('change', (e) => {
-            showPolylineBorders = e.target.checked;
-            // Update polyline layer style
-            polylinesLayer.setStyle(createPolylineStyleWithBorders);
-        });
-    }
-    
-    if (toggleSegmentBorders) {
-        toggleSegmentBorders.addEventListener('change', (e) => {
-            showSegmentBorders = e.target.checked;
-            updateSegmentVisibility();
-        });
-    }
-    
-    if (toggleActiveSegments) {
-        toggleActiveSegments.addEventListener('change', updateSegmentVisibility);
-    }
-    
-    if (toggleInactiveSegments) {
-        toggleInactiveSegments.addEventListener('change', updateSegmentVisibility);
-    }
 }
 
+// Function to highlight map features from database clicks
+window.highlightMapFeature = function(tableName, rowData) {
+    if (tableName === 'road_segments') {
+        // Find and highlight the segment on the map
+        const features = segmentsSource.getFeatures();
+        const segment = features.find(f => f.get('segment_id') === rowData.id);
+        if (segment) {
+            // Flash the segment
+            const originalStyle = segment.getStyle();
+            segment.setStyle(createHoverStyle(segment));
+            setTimeout(() => segment.setStyle(originalStyle), 1000);
+            
+            // Pan to segment
+            const extent = segment.getGeometry().getExtent();
+            map.getView().fit(extent, {
+                padding: [100, 100, 100, 100],
+                maxZoom: 18,
+                duration: 500
+            });
+        }
+    } else if (tableName === 'cached_polylines') {
+        // Find and highlight the polyline on the map
+        const features = polylinesSource.getFeatures();
+        const polyline = features.find(f => f.get('polyline_id') === rowData.id);
+        if (polyline) {
+            // Flash the polyline
+            const originalStyle = polyline.getStyle();
+            polyline.setStyle(createHoverStyle(polyline));
+            setTimeout(() => polyline.setStyle(originalStyle), 1000);
+            
+            // Pan to polyline
+            const extent = polyline.getGeometry().getExtent();
+            map.getView().fit(extent, {
+                padding: [100, 100, 100, 100],
+                maxZoom: 16,
+                duration: 500
+            });
+        }
+    } else if (tableName === 'gps_raw_data') {
+        // Create a temporary marker for the GPS point
+        const tempFeature = new Feature({
+            geometry: new Point(fromLonLat([rowData.longitude, rowData.latitude]))
+        });
+        
+        // Add temporary marker
+        searchResultSource.clear();
+        searchResultSource.addFeature(tempFeature);
+        
+        // Pan to point
+        map.getView().animate({
+            center: fromLonLat([rowData.longitude, rowData.latitude]),
+            zoom: 18,
+            duration: 500
+        });
+        
+        // Remove marker after 3 seconds
+        setTimeout(() => searchResultSource.clear(), 3000);
+    }
+};
+
+// Initialize modules
+console.log('🗺️ Initializing MudMaps Developer Mode...');
+createUI();
+updateGradientLabels(currentTimeHours);
 initDevPanel();
+
+// Initialize statistics module
+const statsModule = initStatistics(
+    { polylinesSource, segmentsSource },
+    currentTimeHours
+);
+
+// Initialize UI controls module with style creators
+setStyleCreators(createPolylineStyleWithBorders, createSegmentStyleWithBorders);
+const uiControls = initUIControls(
+    { polylinesLayer, segmentsLayer },
+    updateStatistics
+);
+window.uiControls = uiControls;
+
+// Initialize database tab
+const databaseTab = initDatabaseTab(API_BASE, { 
+    polylinesSource, 
+    segmentsSource, 
+    boundarySource 
+});
+window.databaseTab = databaseTab;
+
+// Load initial data
+loadAllData();
+
+// Export for debugging
+window.devState = {
+    map,
+    sources: { 
+        polylinesSource, 
+        segmentsSource, 
+        boundarySource,
+        userLocationSource,
+        searchResultSource
+    },
+    layers: { polylinesLayer, segmentsLayer },
+    modules: { statsModule, uiControls, databaseTab },
+    currentTimeHours: () => currentTimeHours,
+    reload: loadAllData
+};
+
+console.log('✅ Dev environment ready! Access state via window.devState');
