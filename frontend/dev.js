@@ -620,7 +620,9 @@ function setupTimeSlider() {
         segmentsSource.changed();
         
         // Update statistics when time range changes
-        updateStatistics();
+        if (window.updateStatsWithTimeRange) {
+            window.updateStatsWithTimeRange(hours);
+        }
     });
 
     slider.addEventListener('change', (e) => {
@@ -648,7 +650,9 @@ function setupTimeSlider() {
         showStatus(`Showing ${visiblePolylines} polylines, ${visibleSegments} segments`);
         
         // Update statistics after time range change
-        updateStatistics();
+        if (window.updateStatsWithTimeRange) {
+            window.updateStatsWithTimeRange(currentTimeHours);
+        }
     });
 }
 
@@ -910,8 +914,8 @@ map.on('pointermove', (event) => {
             hoveredFeatures = allFeatures;
             hoveredFeatures.forEach(f => f.setStyle(createHoverStyle(f)));
             
-            // Build popup content with boxes side by side
-            let popupHTML = '<div style="display: flex; gap: 10px;">';
+            // Build popup content with boxes stacked vertically
+            let popupHTML = '<div style="display: flex; flex-direction: column; gap: 10px;">';
             
             // Segment box (left)
             const segment = segmentFeatures[0];
@@ -1222,6 +1226,11 @@ const statsModule = initStatistics(
     { polylinesSource, segmentsSource },
     currentTimeHours
 );
+
+// Make stats update function globally accessible
+window.updateStatsWithTimeRange = (hours) => {
+    statsModule.setTimeRange(hours);
+};
 
 // Initialize UI controls module with style creators
 setStyleCreators(createPolylineStyleWithBorders, createSegmentStyleWithBorders);
