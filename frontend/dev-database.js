@@ -346,24 +346,27 @@ function updateTableStats(rowCount) {
  * Called from map click events
  */
 export async function highlightTableRow(tableName, id) {
+    console.log(`🎯 Highlighting ${tableName} row with ID: ${id}`);
+    
     // Switch to the correct table if needed
     const tableSelect = document.getElementById('db-table-select');
     if (tableSelect && tableSelect.value !== tableName) {
+        console.log(`  🔄 Switching from ${tableSelect.value} to ${tableName}`);
         tableSelect.value = tableName;
         databaseState.activeTable = tableName;
-        resetTableState(tableName);
-        await loadTableData(tableName);
     }
     
-    // Check if row exists in current data
+    // Check if row exists in current data (before resetting)
     const table = databaseState.tables[tableName];
     const existingRow = table.data.find(row => row.id === id);
     
     if (existingRow) {
+        console.log(`  ✅ Row ${id} already exists in table data`);
         // Row exists, just scroll to it
         scrollToRow(tableName, id);
     } else {
-        // Row doesn't exist, fetch it from backend
+        console.log(`  🔍 Row ${id} not in current data, fetching from backend`);
+        // Row doesn't exist, fetch it from backend and insert it
         await fetchAndInsertRow(tableName, id);
     }
 }
@@ -380,10 +383,14 @@ async function fetchAndInsertRow(tableName, id) {
         // Fetch from appropriate endpoint
         if (tableName === 'cached_polylines') {
             const url = `${databaseState.API_BASE}/api/polylines/${id}`;
+            console.log(`  🌍 Fetching from: ${url}`);
             rowData = await fetchJSON(url);
+            console.log(`  📦 Received polyline data:`, rowData);
         } else if (tableName === 'road_segments') {
             const url = `${databaseState.API_BASE}/api/segments/${id}`;
+            console.log(`  🌍 Fetching from: ${url}`);
             const segment = await fetchJSON(url);
+            console.log(`  📦 Received segment data:`, segment);
             // Transform segment data to match table format
             rowData = {
                 id: segment.id,
@@ -393,6 +400,7 @@ async function fetchAndInsertRow(tableName, id) {
                 last_plowed_reverse: segment.properties.last_plowed_reverse,
                 plow_count_total: segment.properties.plow_count_total
             };
+            console.log(`  🔄 Transformed to row data:`, rowData);
         } else {
             console.warn(`⚠️ Cannot fetch individual row for table: ${tableName}`);
             return;
@@ -403,27 +411,45 @@ async function fetchAndInsertRow(tableName, id) {
             return;
         }
         
-        // Add to table data at the top
+        // Ensure table has been initialized with headers
+        const tbody = document.getElementById('db-table-body');
+        const thead = document.getElementById('db-table-head');
         const table = databaseState.tables[tableName];
+        
+        // If table is empty, initialize headers
+        if (tbody.children.length === 0 || tbody.children[0].querySelector('.db-loading')) {
+            console.log(`  🔧 Initializing table headers for ${tableName}`);
+            const headerRow = thead.querySelector('tr');
+            headerRow.innerHTML = table.columns.map(col => 
+                `<th>${col.replace(/_/g, ' ').toUpperCase()}</th>`
+            ).join('');
+            tbody.innerHTML = '';
+        }
+        
+        // Add to table data at the top
         table.data.unshift(rowData);
+        console.log(`  ➕ Added to table data array (now has ${table.data.length} rows)`);
         
         // Create and insert the row element at the top of the table
-        const tbody = document.getElementById('db-table-body');
         const tr = createTableRow(tableName, rowData, 0);
         tbody.insertBefore(tr, tbody.firstChild);
+        console.log(`  🎯 Inserted row element into DOM`);
         
         // Update all row indices
         tbody.querySelectorAll('tr').forEach((row, index) => {
             row.dataset.index = index;
         });
         
+        // Update stats
+        updateTableStats(table.data.length);
+        
         // Scroll to and highlight the new row
         scrollToRow(tableName, id);
         
-        console.log(`✅ Inserted row ${id} into ${tableName}`);
+        console.log(`✅ Successfully inserted and highlighted row ${id} in ${tableName}`);
         
     } catch (err) {
-        console.error(`Failed to fetch row ${id} from ${tableName}:`, err);
+        console.error(`❌ Failed to fetch row ${id} from ${tableName}:`, err);
     }
 }
 
