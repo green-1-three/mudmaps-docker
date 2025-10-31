@@ -378,11 +378,13 @@ body:has(.dev-panel.collapsed) #map {
 
 .db-table-container {
     height: 400px;
-    overflow: auto;
+    overflow-y: scroll;
+    overflow-x: auto;
     border: 1px solid #ddd;
     border-radius: 4px;
     background: white;
     position: relative;
+    -webkit-overflow-scrolling: touch; /* Better mobile scrolling */
 }
 
 .db-table {

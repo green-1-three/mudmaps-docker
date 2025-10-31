@@ -782,19 +782,6 @@ function updateTimeDisplay(hours) {
     updateGradientLabels(hours);
 }
 
-// User geolocation
-if ('geolocation' in navigator) {
-    navigator.geolocation.getCurrentPosition((pos) => {
-        const coords = [pos.coords.longitude, pos.coords.latitude];
-        console.log('User location:', coords);
-        
-        map.getView().setCenter(fromLonLat(coords));
-        map.getView().setZoom(13);
-    }, (error) => {
-        console.warn('Geolocation error:', error.message);
-    }, { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 });
-}
-
 // Hover functionality for segments and polylines
 let hoveredFeature = null;
 let hoverPopup = null;
@@ -1195,7 +1182,25 @@ const databaseTab = initDatabaseTab(API_BASE, {
 window.databaseTab = databaseTab;
 
 // Load initial data
-loadAllData();
+loadAllData().then(() => {
+    // Only use geolocation if no features were loaded
+    const allFeatures = [
+        ...polylinesSource.getFeatures(),
+        ...segmentsSource.getFeatures()
+    ];
+    
+    if (allFeatures.length === 0 && 'geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+            const coords = [pos.coords.longitude, pos.coords.latitude];
+            console.log('User location:', coords);
+            
+            map.getView().setCenter(fromLonLat(coords));
+            map.getView().setZoom(13);
+        }, (error) => {
+            console.warn('Geolocation error:', error.message);
+        }, { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 });
+    }
+});
 
 // Export for debugging
 window.devState = {

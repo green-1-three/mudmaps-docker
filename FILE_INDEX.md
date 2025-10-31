@@ -35,11 +35,25 @@ Main API server that serves polylines, segments, and municipality data to fronte
 - `app.js` - Express app setup and middleware
 - `package.json` - Backend dependencies
 
-### Subdirectories
-- `/routes` - API endpoint definitions
-- `/services` - Business logic and database queries
-- `/middleware` - Express middleware (auth, error handling, etc.)
-- `/config` - Configuration files
+### Routes (`/routes`)
+- `database.routes.js` - Database inspection endpoints
+- `health.routes.js` - Health check endpoints
+- `polylines.routes.js` - Polyline data endpoints
+- `segments.routes.js` - Segment data endpoints
+
+### Services (`/services`)
+- `database.service.js` - Database connection and query utilities
+- `database-inspection.service.js` - Database inspection and debugging queries
+- `polylines.service.js` - Polyline data retrieval logic
+- `segments.service.js` - Segment data retrieval logic
+
+### Middleware (`/middleware`)
+- `error-handler.js` - Centralized error handling
+
+### Config (`/config`)
+- `config.js` - Backend configuration settings
+
+### Other
 - `/old_files` - Archived/deprecated code
 
 ---
@@ -69,10 +83,18 @@ Processes GPS batches, performs map-matching via OSRM, activates segments.
 - `index.js` - Worker entry point
 - `package.json` - Worker dependencies
 
-### Subdirectories
-- `/services` - Core processing logic (map-matching, segment activation)
-- `/utils` - Utility functions
-- `/config` - Configuration files
+### Services (`/services`)
+- `batch-processor.js` - Main batch processing orchestration
+- `database.service.js` - Database connection and query utilities
+- `gps-processor.js` - GPS point processing and validation
+- `osrm.service.js` - OSRM map-matching integration
+- `segment-activation.service.js` - Segment activation logic
+
+### Utils (`/utils`)
+- `geo-calculations.js` - Geographic calculation utilities
+
+### Config (`/config`)
+- `config.js` - Worker configuration settings
 
 ---
 
