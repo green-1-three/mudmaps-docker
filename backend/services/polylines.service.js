@@ -19,7 +19,7 @@ class PolylinesService {
         
         const startTime = performance.now();
         
-        // Build query - now including ID
+        // Build query - now including ID and bearing
         let query = `
             SELECT 
                 id,
@@ -28,7 +28,8 @@ class PolylinesService {
                 end_time,
                 encoded_polyline,
                 osrm_confidence,
-                point_count
+                point_count,
+                bearing
             FROM cached_polylines
             WHERE start_time > $1
         `;
@@ -63,7 +64,8 @@ class PolylinesService {
                 end_time: row.end_time,
                 encoded_polyline: row.encoded_polyline,
                 osrm_confidence: row.osrm_confidence,
-                point_count: row.point_count
+                point_count: row.point_count,
+                bearing: row.bearing
             });
         });
 
@@ -77,10 +79,13 @@ class PolylinesService {
                 end_time: polylines[polylines.length - 1].end_time,
                 coordinate_count: polylines.reduce((sum, p) => sum + p.point_count, 0),
                 batches: polylines.map(p => ({
-                    id: p.id,  // Include polyline ID
+                    id: p.id,
                     success: true,
                     encoded_polyline: p.encoded_polyline,
-                    confidence: p.osrm_confidence
+                    confidence: p.osrm_confidence,
+                    start_time: p.start_time,
+                    end_time: p.end_time,
+                    bearing: p.bearing
                 })),
                 matched_batches: polylines.length,
                 total_batches: polylines.length,

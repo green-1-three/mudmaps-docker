@@ -307,9 +307,12 @@ async function loadPolylines() {
                         
                         const feature = new Feature({
                             geometry: new LineString(projectedCoords),
+                            polyline_id: batch.id,
                             device: device.device,
-                            start_time: device.start_time,
-                            end_time: device.end_time,
+                            start_time: batch.start_time,
+                            end_time: batch.end_time,
+                            bearing: batch.bearing,
+                            confidence: batch.confidence,
                             type: 'polyline'
                         });
                         
@@ -839,11 +842,19 @@ map.on('click', (event) => {
             showStatus(info);
             console.log('📍 Segment clicked:', info);
         } else if (type === 'polyline') {
+            const polylineId = feature.get('polyline_id');
             const device = feature.get('device');
+            const bearing = feature.get('bearing');
+            const confidence = feature.get('confidence');
             const startTime = feature.get('start_time');
             const endTime = feature.get('end_time');
             
-            const info = `POLYLINE: Device ${device} from ${new Date(startTime).toLocaleString()} to ${new Date(endTime).toLocaleString()}`;
+            const startText = startTime ? new Date(startTime).toLocaleString() : 'Unknown';
+            const endText = endTime ? new Date(endTime).toLocaleString() : 'Unknown';
+            const bearingText = bearing ? `${Math.round(bearing)}°` : 'Unknown';
+            const confidenceText = confidence ? `${(confidence * 100).toFixed(1)}%` : 'Unknown';
+            
+            const info = `POLYLINE #${polylineId || 'Unknown'} - Device: ${device || 'Unknown'}, Bearing: ${bearingText}, Confidence: ${confidenceText}, Start: ${startText}, End: ${endText}`;
             showStatus(info);
             console.log('📍 Polyline clicked:', info);
         }
