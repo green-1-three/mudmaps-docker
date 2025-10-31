@@ -15,12 +15,13 @@ function createDatabaseRoutes(databaseInspectionService) {
     router.get('/api/database/:tableName', async (req, res, next) => {
         try {
             const { tableName } = req.params;
-            const { limit = 10, offset = 0 } = req.query;
+            const { limit = 10, offset = 0, target_id } = req.query;
 
             const data = await databaseInspectionService.getTableData(
                 tableName, 
                 parseInt(limit), 
-                parseInt(offset)
+                parseInt(offset),
+                target_id ? parseInt(target_id) : null
             );
 
             res.json(data);

@@ -19,41 +19,55 @@ class DatabaseInspectionService {
     /**
      * Get paginated rows from a table
      */
-    async getTableData(tableName, limit = 10, offset = 0) {
+    async getTableData(tableName, limit = 10, offset = 0, targetId = null) {
         if (!this.allowedTables.includes(tableName)) {
             throw new Error(`Invalid table name. Allowed tables: ${this.allowedTables.join(', ')}`);
         }
 
-        // Build order by clause based on table
-        let orderByColumn;
-        switch(tableName) {
-            case 'gps_raw_data':
-                orderByColumn = 'recorded_at';
-                break;
-            case 'cached_polylines':
-                orderByColumn = 'created_at';
-                break;
-            case 'road_segments':
-                orderByColumn = 'updated_at';
-                break;
-            case 'segment_updates':
-                orderByColumn = 'timestamp';
-                break;
-            case 'municipalities':
-                orderByColumn = 'created_at';
-                break;
-            case 'processing_log':
-                orderByColumn = 'created_at';
-                break;
-            default:
-                orderByColumn = 'id';
-        }
-
         try {
-            // Get rows with pagination
+            // If targetId is provided, fetch surrounding rows
+            if (targetId) {
+                const surroundingQuery = `
+                    (
+                        SELECT * FROM ${tableName}
+                        WHERE id <= $1
+                        ORDER BY id DESC
+                        LIMIT $2
+                    )
+                    UNION ALL
+                    (
+                        SELECT * FROM ${tableName}
+                        WHERE id > $1
+                        ORDER BY id ASC
+                        LIMIT $3
+                    )
+                    ORDER BY id DESC
+                `;
+                
+                // Get 4 rows before, target row, and 4 rows after (total 9)
+                const beforeCount = Math.floor(limit / 2) + 1; // 5 rows (includes target)
+                const afterCount = Math.floor(limit / 2);      // 4 rows
+                
+                const dataResult = await this.db.query(surroundingQuery, [targetId, beforeCount, afterCount]);
+                
+                // Get total count
+                const countQuery = `SELECT COUNT(*) as count FROM ${tableName}`;
+                const countResult = await this.db.query(countQuery);
+                
+                return {
+                    table: tableName,
+                    rows: dataResult.rows,
+                    total: parseInt(countResult.rows[0].count),
+                    limit: parseInt(limit),
+                    offset: 0,
+                    target_id: targetId
+                };
+            }
+
+            // Default: Order by ID DESC
             const dataQuery = `
                 SELECT * FROM ${tableName}
-                ORDER BY ${orderByColumn} DESC
+                ORDER BY id DESC
                 LIMIT $1 OFFSET $2
             `;
             const dataResult = await this.db.query(dataQuery, [limit, offset]);

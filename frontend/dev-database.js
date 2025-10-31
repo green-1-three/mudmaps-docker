@@ -375,48 +375,71 @@ export async function highlightTableRow(tableName, id) {
  * Fetch a single row from backend and insert it into the table
  */
 async function fetchAndInsertRow(tableName, id) {
-    console.log(`🔍 Fetching ${tableName} row with ID: ${id}`);
+    console.log(`🔍 Fetching ${tableName} row with ID: ${id} (plus surrounding rows)`);
     
     try {
-        let rowData = null;
+        let rowsToInsert = [];
         
-        // Fetch from appropriate endpoint
+        // Fetch the target row plus surrounding rows (±4)
         if (tableName === 'cached_polylines') {
-            const url = `${databaseState.API_BASE}/polylines/${id}`;
+            // Fetch 9 rows: target + 4 before + 4 after, ordered by ID DESC
+            const url = `${databaseState.API_BASE}/database/cached_polylines?limit=9&target_id=${id}`;
             console.log(`  🌍 Fetching from: ${url}`);
-            rowData = await fetchJSON(url);
-            console.log(`  📦 Received polyline data:`, rowData);
+            const response = await fetchJSON(url);
+            
+            if (response.rows && response.rows.length > 0) {
+                rowsToInsert = response.rows;
+            } else {
+                // Fallback: fetch just the single row
+                const singleUrl = `${databaseState.API_BASE}/polylines/${id}`;
+                console.log(`  🔄 Fallback to single row fetch: ${singleUrl}`);
+                const singleRow = await fetchJSON(singleUrl);
+                if (singleRow) {
+                    rowsToInsert = [singleRow];
+                }
+            }
         } else if (tableName === 'road_segments') {
-            const url = `${databaseState.API_BASE}/segments/${id}`;
+            // Fetch 9 rows: target + 4 before + 4 after, ordered by ID DESC
+            const url = `${databaseState.API_BASE}/database/road_segments?limit=9&target_id=${id}`;
             console.log(`  🌍 Fetching from: ${url}`);
-            const segment = await fetchJSON(url);
-            console.log(`  📦 Received segment data:`, segment);
-            // Transform segment data to match table format
-            rowData = {
-                id: segment.id,
-                street_name: segment.properties.street_name,
-                municipality_id: segment.properties.municipality_id,
-                last_plowed_forward: segment.properties.last_plowed_forward,
-                last_plowed_reverse: segment.properties.last_plowed_reverse,
-                plow_count_total: segment.properties.plow_count_total
-            };
-            console.log(`  🔄 Transformed to row data:`, rowData);
+            const response = await fetchJSON(url);
+            
+            if (response.rows && response.rows.length > 0) {
+                rowsToInsert = response.rows;
+            } else {
+                // Fallback: fetch just the single row and transform it
+                const singleUrl = `${databaseState.API_BASE}/segments/${id}`;
+                console.log(`  🔄 Fallback to single row fetch: ${singleUrl}`);
+                const segment = await fetchJSON(singleUrl);
+                if (segment) {
+                    rowsToInsert = [{
+                        id: segment.id,
+                        street_name: segment.properties.street_name,
+                        municipality_id: segment.properties.municipality_id,
+                        last_plowed_forward: segment.properties.last_plowed_forward,
+                        last_plowed_reverse: segment.properties.last_plowed_reverse,
+                        plow_count_total: segment.properties.plow_count_total
+                    }];
+                }
+            }
         } else {
             console.warn(`⚠️ Cannot fetch individual row for table: ${tableName}`);
             return;
         }
         
-        if (!rowData) {
+        if (rowsToInsert.length === 0) {
             console.warn(`⚠️ Row ${id} not found in ${tableName}`);
             return;
         }
+        
+        console.log(`  📦 Received ${rowsToInsert.length} rows`);
         
         // Ensure table has been initialized with headers
         const tbody = document.getElementById('db-table-body');
         const thead = document.getElementById('db-table-head');
         const table = databaseState.tables[tableName];
         
-        // If table is empty, initialize headers
+        // If table is empty or has loading message, initialize headers
         if (tbody.children.length === 0 || tbody.children[0].querySelector('.db-loading')) {
             console.log(`  🔧 Initializing table headers for ${tableName}`);
             const headerRow = thead.querySelector('tr');
@@ -426,27 +449,27 @@ async function fetchAndInsertRow(tableName, id) {
             tbody.innerHTML = '';
         }
         
-        // Add to table data at the top
-        table.data.unshift(rowData);
-        console.log(`  ➕ Added to table data array (now has ${table.data.length} rows)`);
+        // Clear existing data and replace with new rows
+        table.data = rowsToInsert;
+        tbody.innerHTML = '';
+        console.log(`  ♻️ Replaced table data with ${rowsToInsert.length} rows`);
         
-        // Create and insert the row element at the top of the table
-        const tr = createTableRow(tableName, rowData, 0);
-        tbody.insertBefore(tr, tbody.firstChild);
-        console.log(`  🎯 Inserted row element into DOM`);
-        
-        // Update all row indices
-        tbody.querySelectorAll('tr').forEach((row, index) => {
-            row.dataset.index = index;
+        // Create and insert all row elements
+        const fragment = document.createDocumentFragment();
+        rowsToInsert.forEach((rowData, index) => {
+            const tr = createTableRow(tableName, rowData, index);
+            fragment.appendChild(tr);
         });
+        tbody.appendChild(fragment);
+        console.log(`  🎯 Inserted ${rowsToInsert.length} row elements into DOM`);
         
         // Update stats
         updateTableStats(table.data.length);
         
-        // Scroll to and highlight the new row
+        // Scroll to and highlight the target row
         scrollToRow(tableName, id);
         
-        console.log(`✅ Successfully inserted and highlighted row ${id} in ${tableName}`);
+        console.log(`✅ Successfully loaded and highlighted row ${id} in ${tableName}`);
         
     } catch (err) {
         console.error(`❌ Failed to fetch row ${id} from ${tableName}:`, err);
