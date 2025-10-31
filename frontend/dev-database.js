@@ -382,12 +382,12 @@ async function fetchAndInsertRow(tableName, id) {
         
         // Fetch from appropriate endpoint
         if (tableName === 'cached_polylines') {
-            const url = `${databaseState.API_BASE}/api/polylines/${id}`;
+            const url = `${databaseState.API_BASE}/polylines/${id}`;
             console.log(`  🌍 Fetching from: ${url}`);
             rowData = await fetchJSON(url);
             console.log(`  📦 Received polyline data:`, rowData);
         } else if (tableName === 'road_segments') {
-            const url = `${databaseState.API_BASE}/api/segments/${id}`;
+            const url = `${databaseState.API_BASE}/segments/${id}`;
             console.log(`  🌍 Fetching from: ${url}`);
             const segment = await fetchJSON(url);
             console.log(`  📦 Received segment data:`, segment);
