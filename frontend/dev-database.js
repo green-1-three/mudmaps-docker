@@ -350,7 +350,9 @@ export async function highlightTableRow(tableName, id) {
     
     // Switch to the correct table if needed
     const tableSelect = document.getElementById('db-table-select');
-    if (tableSelect && tableSelect.value !== tableName) {
+    const needsTableSwitch = tableSelect && tableSelect.value !== tableName;
+    
+    if (needsTableSwitch) {
         console.log(`  🔄 Switching from ${tableSelect.value} to ${tableName}`);
         tableSelect.value = tableName;
         databaseState.activeTable = tableName;
@@ -360,13 +362,13 @@ export async function highlightTableRow(tableName, id) {
     const table = databaseState.tables[tableName];
     const existingRow = table.data.find(row => row.id === id);
     
-    if (existingRow) {
+    if (existingRow && !needsTableSwitch) {
         console.log(`  ✅ Row ${id} already exists in table data`);
-        // Row exists, just scroll to it
+        // Row exists and we didn't switch tables, just scroll to it
         scrollToRow(tableName, id);
     } else {
-        console.log(`  🔍 Row ${id} not in current data, fetching from backend`);
-        // Row doesn't exist, fetch it from backend and insert it
+        console.log(`  🔍 Row ${id} not in current data or table switched, fetching from backend`);
+        // Row doesn't exist OR we switched tables, fetch it from backend and insert it
         await fetchAndInsertRow(tableName, id);
     }
 }
@@ -448,15 +450,13 @@ async function fetchAndInsertRow(tableName, id) {
         const thead = document.getElementById('db-table-head');
         const table = databaseState.tables[tableName];
         
-        // If table is empty or has loading message, initialize headers
-        if (tbody.children.length === 0 || tbody.children[0].querySelector('.db-loading')) {
-            console.log(`  🔧 Initializing table headers for ${tableName}`);
-            const headerRow = thead.querySelector('tr');
-            headerRow.innerHTML = table.columns.map(col => 
-                `<th>${col.replace(/_/g, ' ').toUpperCase()}</th>`
-            ).join('');
-            tbody.innerHTML = '';
-        }
+        // ALWAYS initialize headers when fetching new data (even if table has data from different table)
+        console.log(`  🔧 Initializing table headers for ${tableName}`);
+        const headerRow = thead.querySelector('tr');
+        headerRow.innerHTML = table.columns.map(col => 
+            `<th>${col.replace(/_/g, ' ').toUpperCase()}</th>`
+        ).join('');
+        tbody.innerHTML = '';
         
         // Clear existing data and replace with new rows
         table.data = rowsToInsert;
