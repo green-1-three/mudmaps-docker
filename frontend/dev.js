@@ -90,7 +90,7 @@ let polylinesLayer;
 let segmentsLayer;
 
 // Global variable to store current time range
-let currentTimeHours = 24;
+let currentTimeHours = 168;
 
 // Add layers to map (order matters for display)
 // Boundary at bottom (zIndex: 0.1)
@@ -577,9 +577,9 @@ function createUI() {
             
             <div class="control-group">
                 <label for="timeRange">Time Range:</label>
-                <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
+                <input type="range" id="timeRange" min="0" max="6" value="6" step="1">
                 <div class="time-display">
-                    <span id="timeValue">Last 1 day</span>
+                    <span id="timeValue">Last 7 days</span>
                 </div>
             </div>
             
