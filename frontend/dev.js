@@ -39,18 +39,28 @@ console.log('Using API_BASE:', API_BASE);
 // Discrete time intervals mapping: index -> hours
 const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
 
-// Create SVG pattern for crosshatch (out-of-range segments)
+// Create crosshatch pattern for out-of-range segments (created once, reused for all segments)
+let crosshatchPattern = null;
+
 function createCrosshatchPattern() {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', 'crosshatch-pattern');
-    svg.innerHTML = `
-        <defs>
-            <pattern id="crosshatch" patternUnits="userSpaceOnUse" width="8" height="8">
-                <path d="M0,0 l8,8 M8,0 l-8,8" stroke="#999" stroke-width="1" />
-            </pattern>
-        </defs>
-    `;
-    document.body.appendChild(svg);
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    const pixelRatio = window.devicePixelRatio || 1;
+    canvas.width = 8 * pixelRatio;
+    canvas.height = 8 * pixelRatio;
+    context.scale(pixelRatio, pixelRatio);
+    
+    // Draw crosshatch pattern
+    context.strokeStyle = '#999';
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(0, 0);
+    context.lineTo(8, 8);
+    context.moveTo(8, 0);
+    context.lineTo(0, 8);
+    context.stroke();
+    
+    crosshatchPattern = context.createPattern(canvas, 'repeat');
 }
 
 // Create crosshatch pattern on load
@@ -188,30 +198,11 @@ function createSegmentStyleWithFilter(feature) {
         const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
         const plowTime = new Date(lastPlowed).getTime();
         
-        // Out of range: show in gray with crosshatch pattern
+        // Out of range: show in gray with crosshatch pattern (reuse pre-created pattern)
         if (plowTime < cutoffTime) {
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            const pixelRatio = window.devicePixelRatio || 1;
-            canvas.width = 8 * pixelRatio;
-            canvas.height = 8 * pixelRatio;
-            context.scale(pixelRatio, pixelRatio);
-            
-            // Draw crosshatch pattern
-            context.strokeStyle = '#999';
-            context.lineWidth = 1;
-            context.beginPath();
-            context.moveTo(0, 0);
-            context.lineTo(8, 8);
-            context.moveTo(8, 0);
-            context.lineTo(0, 8);
-            context.stroke();
-            
-            const pattern = context.createPattern(canvas, 'repeat');
-            
             return new Style({
                 stroke: new Stroke({
-                    color: pattern,
+                    color: crosshatchPattern,
                     width: 4
                 })
             });
