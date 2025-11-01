@@ -34,7 +34,7 @@ module.exports = {
     
     // Processing Configuration
     processing: {
-        batchSize: 4, // Process 4 coordinates per batch (~2 minutes of data)
+        batchSize: 5, // Process 5 coordinates per batch (1 overlap + 4 new = ~2 minutes of data)
         timeWindowMinutes: 2, // Group coordinates within 2-minute windows
         minMovementMeters: 50, // Minimum movement to process batch
         maxConnectionGapMinutes: 5, // Max gap to connect points
