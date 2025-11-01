@@ -275,7 +275,7 @@ async function loadTableData(tableName, append = false) {
     
     try {
         // Construct the API endpoint
-        const url = `${databaseState.API_BASE}/database/${tableName}?limit=5&offset=${table.offset}`;
+        const url = `${databaseState.API_BASE}/database/${tableName}?limit=20&offset=${table.offset}`;
         console.log(`📊 Fetching ${tableName} from: ${url}`);
         
         const response = await fetchJSON(url);
