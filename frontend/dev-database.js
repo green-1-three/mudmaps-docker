@@ -89,9 +89,6 @@ function createDatabaseTabHTML() {
                 <span id="db-row-count-road_segments">Rows: 0</span>
                 <span id="db-last-updated-road_segments">Last Updated: Never</span>
             </div>
-            <div class="db-table-actions">
-                <button id="db-copy-road_segments" class="db-action-btn">📋 Copy Visible Data</button>
-            </div>
             <div class="db-table-container" data-table="road_segments">
                 <table class="db-table">
                     <thead id="db-table-head-road_segments">
@@ -104,6 +101,9 @@ function createDatabaseTabHTML() {
                     </tbody>
                 </table>
             </div>
+            <div class="db-table-actions">
+                <button id="db-copy-road_segments" class="db-action-btn">📋 Copy Visible Data</button>
+            </div>
         </div>
         
         <!-- Cached Polylines Table -->
@@ -112,10 +112,6 @@ function createDatabaseTabHTML() {
             <div class="db-stats">
                 <span id="db-row-count-cached_polylines">Rows: 0</span>
                 <span id="db-last-updated-cached_polylines">Last Updated: Never</span>
-            </div>
-            <div class="db-table-actions">
-                <button id="db-view-gps-from-polyline" class="db-action-btn" disabled>🔍 View GPS Points</button>
-                <button id="db-copy-cached_polylines" class="db-action-btn">📋 Copy Visible Data</button>
             </div>
             <div class="db-table-container" data-table="cached_polylines">
                 <table class="db-table">
@@ -129,6 +125,10 @@ function createDatabaseTabHTML() {
                     </tbody>
                 </table>
             </div>
+            <div class="db-table-actions">
+                <button id="db-view-gps-from-polyline" class="db-action-btn" disabled>🔍 View GPS Points</button>
+                <button id="db-copy-cached_polylines" class="db-action-btn">📋 Copy Visible Data</button>
+            </div>
         </div>
         
         <!-- GPS Raw Data Table -->
@@ -137,10 +137,6 @@ function createDatabaseTabHTML() {
             <div class="db-stats">
                 <span id="db-row-count-gps_raw_data">Rows: 0</span>
                 <span id="db-last-updated-gps_raw_data">Last Updated: Never</span>
-            </div>
-            <div class="db-table-actions">
-                <button id="db-view-polyline-from-gps" class="db-action-btn" disabled>🔍 View Polyline</button>
-                <button id="db-copy-gps_raw_data" class="db-action-btn">📋 Copy Visible Data</button>
             </div>
             <div class="db-table-container" data-table="gps_raw_data">
                 <table class="db-table">
@@ -154,6 +150,10 @@ function createDatabaseTabHTML() {
                     </tbody>
                 </table>
             </div>
+            <div class="db-table-actions">
+                <button id="db-view-polyline-from-gps" class="db-action-btn" disabled>🔍 View Polyline</button>
+                <button id="db-copy-gps_raw_data" class="db-action-btn">📋 Copy Visible Data</button>
+            </div>
         </div>
         
         <!-- Segment Updates Table -->
@@ -162,9 +162,6 @@ function createDatabaseTabHTML() {
             <div class="db-stats">
                 <span id="db-row-count-segment_updates">Rows: 0</span>
                 <span id="db-last-updated-segment_updates">Last Updated: Never</span>
-            </div>
-            <div class="db-table-actions">
-                <button id="db-copy-segment_updates" class="db-action-btn">📋 Copy Visible Data</button>
             </div>
             <div class="db-table-container" data-table="segment_updates">
                 <table class="db-table">
@@ -177,6 +174,9 @@ function createDatabaseTabHTML() {
                         </tr>
                     </tbody>
                 </table>
+            </div>
+            <div class="db-table-actions">
+                <button id="db-copy-segment_updates" class="db-action-btn">📋 Copy Visible Data</button>
             </div>
         </div>
     `;

@@ -508,8 +508,8 @@ body:has(.dev-panel.collapsed) #map {
 .db-table-actions {
     display: flex;
     gap: 8px;
-    margin-top: 10px;
-    margin-bottom: 20px;
+    margin-top: 12px;
+    margin-bottom: 25px;
 }
 
 .db-action-btn {
