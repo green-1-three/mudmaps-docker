@@ -174,12 +174,15 @@ body:has(.dev-panel.collapsed) #map {
 
 .dev-panel.collapsed .dev-panel-collapse {
     position: fixed;
-    right: 5px;
+    right: 10px;
     top: 50%;
     transform: translateY(-50%);
     background: rgba(255, 255, 255, 0.95);
-    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     z-index: 2001;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
 }
 
 .dev-panel-body {

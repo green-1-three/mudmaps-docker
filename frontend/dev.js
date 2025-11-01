@@ -1151,7 +1151,7 @@ function initDevPanel() {
         collapseBtn.innerHTML = isCollapsed ? '&larr;' : '&rarr;';
         collapseBtn.title = isCollapsed ? 'Expand Panel' : 'Collapse Panel';
         
-        // Update map right margin - when collapsed, only leave room for the button
+        // Update map right margin - when collapsed, map fills entire screen
         const mapElement = document.getElementById('map');
         if (mapElement) {
             mapElement.style.right = isCollapsed ? '0px' : panel.offsetWidth + 'px';
