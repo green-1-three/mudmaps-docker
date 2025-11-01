@@ -8,7 +8,7 @@ const { calculateBearing, coordinatesToWKT, hasSignificantMovement } = require('
 
 class BatchProcessor {
     constructor(config = {}) {
-        this.batchSize = config.batchSize || 4;
+        this.batchSize = config.batchSize || 5;
         this.timeWindowMinutes = config.timeWindowMinutes || 2;
         this.minMovementMeters = config.minMovementMeters || 50;
     }

@@ -207,3 +207,40 @@ docker compose logs backend --tail 50  # Shows last 50 lines
 - **OSM_OPERATIONS.md** - OSM import guide, troubleshooting, safe scripts
 - **NOTES.md** - Technical debt, future improvements, business notes
 - **FILE_INDEX.md** - Quick reference for navigating the codebase
+
+---
+
+## 🎯 Raycast Script Configuration
+
+**When creating/editing Raycast scripts for remote server queries:**
+
+### Connection Details
+- **Server:** `root@142.93.193.102`
+- **Project Directory:** `/root/mudmaps-docker`
+- **SSH Key:** `/Users/jamesfreeman/.ssh/id_ed25519`
+
+### Database Configuration
+- **Service Name:** `postgres` (NOT `db`)
+- **Database Name:** `mudmapsdb`
+- **Database User:** `mudmaps`
+- **Connection Command:** `docker compose exec -T postgres psql -U mudmaps -d mudmapsdb`
+
+### Key Tables
+- **gps_raw_data** - GPS points from trackers
+  - Columns: `id`, `device_id`, `longitude`, `latitude`, `recorded_at`, `received_at`, `processed`, `batch_id`
+  - Device IDs are numeric strings (e.g., `862343066524415`), NOT short codes like "WF3"
+- **polylines** - Processed GPS paths
+- **road_segments** - OSM road network segments
+- **matched_paths** - OSRM map-matched routes
+- **municipalities** - Municipal boundary data
+
+### Important Notes
+- **One query per script execution** - User's terminal can only handle one query at a time
+- **Use table structure queries sparingly** - `\d table_name` can be verbose
+- **Device IDs are numeric** - Always use the full numeric device_id (e.g., `862343066524415`), not tracker nicknames
+- **Modern Docker syntax** - Use `docker compose` (not `docker-compose`)
+
+### Example Query Template
+```sql
+docker compose exec -T postgres psql -U mudmaps -d mudmapsdb -c "SELECT id, device_id, recorded_at FROM gps_raw_data WHERE device_id = '862343066524415' ORDER BY recorded_at DESC LIMIT 10;"
+```
