@@ -1151,16 +1151,16 @@ function initDevPanel() {
         collapseBtn.innerHTML = isCollapsed ? '&larr;' : '&rarr;';
         collapseBtn.title = isCollapsed ? 'Expand Panel' : 'Collapse Panel';
         
-        // Update map right margin
+        // Update map right margin - when collapsed, only leave room for the button
         const mapElement = document.getElementById('map');
         if (mapElement) {
-            mapElement.style.right = isCollapsed ? '40px' : panel.offsetWidth + 'px';
+            mapElement.style.right = isCollapsed ? '0px' : panel.offsetWidth + 'px';
         }
         
         // Update controls position
         const controlsElement = document.getElementById('controls');
         if (controlsElement) {
-            controlsElement.style.right = isCollapsed ? '50px' : (panel.offsetWidth + 10) + 'px';
+            controlsElement.style.right = isCollapsed ? '10px' : (panel.offsetWidth + 10) + 'px';
         }
         
         // Update map size after collapse/expand animation
