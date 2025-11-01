@@ -988,9 +988,17 @@ map.on('pointermove', (event) => {
             hoverPopup.innerHTML = popupHTML;
         }
         
-        // Position popup near cursor (offset to avoid blocking)
-        hoverPopup.style.left = (event.pixel[0] + 20) + 'px';
-        hoverPopup.style.top = (event.pixel[1] + 20) + 'px';
+        // Position popup near cursor
+        // Calculate total height to center vertically around cursor
+        // Wait for next frame to get accurate dimensions after content is set
+        setTimeout(() => {
+            const popupHeight = hoverPopup.offsetHeight;
+            const verticalOffset = -popupHeight / 2;
+            
+            hoverPopup.style.left = (event.pixel[0] + 20) + 'px';
+            hoverPopup.style.top = (event.pixel[1] + verticalOffset) + 'px';
+        }, 0);
+        
         hoverPopup.style.display = 'flex';
         
         // Change cursor
