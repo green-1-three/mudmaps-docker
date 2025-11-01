@@ -504,6 +504,62 @@ body:has(.dev-panel.collapsed) #map {
     background: #fafafa;
 }
 
+/* Database Table Action Buttons */
+.db-table-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    margin-bottom: 20px;
+}
+
+.db-action-btn {
+    padding: 8px 14px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+}
+
+.db-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.db-action-btn:not(:disabled):hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.db-action-btn.primary {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+.db-action-btn.primary:not(:disabled):hover {
+    background: #0056b3;
+    border-color: #0056b3;
+}
+
+.db-action-btn.success {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+}
+
+.db-action-btn.success:not(:disabled):hover {
+    background: #218838;
+    border-color: #218838;
+}
+
 /* Search Bar - Top Left (positioned within map, avoiding zoom buttons) */
 #search-bar {
     position: fixed;

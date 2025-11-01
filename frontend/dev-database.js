@@ -89,6 +89,9 @@ function createDatabaseTabHTML() {
                 <span id="db-row-count-road_segments">Rows: 0</span>
                 <span id="db-last-updated-road_segments">Last Updated: Never</span>
             </div>
+            <div class="db-table-actions">
+                <button id="db-copy-road_segments" class="db-action-btn">📋 Copy Visible Data</button>
+            </div>
             <div class="db-table-container" data-table="road_segments">
                 <table class="db-table">
                     <thead id="db-table-head-road_segments">
@@ -109,6 +112,10 @@ function createDatabaseTabHTML() {
             <div class="db-stats">
                 <span id="db-row-count-cached_polylines">Rows: 0</span>
                 <span id="db-last-updated-cached_polylines">Last Updated: Never</span>
+            </div>
+            <div class="db-table-actions">
+                <button id="db-view-gps-from-polyline" class="db-action-btn" disabled>🔍 View GPS Points</button>
+                <button id="db-copy-cached_polylines" class="db-action-btn">📋 Copy Visible Data</button>
             </div>
             <div class="db-table-container" data-table="cached_polylines">
                 <table class="db-table">
@@ -131,6 +138,10 @@ function createDatabaseTabHTML() {
                 <span id="db-row-count-gps_raw_data">Rows: 0</span>
                 <span id="db-last-updated-gps_raw_data">Last Updated: Never</span>
             </div>
+            <div class="db-table-actions">
+                <button id="db-view-polyline-from-gps" class="db-action-btn" disabled>🔍 View Polyline</button>
+                <button id="db-copy-gps_raw_data" class="db-action-btn">📋 Copy Visible Data</button>
+            </div>
             <div class="db-table-container" data-table="gps_raw_data">
                 <table class="db-table">
                     <thead id="db-table-head-gps_raw_data">
@@ -151,6 +162,9 @@ function createDatabaseTabHTML() {
             <div class="db-stats">
                 <span id="db-row-count-segment_updates">Rows: 0</span>
                 <span id="db-last-updated-segment_updates">Last Updated: Never</span>
+            </div>
+            <div class="db-table-actions">
+                <button id="db-copy-segment_updates" class="db-action-btn">📋 Copy Visible Data</button>
             </div>
             <div class="db-table-container" data-table="segment_updates">
                 <table class="db-table">
@@ -222,6 +236,16 @@ function setupDatabaseEventListeners() {
             }
         });
     });
+    
+    // Copy buttons - copy visible table data as JSON
+    setupCopyButton('db-copy-road_segments', 'road_segments');
+    setupCopyButton('db-copy-cached_polylines', 'cached_polylines');
+    setupCopyButton('db-copy-gps_raw_data', 'gps_raw_data');
+    setupCopyButton('db-copy-segment_updates', 'segment_updates');
+    
+    // Navigation buttons - view related data
+    setupViewGPSButton();
+    setupViewPolylineButton();
 }
 
 /**
@@ -344,6 +368,9 @@ function handleRowClick(tableName, rowData, rowElement) {
     // Add selection to clicked row
     rowElement.classList.add('selected');
     databaseState.selectedRow = { tableName, data: rowData };
+    
+    // Enable/disable navigation buttons based on selection
+    updateNavigationButtons(tableName, rowData);
     
     // Trigger map interaction based on table type
     if (window.highlightMapFeature) {
@@ -535,6 +562,233 @@ function scrollToRow(tableName, id) {
         row.classList.add('highlight-flash');
         setTimeout(() => row.classList.remove('highlight-flash'), 1000);
     }
+}
+
+/**
+ * Update navigation button states based on selected row
+ */
+function updateNavigationButtons(tableName, rowData) {
+    const viewGPSBtn = document.getElementById('db-view-gps-from-polyline');
+    const viewPolylineBtn = document.getElementById('db-view-polyline-from-gps');
+    
+    // Enable View GPS Points button if polyline with batch_id is selected
+    if (viewGPSBtn) {
+        if (tableName === 'cached_polylines' && rowData.batch_id) {
+            viewGPSBtn.disabled = false;
+        } else {
+            viewGPSBtn.disabled = true;
+        }
+    }
+    
+    // Enable View Polyline button if GPS point with batch_id is selected
+    if (viewPolylineBtn) {
+        if (tableName === 'gps_raw_data' && rowData.batch_id) {
+            viewPolylineBtn.disabled = false;
+        } else {
+            viewPolylineBtn.disabled = true;
+        }
+    }
+}
+
+/**
+ * Setup copy button for a specific table
+ */
+function setupCopyButton(buttonId, tableName) {
+    const button = document.getElementById(buttonId);
+    if (button) {
+        button.addEventListener('click', () => {
+            const table = databaseState.tables[tableName];
+            if (table.data.length === 0) {
+                console.warn(`No data to copy from ${tableName}`);
+                return;
+            }
+            
+            // Copy data as JSON
+            const jsonString = JSON.stringify(table.data, null, 2);
+            
+            // Copy to clipboard
+            navigator.clipboard.writeText(jsonString).then(() => {
+                console.log(`✅ Copied ${table.data.length} rows from ${tableName} as JSON`);
+                
+                // Visual feedback
+                const originalText = button.textContent;
+                button.textContent = '✅ Copied!';
+                button.classList.add('success');
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('success');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy data to clipboard');
+            });
+        });
+    }
+}
+
+/**
+ * Setup View GPS Points button (from cached_polylines table)
+ */
+function setupViewGPSButton() {
+    const button = document.getElementById('db-view-gps-from-polyline');
+    if (!button) return;
+    
+    button.addEventListener('click', async () => {
+        const selected = databaseState.selectedRow;
+        
+        if (!selected || selected.tableName !== 'cached_polylines') {
+            console.warn('No polyline selected');
+            return;
+        }
+        
+        const batchId = selected.data.batch_id;
+        if (!batchId) {
+            console.warn('Selected polyline has no batch_id');
+            return;
+        }
+        
+        console.log(`🔍 Loading GPS points for batch_id: ${batchId}`);
+        button.disabled = true;
+        button.textContent = '⏳ Loading...';
+        
+        try {
+            // Fetch GPS points by batch_id
+            const url = `${databaseState.API_BASE}/database/gps_raw_data/by-batch/${batchId}`;
+            const response = await fetchJSON(url);
+            
+            if (!response || !response.length) {
+                console.warn(`No GPS points found for batch_id: ${batchId}`);
+                alert('No GPS points found for this polyline');
+                return;
+            }
+            
+            console.log(`📍 Found ${response.length} GPS points`);
+            
+            // Replace GPS table data with these points
+            const gpsTable = databaseState.tables.gps_raw_data;
+            gpsTable.data = response;
+            gpsTable.offset = response.length;
+            
+            // Rebuild GPS table
+            const tbody = document.getElementById('db-table-body-gps_raw_data');
+            const thead = document.getElementById('db-table-head-gps_raw_data');
+            
+            // Initialize headers
+            const headerRow = thead.querySelector('tr');
+            headerRow.innerHTML = gpsTable.columns.map(col => 
+                `<th>${col.replace(/_/g, ' ').toUpperCase()}</th>`
+            ).join('');
+            
+            // Build rows
+            tbody.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+            response.forEach((rowData, index) => {
+                const tr = createTableRow('gps_raw_data', rowData, index);
+                fragment.appendChild(tr);
+            });
+            tbody.appendChild(fragment);
+            
+            // Update stats
+            updateTableStats('gps_raw_data', response.length);
+            
+            // Scroll GPS table into view
+            const gpsSection = document.querySelector('[data-table="gps_raw_data"]').closest('.db-table-section');
+            if (gpsSection) {
+                gpsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            
+            console.log(`✅ Loaded ${response.length} GPS points into table`);
+            
+        } catch (err) {
+            console.error('Failed to load GPS points:', err);
+            alert('Failed to load GPS points');
+        } finally {
+            button.disabled = false;
+            button.textContent = '🔍 View GPS Points';
+        }
+    });
+}
+
+/**
+ * Setup View Polyline button (from gps_raw_data table)
+ */
+function setupViewPolylineButton() {
+    const button = document.getElementById('db-view-polyline-from-gps');
+    if (!button) return;
+    
+    button.addEventListener('click', async () => {
+        const selected = databaseState.selectedRow;
+        
+        if (!selected || selected.tableName !== 'gps_raw_data') {
+            console.warn('No GPS point selected');
+            return;
+        }
+        
+        const batchId = selected.data.batch_id;
+        if (!batchId) {
+            console.warn('Selected GPS point has no batch_id');
+            return;
+        }
+        
+        console.log(`🔍 Loading polyline for batch_id: ${batchId}`);
+        button.disabled = true;
+        button.textContent = '⏳ Loading...';
+        
+        try {
+            // Fetch polyline by batch_id
+            const url = `${databaseState.API_BASE}/database/cached_polylines/by-batch/${batchId}`;
+            const response = await fetchJSON(url);
+            
+            if (!response) {
+                console.warn(`No polyline found for batch_id: ${batchId}`);
+                alert('No polyline found for this GPS point');
+                return;
+            }
+            
+            console.log(`📍 Found polyline:`, response);
+            
+            // Replace polyline table data with this polyline
+            const polylineTable = databaseState.tables.cached_polylines;
+            polylineTable.data = [response];
+            polylineTable.offset = 1;
+            
+            // Rebuild polyline table
+            const tbody = document.getElementById('db-table-body-cached_polylines');
+            const thead = document.getElementById('db-table-head-cached_polylines');
+            
+            // Initialize headers
+            const headerRow = thead.querySelector('tr');
+            headerRow.innerHTML = polylineTable.columns.map(col => 
+                `<th>${col.replace(/_/g, ' ').toUpperCase()}</th>`
+            ).join('');
+            
+            // Build row
+            tbody.innerHTML = '';
+            const tr = createTableRow('cached_polylines', response, 0);
+            tbody.appendChild(tr);
+            
+            // Update stats
+            updateTableStats('cached_polylines', 1);
+            
+            // Scroll polyline table into view
+            const polylineSection = document.querySelector('[data-table="cached_polylines"]').closest('.db-table-section');
+            if (polylineSection) {
+                polylineSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            
+            // Auto-select the row
+            tr.click();
+            
+            console.log(`✅ Loaded polyline into table`);
+            
+        } catch (err) {
+            console.error('Failed to load polyline:', err);
+            alert('Failed to load polyline');
+        } finally {
+            button.disabled = false;
+            button.textContent = '🔍 View Polyline';
+        }
+    });
 }
 
 /**

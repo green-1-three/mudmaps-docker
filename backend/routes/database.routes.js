@@ -65,6 +65,77 @@ function createDatabaseRoutes(databaseInspectionService) {
         }
     });
 
+    /**
+     * GET /api/database/gps_raw_data/by-batch/:batchId
+     * Get GPS points by batch_id
+     */
+    router.get('/api/database/gps_raw_data/by-batch/:batchId', async (req, res, next) => {
+        try {
+            const { batchId } = req.params;
+            const data = await databaseInspectionService.getGPSPointsByBatch(batchId);
+            res.json(data);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    /**
+     * GET /api/database/cached_polylines/by-batch/:batchId
+     * Get cached polyline by batch_id
+     */
+    router.get('/api/database/cached_polylines/by-batch/:batchId', async (req, res, next) => {
+        try {
+            const { batchId } = req.params;
+            const data = await databaseInspectionService.getPolylineByBatch(batchId);
+            
+            if (!data) {
+                return res.status(404).json({ 
+                    error: 'Polyline not found for batch_id' 
+                });
+            }
+            
+            res.json(data);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    /**
+     * GET /api/database/gps_raw_data/by-batch/:batchId
+     * Get GPS raw data points by batch_id
+     */
+    router.get('/api/database/gps_raw_data/by-batch/:batchId', async (req, res, next) => {
+        try {
+            const { batchId } = req.params;
+            const data = await databaseInspectionService.getGPSPointsByBatch(batchId);
+
+            res.json(data);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    /**
+     * GET /api/database/cached_polylines/by-batch/:batchId
+     * Get cached polyline by batch_id
+     */
+    router.get('/api/database/cached_polylines/by-batch/:batchId', async (req, res, next) => {
+        try {
+            const { batchId } = req.params;
+            const data = await databaseInspectionService.getPolylineByBatch(batchId);
+
+            if (!data) {
+                return res.status(404).json({ 
+                    error: 'Polyline not found for this batch_id' 
+                });
+            }
+
+            res.json(data);
+        } catch (error) {
+            next(error);
+        }
+    });
+
     return router;
 }
 
