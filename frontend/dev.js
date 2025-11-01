@@ -1146,8 +1146,22 @@ function initDevPanel() {
     // Collapse functionality
     collapseBtn.addEventListener('click', () => {
         panel.classList.toggle('collapsed');
-        collapseBtn.innerHTML = panel.classList.contains('collapsed') ? '&larr;' : '&rarr;';
-        collapseBtn.title = panel.classList.contains('collapsed') ? 'Expand Panel' : 'Collapse Panel';
+        const isCollapsed = panel.classList.contains('collapsed');
+        
+        collapseBtn.innerHTML = isCollapsed ? '&larr;' : '&rarr;';
+        collapseBtn.title = isCollapsed ? 'Expand Panel' : 'Collapse Panel';
+        
+        // Update map right margin
+        const mapElement = document.getElementById('map');
+        if (mapElement) {
+            mapElement.style.right = isCollapsed ? '40px' : panel.offsetWidth + 'px';
+        }
+        
+        // Update controls position
+        const controlsElement = document.getElementById('controls');
+        if (controlsElement) {
+            controlsElement.style.right = isCollapsed ? '50px' : (panel.offsetWidth + 10) + 'px';
+        }
         
         // Update map size after collapse/expand animation
         setTimeout(() => {
