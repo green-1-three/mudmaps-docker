@@ -1151,6 +1151,15 @@ function initDevPanel() {
         collapseBtn.innerHTML = isCollapsed ? '&larr;' : '&rarr;';
         collapseBtn.title = isCollapsed ? 'Expand Panel' : 'Collapse Panel';
         
+        // When collapsed, move button outside panel so it's visible
+        if (isCollapsed) {
+            collapseBtn.classList.add('floating');
+            document.body.appendChild(collapseBtn);
+        } else {
+            collapseBtn.classList.remove('floating');
+            document.querySelector('.dev-panel-header').appendChild(collapseBtn);
+        }
+        
         // Update map right margin - when collapsed, map fills entire screen
         const mapElement = document.getElementById('map');
         if (mapElement) {

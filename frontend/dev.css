@@ -18,8 +18,7 @@ html, body {
 .back-to-public {
     position: fixed;
     left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
+    bottom: 10px;
     z-index: 2001;
     background: rgba(255, 255, 255, 0.95);
     color: #333;
@@ -38,7 +37,7 @@ html, body {
 .back-to-public:hover {
     background: rgba(255, 255, 255, 1);
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-    transform: translateY(-50%) translateX(-2px);
+    transform: translateY(-2px);
 }
 
 .back-to-public svg {
@@ -172,7 +171,7 @@ body:has(.dev-panel.collapsed) #map {
     color: #333;
 }
 
-.dev-panel.collapsed .dev-panel-collapse {
+.dev-panel-collapse.floating {
     position: fixed;
     right: 10px;
     top: 50%;
@@ -183,6 +182,11 @@ body:has(.dev-panel.collapsed) #map {
     border-radius: 50%;
     width: 40px;
     height: 40px;
+}
+
+.dev-panel-collapse.floating:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .dev-panel-body {
