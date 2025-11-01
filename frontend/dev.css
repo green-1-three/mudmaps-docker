@@ -560,6 +560,15 @@ body:has(.dev-panel.collapsed) #map {
     border-color: #218838;
 }
 
+/* Button error messages */
+.db-button-error {
+    color: #dc3545;
+    font-size: 12px;
+    margin-top: -18px;
+    margin-bottom: 20px;
+    padding-left: 4px;
+}
+
 /* Search Bar - Top Left (positioned within map, avoiding zoom buttons) */
 #search-bar {
     position: fixed;

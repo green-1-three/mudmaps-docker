@@ -571,6 +571,10 @@ function updateNavigationButtons(tableName, rowData) {
     const viewGPSBtn = document.getElementById('db-view-gps-from-polyline');
     const viewPolylineBtn = document.getElementById('db-view-polyline-from-gps');
     
+    // Clear any existing errors
+    clearButtonError('db-view-gps-from-polyline');
+    clearButtonError('db-view-polyline-from-gps');
+    
     // Enable View GPS Points button if polyline with batch_id is selected
     if (viewGPSBtn) {
         if (tableName === 'cached_polylines' && rowData.batch_id) {
@@ -650,15 +654,16 @@ function setupViewGPSButton() {
         console.log(`🔍 Loading GPS points for batch_id: ${batchId}`);
         button.disabled = true;
         button.textContent = '⏳ Loading...';
+        clearButtonError('db-view-gps-from-polyline');
         
         try {
             // Fetch GPS points by batch_id
             const url = `${databaseState.API_BASE}/database/gps_raw_data/by-batch/${batchId}`;
             const response = await fetchJSON(url);
             
-            if (!response || !response.length) {
+            if (!response || response.length === 0) {
                 console.warn(`No GPS points found for batch_id: ${batchId}`);
-                alert('No GPS points found for this polyline');
+                showButtonError('db-view-gps-from-polyline', 'No GPS points found for this polyline');
                 return;
             }
             
@@ -701,7 +706,7 @@ function setupViewGPSButton() {
             
         } catch (err) {
             console.error('Failed to load GPS points:', err);
-            alert('Failed to load GPS points');
+            showButtonError('db-view-gps-from-polyline', 'Failed to load GPS points');
         } finally {
             button.disabled = false;
             button.textContent = '🔍 View GPS Points';
@@ -733,6 +738,7 @@ function setupViewPolylineButton() {
         console.log(`🔍 Loading polyline for batch_id: ${batchId}`);
         button.disabled = true;
         button.textContent = '⏳ Loading...';
+        clearButtonError('db-view-polyline-from-gps');
         
         try {
             // Fetch polyline by batch_id
@@ -741,7 +747,7 @@ function setupViewPolylineButton() {
             
             if (!response) {
                 console.warn(`No polyline found for batch_id: ${batchId}`);
-                alert('No polyline found for this GPS point');
+                showButtonError('db-view-polyline-from-gps', 'No polyline found for this GPS point');
                 return;
             }
             
@@ -783,12 +789,45 @@ function setupViewPolylineButton() {
             
         } catch (err) {
             console.error('Failed to load polyline:', err);
-            alert('Failed to load polyline');
+            showButtonError('db-view-polyline-from-gps', 'Failed to load polyline');
         } finally {
             button.disabled = false;
             button.textContent = '🔍 View Polyline';
         }
     });
+}
+
+/**
+ * Show error message below a button
+ */
+function showButtonError(buttonId, message) {
+    const button = document.getElementById(buttonId);
+    if (!button) return;
+    
+    // Remove any existing error
+    clearButtonError(buttonId);
+    
+    // Create error element
+    const errorEl = document.createElement('div');
+    errorEl.className = 'db-button-error';
+    errorEl.id = `${buttonId}-error`;
+    errorEl.textContent = message;
+    
+    // Insert after button's parent container
+    const buttonContainer = button.closest('.db-table-actions');
+    if (buttonContainer) {
+        buttonContainer.parentNode.insertBefore(errorEl, buttonContainer.nextSibling);
+    }
+}
+
+/**
+ * Clear error message below a button
+ */
+function clearButtonError(buttonId) {
+    const errorEl = document.getElementById(`${buttonId}-error`);
+    if (errorEl) {
+        errorEl.remove();
+    }
 }
 
 /**

@@ -207,12 +207,7 @@ class DatabaseInspectionService {
             `;
             const result = await this.db.query(query, [batchId]);
 
-            return {
-                table: 'gps_raw_data',
-                batch_id: batchId,
-                rows: result.rows,
-                total: result.rows.length
-            };
+            return result.rows;
         } catch (error) {
             console.error(`Error fetching GPS points by batch_id ${batchId}:`, error);
             throw new Error(`Database query failed: ${error.message}`);
@@ -235,62 +230,7 @@ class DatabaseInspectionService {
                 return null;
             }
 
-            return {
-                table: 'cached_polylines',
-                batch_id: batchId,
-                record: result.rows[0]
-            };
-        } catch (error) {
-            console.error(`Error fetching polyline by batch_id ${batchId}:`, error);
-            throw new Error(`Database query failed: ${error.message}`);
-        }
-    }
-
-    /**
-     * Get GPS raw data points by batch_id
-     */
-    async getGPSPointsByBatch(batchId) {
-        try {
-            const query = `
-                SELECT * FROM gps_raw_data
-                WHERE batch_id = $1
-                ORDER BY recorded_at ASC
-            `;
-            const result = await this.db.query(query, [batchId]);
-
-            return {
-                table: 'gps_raw_data',
-                batch_id: batchId,
-                rows: result.rows,
-                total: result.rows.length
-            };
-        } catch (error) {
-            console.error(`Error fetching GPS points by batch_id ${batchId}:`, error);
-            throw new Error(`Database query failed: ${error.message}`);
-        }
-    }
-
-    /**
-     * Get cached polyline by batch_id
-     */
-    async getPolylineByBatch(batchId) {
-        try {
-            const query = `
-                SELECT * FROM cached_polylines
-                WHERE batch_id = $1
-                LIMIT 1
-            `;
-            const result = await this.db.query(query, [batchId]);
-
-            if (result.rows.length === 0) {
-                return null;
-            }
-
-            return {
-                table: 'cached_polylines',
-                batch_id: batchId,
-                record: result.rows[0]
-            };
+            return result.rows[0];
         } catch (error) {
             console.error(`Error fetching polyline by batch_id ${batchId}:`, error);
             throw new Error(`Database query failed: ${error.message}`);
