@@ -7,6 +7,7 @@ const { createClient } = require('redis');
 const config = require('./config/config');
 const DatabaseService = require('./services/database.service');
 const GPSProcessor = require('./services/gps-processor');
+const RemoteLogger = require('../shared/remote-logger');
 
 class Worker {
     constructor() {
@@ -15,27 +16,34 @@ class Worker {
         this.processor = new GPSProcessor(this.db, config);
         this.redis = null;
         this.isShuttingDown = false;
+
+        // Initialize remote logger
+        const backendUrl = process.env.BACKEND_URL || 'http://backend:3000/api';
+        this.logger = new RemoteLogger(backendUrl, 'Worker');
+
+        // Pass logger to processor
+        this.processor.setLogger(this.logger);
     }
 
     /**
      * Initialize the worker
      */
     async initialize() {
-        console.log('🚀 Background Worker Starting...');
-        console.log(`📊 Config: OSRM=${this.config.osrm.baseUrl}, BatchSize=${this.config.processing.batchSize}, TimeWindow=${this.config.processing.timeWindowMinutes}min, MinMovement=${this.config.processing.minMovementMeters}m`);
-        
+        this.logger.info('Background Worker Starting...');
+        this.logger.info(`Config: OSRM=${this.config.osrm.baseUrl}, BatchSize=${this.config.processing.batchSize}, TimeWindow=${this.config.processing.timeWindowMinutes}min, MinMovement=${this.config.processing.minMovementMeters}m`);
+
         // Connect to Redis
         this.redis = createClient({ url: this.config.redis.url });
-        this.redis.on('error', (err) => console.error('❌ Redis Error:', err));
+        this.redis.on('error', (err) => this.logger.error('Redis error', { error: err.message }));
         await this.redis.connect();
-        console.log('✅ Connected to Redis queue');
-        
+        this.logger.info('Connected to Redis queue');
+
         // Log initial statistics
         await this.logStatistics();
-        
+
         // Set up statistics interval
         setInterval(() => this.logStatistics(), this.config.processing.statisticsIntervalMs);
-        
+
         // Set up graceful shutdown handlers
         process.on('SIGTERM', () => this.shutdown('SIGTERM'));
         process.on('SIGINT', () => this.shutdown('SIGINT'));
@@ -45,27 +53,27 @@ class Worker {
      * Main processing loop
      */
     async run() {
-        console.log('👂 Listening for jobs on gps:queue...');
-        
+        this.logger.info('Listening for jobs on gps:queue...');
+
         while (!this.isShuttingDown) {
             try {
                 // BRPOP blocks until a job is available
                 const result = await this.redis.brPop(
-                    this.config.redis.queues.gps, 
+                    this.config.redis.queues.gps,
                     this.config.redis.popTimeout
                 );
-                
+
                 if (result) {
                     const deviceId = result.element;
-                    console.log(`\n📦 Received job for device: ${deviceId}`);
-                    
+                    this.logger.info(`Received job for device: ${deviceId}`);
+
                     await this.processor.processDevice(deviceId);
-                    
+
                     // Remove device from queued set
                     await this.redis.sRem(this.config.redis.queues.devicesQueued, deviceId);
                 }
             } catch (error) {
-                console.error('❌ Error in main loop:', error);
+                this.logger.error('Error in main loop', { error: error.message, stack: error.stack });
                 // Brief pause before retrying on error
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
@@ -78,19 +86,17 @@ class Worker {
     async logStatistics() {
         try {
             const stats = await this.db.getStatistics();
-            
-            console.log('\n📊 === STATISTICS ===');
-            console.log(`   Total GPS Points: ${stats.total_gps_points}`);
-            console.log(`   Unprocessed: ${stats.unprocessed_points}`);
-            console.log(`   Processed: ${stats.processed_points}`);
-            console.log(`   Cached Paths: ${stats.total_cached_paths}`);
-            console.log(`   Active Devices: ${stats.active_devices}`);
-            if (stats.processing_backlog_minutes) {
-                console.log(`   Backlog: ${Math.round(stats.processing_backlog_minutes)} minutes`);
-            }
-            console.log('=====================\n');
+
+            this.logger.info('=== STATISTICS ===', {
+                total_gps_points: stats.total_gps_points,
+                unprocessed: stats.unprocessed_points,
+                processed: stats.processed_points,
+                cached_paths: stats.total_cached_paths,
+                active_devices: stats.active_devices,
+                backlog_minutes: stats.processing_backlog_minutes ? Math.round(stats.processing_backlog_minutes) : null
+            });
         } catch (error) {
-            console.error('❌ Error logging statistics:', error);
+            this.logger.error('Error logging statistics', { error: error.message });
         }
     }
 
@@ -98,18 +104,24 @@ class Worker {
      * Graceful shutdown
      */
     async shutdown(signal) {
-        console.log(`\n📴 Received ${signal}, shutting down gracefully...`);
+        this.logger.warn(`Received ${signal}, shutting down gracefully...`);
         this.isShuttingDown = true;
-        
+
         try {
             if (this.redis) {
                 await this.redis.quit();
             }
             await this.db.close();
-            console.log('✅ Shutdown complete');
+
+            this.logger.info('Shutdown complete');
+
+            // Flush remaining logs before exiting
+            await this.logger.shutdown();
+
             process.exit(0);
         } catch (error) {
-            console.error('❌ Error during shutdown:', error);
+            this.logger.error('Error during shutdown', { error: error.message });
+            await this.logger.shutdown();
             process.exit(1);
         }
     }
@@ -118,12 +130,13 @@ class Worker {
 // Start the worker
 async function main() {
     const worker = new Worker();
-    
+
     try {
         await worker.initialize();
         await worker.run();
     } catch (error) {
-        console.error('❌ Fatal error:', error);
+        worker.logger.error('Fatal error', { error: error.message, stack: error.stack });
+        await worker.logger.shutdown();
         process.exit(1);
     }
 }

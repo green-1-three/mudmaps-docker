@@ -15,6 +15,15 @@ class GPSProcessor {
         this.batchProcessor = new BatchProcessor(config.processing);
         this.osrm = new OSRMService(config.osrm.baseUrl);
         this.segmentActivator = new SegmentActivationService();
+        this.logger = null; // Will be set by Worker
+    }
+
+    /**
+     * Set the logger instance
+     * @param {Object} logger - Remote logger instance
+     */
+    setLogger(logger) {
+        this.logger = logger;
     }
 
     /**
@@ -24,11 +33,15 @@ class GPSProcessor {
      */
     async processDevice(deviceId) {
         const client = await this.db.getClient();
-        
+
         try {
             await this.processDeviceData(client, deviceId);
         } catch (error) {
-            console.error(`❌ Error processing device ${deviceId}:`, error);
+            if (this.logger) {
+                this.logger.error(`Error processing device ${deviceId}`, { error: error.message, stack: error.stack });
+            } else {
+                console.error(`❌ Error processing device ${deviceId}:`, error);
+            }
         } finally {
             client.release();
         }

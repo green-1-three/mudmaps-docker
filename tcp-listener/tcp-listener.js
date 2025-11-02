@@ -2,13 +2,18 @@ const net = require('net');
 const fs = require('fs');
 const { Pool } = require('pg');
 const { createClient } = require('redis');
+const RemoteLogger = require('../shared/remote-logger');
 require('dotenv').config();
 
 // Config
 const PORT = process.env.LISTENER_PORT || 5500;
 const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://backend:3000/api';
 const logDecoded = (msg) => fs.appendFileSync('decoded_records.log', msg + '\n');
 const logError = (msg) => fs.appendFileSync('decode_errors.log', msg + '\n');
+
+// Initialize remote logger
+const logger = new RemoteLogger(BACKEND_URL, 'TCP-Listener');
 
 // Helper functions for logging with timestamp
 function timestamp() {
@@ -16,7 +21,7 @@ function timestamp() {
 }
 
 function log(message) {
-    console.log(`[${timestamp()}] ${message}`);
+    logger.info(message);
 }
 
 // Postgres connection
@@ -30,18 +35,18 @@ const pool = new Pool({
 
 // Handle pool errors to prevent crashes
 pool.on('error', (err) => {
-    console.error('❌ PostgreSQL pool error:', err.message);
+    logger.error('PostgreSQL pool error', { error: err.message, stack: err.stack });
     logError(`PostgreSQL pool error: ${err.stack}`);
     // Pool will automatically try to reconnect
 });
 
 // Redis connection
 const redis = createClient({ url: REDIS_URL });
-redis.on('error', (err) => console.error('Redis Error:', err));
+redis.on('error', (err) => logger.error('Redis error', { error: err.message }));
 redis.connect().then(() => {
-    console.log('✅ Connected to Redis');
+    logger.info('Connected to Redis');
 }).catch(err => {
-    console.error('❌ Failed to connect to Redis:', err);
+    logger.error('Failed to connect to Redis', { error: err.message });
 });
 
 // Codec 8 decoder
@@ -193,3 +198,25 @@ const server = net.createServer((socket) => {
 server.listen(PORT, '0.0.0.0', () => {
     log(`🚀 Teltonika TCP listener running on 0.0.0.0:${PORT}`);
 });
+
+// Graceful shutdown
+async function shutdown(signal) {
+    logger.warn(`Received ${signal}, shutting down gracefully`);
+
+    // Close server
+    server.close(() => {
+        logger.info('TCP server closed');
+    });
+
+    // Close connections
+    await redis.disconnect();
+    await pool.end();
+
+    // Flush remaining logs
+    await logger.shutdown();
+
+    process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
