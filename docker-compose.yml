@@ -73,9 +73,11 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - redis
+      - backend
     ports:
       - "5500:${LISTENER_PORT}"
 
@@ -91,10 +93,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - osrm
       - redis
+      - backend
     restart: unless-stopped
 
   worker-2:
@@ -109,10 +113,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - osrm
       - redis
+      - backend
     restart: unless-stopped
 
   worker-3:
@@ -127,10 +133,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - osrm
       - redis
+      - backend
     restart: unless-stopped
 
   worker-4:
@@ -145,10 +153,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - osrm
       - redis
+      - backend
     restart: unless-stopped
 
   worker-5:
@@ -163,10 +173,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - osrm
       - redis
+      - backend
     restart: unless-stopped
 
   worker-6:
@@ -181,10 +193,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - osrm
       - redis
+      - backend
     restart: unless-stopped
 
   worker-7:
@@ -199,10 +213,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - osrm
       - redis
+      - backend
     restart: unless-stopped
 
   worker-8:
@@ -217,10 +233,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - osrm
       - redis
+      - backend
     restart: unless-stopped
 
   worker-9:
@@ -235,10 +253,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - osrm
       - redis
+      - backend
     restart: unless-stopped
 
   worker-10:
@@ -253,10 +273,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       OSRM_BASE: http://osrm:5000
       REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3000/api
     depends_on:
       - postgres
       - osrm
       - redis
+      - backend
     restart: unless-stopped
 
   frontend:
