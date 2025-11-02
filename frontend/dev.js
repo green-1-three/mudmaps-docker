@@ -24,6 +24,7 @@ import { initStatistics, updateStatistics } from './dev-stats.js';
 import { initUIControls, setStyleCreators } from './dev-ui-controls.js';
 import { initDatabaseTab, highlightTableRow } from './dev-database.js';
 import { initLogsTab } from './dev-logs.js';
+import { initFrontendLogger } from './dev-frontend-logger.js';
 
 // Configuration
 let API_BASE = import.meta.env.VITE_API_BASE;
@@ -1296,6 +1297,10 @@ window.databaseTab = databaseTab;
 // Initialize logs tab
 const logsTab = initLogsTab(API_BASE);
 window.logsTab = logsTab;
+
+// Initialize frontend logger (captures console logs and sends to backend)
+const frontendLogger = initFrontendLogger(API_BASE);
+window.frontendLogger = frontendLogger;
 
 // Load initial data
 loadAllData().then(() => {

@@ -66,6 +66,43 @@ function createLogsRoutes(loggingService) {
     });
 
     /**
+     * POST /api/logs
+     * Accept logs from frontend
+     *
+     * Body:
+     * - level: Log level (error, warn, info, debug)
+     * - message: Log message
+     * - component: Component name (optional, defaults to 'Frontend')
+     * - details: Additional details (optional)
+     */
+    router.post('/api/logs', async (req, res, next) => {
+        try {
+            const { level, message, component, details } = req.body;
+
+            if (!level || !message) {
+                return res.status(400).json({
+                    error: 'Missing required fields: level and message'
+                });
+            }
+
+            // Log to the logging service
+            loggingService.log(
+                level,
+                message,
+                component || 'Frontend',
+                details || null
+            );
+
+            res.status(201).json({
+                success: true,
+                message: 'Log recorded'
+            });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    /**
      * GET /api/logs/components
      * Get list of unique component names
      */
