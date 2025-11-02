@@ -18,7 +18,7 @@ function createLogsRoutes(loggingService) {
      * - component: Filter by component name
      * - since: Filter by timestamp (ISO 8601 date string)
      */
-    router.get('/logs', async (req, res, next) => {
+    router.get('/api/logs', async (req, res, next) => {
         try {
             const options = {
                 limit: parseInt(req.query.limit) || 200,
@@ -56,7 +56,7 @@ function createLogsRoutes(loggingService) {
      * GET /api/logs/stats
      * Get statistics about logs
      */
-    router.get('/logs/stats', async (req, res, next) => {
+    router.get('/api/logs/stats', async (req, res, next) => {
         try {
             const stats = loggingService.getStats();
             res.json(stats);
@@ -69,7 +69,7 @@ function createLogsRoutes(loggingService) {
      * GET /api/logs/components
      * Get list of unique component names
      */
-    router.get('/logs/components', async (req, res, next) => {
+    router.get('/api/logs/components', async (req, res, next) => {
         try {
             const components = loggingService.getComponents();
             res.json({
@@ -85,7 +85,7 @@ function createLogsRoutes(loggingService) {
      * DELETE /api/logs
      * Clear all logs (useful for testing/debugging)
      */
-    router.delete('/logs', async (req, res, next) => {
+    router.delete('/api/logs', async (req, res, next) => {
         try {
             loggingService.clear();
             res.json({
