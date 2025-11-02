@@ -23,6 +23,7 @@ import {
 import { initStatistics, updateStatistics } from './dev-stats.js';
 import { initUIControls, setStyleCreators } from './dev-ui-controls.js';
 import { initDatabaseTab, highlightTableRow } from './dev-database.js';
+import { initLogsTab } from './dev-logs.js';
 
 // Configuration
 let API_BASE = import.meta.env.VITE_API_BASE;
@@ -1285,12 +1286,16 @@ const uiControls = initUIControls(
 window.uiControls = uiControls;
 
 // Initialize database tab
-const databaseTab = initDatabaseTab(API_BASE, { 
-    polylinesSource, 
-    segmentsSource, 
-    boundarySource 
+const databaseTab = initDatabaseTab(API_BASE, {
+    polylinesSource,
+    segmentsSource,
+    boundarySource
 });
 window.databaseTab = databaseTab;
+
+// Initialize logs tab
+const logsTab = initLogsTab(API_BASE);
+window.logsTab = logsTab;
 
 // Load initial data
 loadAllData().then(() => {

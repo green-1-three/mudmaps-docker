@@ -4,13 +4,27 @@
  */
 
 function errorHandler(err, req, res, next) {
-    // Log error details
-    console.error('Error:', {
-        message: err.message,
-        stack: err.stack,
-        path: req.path,
-        method: req.method
-    });
+    // Get logging service if available
+    const logger = req.app.locals.loggingService;
+
+    // Log to logging service (which also logs to console)
+    if (logger) {
+        logger.error(err.message, 'ErrorHandler', {
+            path: req.path,
+            method: req.method,
+            code: err.code,
+            status: err.status,
+            stack: err.stack
+        });
+    } else {
+        // Fallback to console if logging service not available
+        console.error('Error:', {
+            message: err.message,
+            stack: err.stack,
+            path: req.path,
+            method: req.method
+        });
+    }
 
     // Database connection errors
     if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {

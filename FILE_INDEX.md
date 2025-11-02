@@ -12,6 +12,7 @@ Quick reference for file locations and purposes. Keep this high-level for token 
 - `NOTES.md` - Technical debt and business notes
 - `FILE_INDEX.md` - This file - quick reference for navigating the codebase
 - `.claudeignore` - Files/directories Claude should ignore to conserve tokens
+- `.gitignore` - Git ignore rules
 
 ### Configuration
 - `docker-compose.yml` - Docker orchestration config
@@ -34,6 +35,7 @@ Main API server that serves polylines, segments, and municipality data to fronte
 ### Key Files
 - `index.js` - Server entry point
 - `app.js` - Express app setup and middleware
+- `Dockerfile` - Backend container build instructions
 - `package.json` - Backend dependencies
 
 ### Routes (`/routes`)
@@ -63,16 +65,27 @@ Main API server that serves polylines, segments, and municipality data to fronte
 
 Public-facing map showing plowed streets with time-based coloring.
 
-### Key Files
+### Public Map Files
 - `index.html` - Main HTML entry point
 - `main.js` - Map initialization and interaction logic
 - `style.css` - UI styling
+
+### Developer Interface Files
+- `dev.html` - Developer dashboard HTML
+- `dev.js` - Developer dashboard main logic
+- `dev.css` - Developer dashboard styling
+- `dev-common.js` - Shared utilities for dev interface
+- `dev-database.js` - Database inspection module
+- `dev-stats.js` - Statistics tracking module
+- `dev-ui-controls.js` - UI control toggles module
+
+### Build & Configuration
 - `vite.config.js` - Vite build configuration
 - `nginx.conf` - Frontend nginx configuration
-
-### Configuration
+- `Dockerfile` - Frontend container build instructions
 - `.env.development` - Development environment variables
 - `.env.production` - Production environment variables
+- `package.json` - Frontend dependencies
 
 ---
 
@@ -82,6 +95,7 @@ Processes GPS batches, performs map-matching via OSRM, activates segments.
 
 ### Key Files
 - `index.js` - Worker entry point
+- `Dockerfile` - Worker container build instructions
 - `package.json` - Worker dependencies
 
 ### Services (`/services`)
@@ -105,6 +119,7 @@ TCP server that receives GPS data from trackers every 30 seconds.
 
 ### Key Files
 - `tcp-listener.js` - TCP server that receives and stores GPS points
+- `Dockerfile` - TCP listener container build instructions
 - `package.json` - TCP listener dependencies
 
 ---

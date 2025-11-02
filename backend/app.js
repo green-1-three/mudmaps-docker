@@ -10,10 +10,12 @@ const DatabaseService = require('./services/database.service');
 const PolylinesService = require('./services/polylines.service');
 const SegmentsService = require('./services/segments.service');
 const DatabaseInspectionService = require('./services/database-inspection.service');
+const loggingService = require('./services/logging.service');
 const createPolylinesRoutes = require('./routes/polylines.routes');
 const createSegmentsRoutes = require('./routes/segments.routes');
 const createHealthRoutes = require('./routes/health.routes');
 const createDatabaseRoutes = require('./routes/database.routes');
+const createLogsRoutes = require('./routes/logs.routes');
 const errorHandler = require('./middleware/error-handler');
 
 // Create Express app
@@ -38,12 +40,17 @@ function createApp() {
     app.use(createSegmentsRoutes(segmentsService));
     app.use(createHealthRoutes(database));
     app.use(createDatabaseRoutes(databaseInspectionService));
+    app.use(createLogsRoutes(loggingService));
 
     // Error handler (must be last)
     app.use(errorHandler);
 
     // Store services for graceful shutdown
     app.locals.database = database;
+    app.locals.loggingService = loggingService;
+
+    // Log application startup
+    loggingService.info('MudMaps backend application initialized', 'Application');
 
     return app;
 }
