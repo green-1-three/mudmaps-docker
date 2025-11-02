@@ -23,11 +23,11 @@ function createApp() {
     const app = express();
 
     // Middleware
-    app.use(cors({ 
-        origin: config.server.corsOrigin, 
-        credentials: false 
+    app.use(cors({
+        origin: config.server.corsOrigin,
+        credentials: false
     }));
-    app.use(express.json());
+    app.use(express.json({ limit: '1mb' })); // Increased limit for log payloads
 
     // Initialize services
     const database = new DatabaseService(config.postgres);
