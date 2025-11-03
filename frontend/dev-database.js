@@ -341,14 +341,15 @@ function setupDatabaseEventListeners() {
             }
 
             reprocessBtn.disabled = true;
-            reprocessBtn.textContent = '⏳ Processing...';
+            reprocessBtn.textContent = '⏳ Starting...';
 
             const progressDiv = document.getElementById('reprocess-progress');
             const progressContent = document.getElementById('reprocess-progress-content');
             progressDiv.style.display = 'block';
-            progressContent.innerHTML = 'Starting reprocessing...';
+            progressContent.innerHTML = 'Starting reprocessing job...';
 
             try {
+                // Start the job
                 const body = limit ? { limit } : {};
                 const response = await fetch(`${databaseState.API_BASE}/operations/reprocess-polylines`, {
                     method: 'POST',
@@ -358,25 +359,23 @@ function setupDatabaseEventListeners() {
                     body: JSON.stringify(body)
                 });
 
-                const result = await response.json();
+                const startResult = await response.json();
 
-                if (result.success) {
-                    progressContent.innerHTML = `
-                        ✅ <strong>Success!</strong><br>
-                        • Processed: ${result.processed} polylines<br>
-                        • Segments Activated: ${result.segmentsActivated} updates<br>
-                        • Message: ${result.message}
-                        ${result.errors ? `<br>• Errors: ${result.errors.length}` : ''}
-                    `;
-
-                    // Reload stats
-                    loadReprocessStats();
-                } else {
-                    progressContent.innerHTML = `❌ <strong>Error:</strong> ${result.message}`;
+                if (!startResult.success || !startResult.jobId) {
+                    progressContent.innerHTML = `❌ <strong>Error:</strong> ${startResult.message || 'Failed to start job'}`;
+                    reprocessBtn.disabled = false;
+                    reprocessBtn.textContent = '▶ Start Reprocessing';
+                    return;
                 }
+
+                // Poll for job status
+                const jobId = startResult.jobId;
+                progressContent.innerHTML = `Job started: ${jobId}<br>Checking status...`;
+
+                pollJobStatus(jobId, progressContent, reprocessBtn);
+
             } catch (error) {
                 progressContent.innerHTML = `❌ <strong>Error:</strong> ${error.message}`;
-            } finally {
                 reprocessBtn.disabled = false;
                 reprocessBtn.textContent = '▶ Start Reprocessing';
             }
@@ -964,6 +963,80 @@ function clearButtonError(buttonId) {
     if (errorEl) {
         errorEl.remove();
     }
+}
+
+/**
+ * Poll job status until completion
+ */
+async function pollJobStatus(jobId, progressContent, reprocessBtn) {
+    const pollInterval = 1000; // Poll every second
+    let attempts = 0;
+    const maxAttempts = 600; // Max 10 minutes
+
+    const poll = async () => {
+        attempts++;
+
+        if (attempts > maxAttempts) {
+            progressContent.innerHTML = `❌ <strong>Timeout:</strong> Job took too long. Check backend logs for status.`;
+            reprocessBtn.disabled = false;
+            reprocessBtn.textContent = '▶ Start Reprocessing';
+            return;
+        }
+
+        try {
+            const response = await fetchJSON(`${databaseState.API_BASE}/operations/jobs/${jobId}`);
+
+            if (!response) {
+                progressContent.innerHTML = `❌ <strong>Error:</strong> Job not found`;
+                reprocessBtn.disabled = false;
+                reprocessBtn.textContent = '▶ Start Reprocessing';
+                return;
+            }
+
+            const { status, progress, result, error } = response;
+
+            // Update progress display
+            if (status === 'running') {
+                const percentage = progress.percentage || 0;
+                const current = progress.current || 0;
+                const total = progress.total || 0;
+
+                progressContent.innerHTML = `
+                    ⏳ <strong>Processing...</strong><br>
+                    • Progress: ${current} / ${total} polylines (${percentage}%)<br>
+                    • Status: Running
+                `;
+
+                // Continue polling
+                setTimeout(poll, pollInterval);
+            } else if (status === 'completed') {
+                progressContent.innerHTML = `
+                    ✅ <strong>Success!</strong><br>
+                    • Processed: ${result.processed} polylines<br>
+                    • Segments Activated: ${result.segmentsActivated} updates<br>
+                    • Message: ${result.message}
+                    ${result.errors ? `<br>• Errors: ${result.errors.length}` : ''}
+                `;
+
+                reprocessBtn.disabled = false;
+                reprocessBtn.textContent = '▶ Start Reprocessing';
+
+                // Reload stats
+                loadReprocessStats();
+            } else if (status === 'failed') {
+                progressContent.innerHTML = `❌ <strong>Error:</strong> ${error || 'Job failed'}`;
+                reprocessBtn.disabled = false;
+                reprocessBtn.textContent = '▶ Start Reprocessing';
+            }
+        } catch (err) {
+            progressContent.innerHTML = `❌ <strong>Error:</strong> ${err.message}`;
+            reprocessBtn.disabled = false;
+            reprocessBtn.textContent = '▶ Start Reprocessing';
+        }
+    };
+
+    // Start polling
+    poll();
 }
 
 /**

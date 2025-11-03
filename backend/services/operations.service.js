@@ -3,6 +3,8 @@
  * Handles database operations and maintenance tasks
  */
 
+const jobTracker = require('./job-tracker.service');
+
 class OperationsService {
     constructor(databaseService, logger) {
         this.db = databaseService;
@@ -10,12 +12,41 @@ class OperationsService {
     }
 
     /**
+     * Start reprocessing job asynchronously
+     * @param {number} limit - Maximum number of polylines to process (optional)
+     * @param {number} offset - Offset for pagination (default: 0)
+     * @returns {string} Job ID
+     */
+    startReprocessJob(limit = null, offset = 0) {
+        const jobId = jobTracker.createJob('reprocess-polylines', { limit, offset });
+
+        // Run in background
+        this.reprocessPolylines(jobId, limit, offset).catch(error => {
+            if (this.logger) {
+                this.logger.error(`Background reprocess job ${jobId} failed: ${error.message}`);
+            }
+        });
+
+        return jobId;
+    }
+
+    /**
+     * Get job status
+     * @param {string} jobId - Job ID
+     * @returns {Object|null} Job status
+     */
+    getJobStatus(jobId) {
+        return jobTracker.getJob(jobId);
+    }
+
+    /**
      * Reprocess cached polylines to activate road segments
+     * @param {string} jobId - Job ID for tracking progress
      * @param {number} limit - Maximum number of polylines to process (optional)
      * @param {number} offset - Offset for pagination (default: 0)
      * @returns {Promise<Object>} Result with stats
      */
-    async reprocessPolylines(limit = null, offset = 0) {
+    async reprocessPolylines(jobId, limit = null, offset = 0) {
         const client = await this.db.pool.connect();
 
         if (this.logger) {
@@ -53,17 +84,22 @@ class OperationsService {
                 this.logger.info(`Found ${polylines.length} polylines to reprocess`);
             }
 
+            // Update job with total count
+            jobTracker.updateProgress(jobId, 0, polylines.length);
+
             if (polylines.length === 0) {
                 await client.query('COMMIT');
                 if (this.logger) {
                     this.logger.info('No polylines to process');
                 }
-                return {
+                const result = {
                     success: true,
                     processed: 0,
                     segmentsActivated: 0,
                     message: 'No polylines to process'
                 };
+                jobTracker.completeJob(jobId, result);
+                return result;
             }
 
             let totalSegmentsActivated = 0;
@@ -155,6 +191,11 @@ class OperationsService {
                     }
 
                     processedCount++;
+
+                    // Update progress every 10 polylines
+                    if (processedCount % 10 === 0 || processedCount === polylines.length) {
+                        jobTracker.updateProgress(jobId, processedCount, polylines.length);
+                    }
                 } catch (error) {
                     if (this.logger) {
                         this.logger.error(`Error processing polyline ${polyline.id}: ${error.message}`);
@@ -172,7 +213,7 @@ class OperationsService {
                 this.logger.info(`Reprocessing complete - Processed: ${processedCount}, Segments activated: ${totalSegmentsActivated}, Errors: ${errors.length}`);
             }
 
-            return {
+            const result = {
                 success: true,
                 processed: processedCount,
                 segmentsActivated: totalSegmentsActivated,
@@ -180,11 +221,15 @@ class OperationsService {
                 message: `Processed ${processedCount} polylines, activated ${totalSegmentsActivated} segment updates`
             };
 
+            jobTracker.completeJob(jobId, result);
+            return result;
+
         } catch (error) {
             await client.query('ROLLBACK');
             if (this.logger) {
                 this.logger.error(`Reprocessing failed: ${error.message}`);
             }
+            jobTracker.failJob(jobId, error);
             throw error;
         } finally {
             client.release();

@@ -8,16 +8,44 @@ const express = require('express');
 function createOperationsRoutes(operationsService) {
     const router = express.Router();
 
-    // Reprocess all cached polylines
+    // Start reprocess job (returns immediately with job ID)
     router.post('/api/operations/reprocess-polylines', async (req, res) => {
         try {
             const { limit, offset = 0 } = req.body;
 
-            const result = await operationsService.reprocessPolylines(limit, offset);
+            const jobId = operationsService.startReprocessJob(limit, offset);
 
-            res.json(result);
+            res.json({
+                success: true,
+                jobId,
+                message: 'Reprocessing job started'
+            });
         } catch (error) {
             console.error('POST /api/operations/reprocess-polylines error:', error);
+            res.status(500).json({
+                error: 'operation_failed',
+                message: error.message
+            });
+        }
+    });
+
+    // Get job status
+    router.get('/api/operations/jobs/:jobId', async (req, res) => {
+        try {
+            const { jobId } = req.params;
+
+            const job = operationsService.getJobStatus(jobId);
+
+            if (!job) {
+                return res.status(404).json({
+                    error: 'job_not_found',
+                    message: 'Job not found'
+                });
+            }
+
+            res.json(job);
+        } catch (error) {
+            console.error('GET /api/operations/jobs/:jobId error:', error);
             res.status(500).json({
                 error: 'operation_failed',
                 message: error.message
