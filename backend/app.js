@@ -30,7 +30,7 @@ function createApp() {
         origin: config.server.corsOrigin,
         credentials: false
     }));
-    app.use(express.json({ limit: '1mb' })); // Increased limit for log payloads
+    app.use(express.json({ limit: '10mb' })); // Increased limit for log payloads
 
     // Create Winston logger for backend services
     // Create custom transport that writes directly to loggingService (avoid HTTP circular dependency)
