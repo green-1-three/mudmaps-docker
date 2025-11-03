@@ -4,6 +4,7 @@
  */
 
 const { createClient } = require('redis');
+const os = require('os');
 const config = require('./config/config');
 const DatabaseService = require('./services/database.service');
 const GPSProcessor = require('./services/gps-processor');
@@ -17,9 +18,10 @@ class Worker {
         this.redis = null;
         this.isShuttingDown = false;
 
-        // Initialize Winston logger
+        // Initialize Winston logger with unique worker ID
         const backendUrl = process.env.BACKEND_URL || 'http://backend:3000/api';
-        this.logger = createLogger('Worker', backendUrl);
+        const workerName = `Worker-${process.env.HOSTNAME || os.hostname()}`;
+        this.logger = createLogger(workerName, backendUrl);
 
         // Pass logger to processor
         this.processor.setLogger(this.logger);
