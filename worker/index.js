@@ -7,7 +7,7 @@ const { createClient } = require('redis');
 const config = require('./config/config');
 const DatabaseService = require('./services/database.service');
 const GPSProcessor = require('./services/gps-processor');
-const RemoteLogger = require('../shared/remote-logger');
+const RemoteLogger = require('./shared/remote-logger');
 
 class Worker {
     constructor() {

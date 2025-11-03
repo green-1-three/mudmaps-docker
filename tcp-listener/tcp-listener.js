@@ -2,7 +2,7 @@ const net = require('net');
 const fs = require('fs');
 const { Pool } = require('pg');
 const { createClient } = require('redis');
-const RemoteLogger = require('../shared/remote-logger');
+const RemoteLogger = require('./shared/remote-logger');
 require('dotenv').config();
 
 // Config
