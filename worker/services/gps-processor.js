@@ -188,6 +188,10 @@ class GPSProcessor {
             // Update processing log - success
             await this.db.logProcessing({
                 batchId,
+                deviceId,
+                startTime,
+                endTime,
+                coordinateCount: newPointsInBatch.length,
                 status: 'completed',
                 osrmCalls: 1,
                 osrmSuccessRate: 1.0
@@ -211,6 +215,10 @@ class GPSProcessor {
             // Update processing log - failure
             await this.db.logProcessing({
                 batchId,
+                deviceId,
+                startTime,
+                endTime,
+                coordinateCount: newPointsInBatch.length,
                 status: 'failed',
                 errorMessage: error.message,
                 errorCode: error.code || 'UNKNOWN'
