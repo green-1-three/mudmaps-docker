@@ -33,27 +33,31 @@ class LoggingService {
             this.logs = this.logs.slice(0, this.maxLogs);
         }
 
-        // Also output to console for real-time monitoring
-        const timestamp = new Date().toLocaleString();
-        const componentStr = component ? `[${component}]` : '';
-        const detailsStr = details ? ` ${JSON.stringify(details)}` : '';
+        // Only output to console for Backend's own logs (not remote logs from Workers/TCP-Listener)
+        // This prevents duplicate log entries when viewing multiple containers
+        if (!component || component === 'Backend') {
+            const timestamp = new Date().toLocaleString();
+            const componentStr = component ? `[${component}]` : '';
+            const detailsStr = details ? ` ${JSON.stringify(details)}` : '';
 
-        switch (level.toLowerCase()) {
-            case 'error':
-                console.error(`❌ ${timestamp} ${componentStr} ${message}${detailsStr}`);
-                break;
-            case 'warn':
-                console.warn(`⚠️  ${timestamp} ${componentStr} ${message}${detailsStr}`);
-                break;
-            case 'info':
-                console.info(`ℹ️  ${timestamp} ${componentStr} ${message}${detailsStr}`);
-                break;
-            case 'debug':
-                console.log(`🐛 ${timestamp} ${componentStr} ${message}${detailsStr}`);
-                break;
-            default:
-                console.log(`📝 ${timestamp} ${componentStr} ${message}${detailsStr}`);
+            switch (level.toLowerCase()) {
+                case 'error':
+                    console.error(`❌ ${timestamp} ${componentStr} ${message}${detailsStr}`);
+                    break;
+                case 'warn':
+                    console.warn(`⚠️  ${timestamp} ${componentStr} ${message}${detailsStr}`);
+                    break;
+                case 'info':
+                    console.info(`ℹ️  ${timestamp} ${componentStr} ${message}${detailsStr}`);
+                    break;
+                case 'debug':
+                    console.log(`🐛 ${timestamp} ${componentStr} ${message}${detailsStr}`);
+                    break;
+                default:
+                    console.log(`📝 ${timestamp} ${componentStr} ${message}${detailsStr}`);
+            }
         }
+        // Remote logs (Worker, TCP-Listener, etc.) are stored in memory but not echoed to console
     }
 
     /**
