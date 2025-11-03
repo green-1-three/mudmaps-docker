@@ -12,6 +12,27 @@ class OperationsService {
     }
 
     /**
+     * Determine direction based on bearing comparison
+     * @param {number} polylineBearing - Bearing of the polyline
+     * @param {number} segmentBearing - Bearing of the segment
+     * @returns {string} 'forward' or 'reverse'
+     */
+    determineDirection(polylineBearing, segmentBearing) {
+        // Handle null bearings
+        if (polylineBearing == null || segmentBearing == null) {
+            return 'forward'; // Default to forward if unknown
+        }
+
+        // Calculate angular difference
+        const diff = Math.abs(polylineBearing - segmentBearing);
+        const normalizedDiff = diff > 180 ? 360 - diff : diff;
+
+        // Within 45 degrees = same direction (forward)
+        // More than 45 degrees = opposite direction (reverse)
+        return normalizedDiff <= 45 ? 'forward' : 'reverse';
+    }
+
+    /**
      * Start reprocessing job asynchronously
      * @param {number} limit - Maximum number of polylines to process (optional)
      * @param {number} offset - Offset for pagination (default: 0)
@@ -138,12 +159,8 @@ class OperationsService {
 
                     // Process each intersecting segment
                     for (const segment of segments) {
-                        // Determine direction
-                        const directionResult = await client.query(
-                            `SELECT determine_direction($1, $2) as direction`,
-                            [polyline.bearing, segment.segment_bearing]
-                        );
-                        const direction = directionResult.rows[0].direction;
+                        // Determine direction (in JavaScript to avoid 13k+ DB queries)
+                        const direction = this.determineDirection(polyline.bearing, segment.segment_bearing);
                         const timestampColumn = direction === 'forward' ? 'last_plowed_forward' : 'last_plowed_reverse';
 
                         // Update segment only if this polyline's timestamp is newer
