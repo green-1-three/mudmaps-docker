@@ -26,11 +26,12 @@ class OperationsService {
             await client.query('BEGIN');
 
             // Get polylines to reprocess
+            // Convert geometry to WKT in the query so we can use it in ST_GeomFromText later
             let query = `
                 SELECT
                     id,
                     device_id,
-                    geometry,
+                    ST_AsText(geometry) as geometry_wkt,
                     bearing,
                     end_time
                 FROM cached_polylines
@@ -72,12 +73,8 @@ class OperationsService {
             // Process each polyline
             for (const polyline of polylines) {
                 try {
-                    // Convert geometry to WKT
-                    const wktResult = await client.query(
-                        `SELECT ST_AsText(ST_GeomFromText($1, 4326)) as wkt`,
-                        [polyline.geometry]
-                    );
-                    const polylineWKT = wktResult.rows[0].wkt;
+                    // Geometry is already converted to WKT in the SELECT query above
+                    const polylineWKT = polyline.geometry_wkt;
 
                     // Find intersecting segments (same logic as worker)
                     const segmentsResult = await client.query(`
