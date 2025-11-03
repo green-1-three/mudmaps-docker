@@ -24,16 +24,27 @@ class SegmentActivationService {
     async activateSegments(client, polylineId, deviceId, polylineWKT, polylineBearing, timestamp) {
         try {
             // Find all road segments that intersect with this polyline
+            // Use ST_DWithin with 2m buffer to catch segments that are close but don't exactly intersect
+            // This handles GPS/map-matching precision issues
             const segmentsResult = await client.query(`
-                SELECT 
+                SELECT
                     rs.id,
                     rs.bearing as segment_bearing,
                     rs.municipality_id,
                     rs.street_name,
-                    ST_Length(ST_Intersection(rs.geometry, ST_GeomFromText($1, 4326))::geography) / 
-                    ST_Length(rs.geometry::geography) * 100 as overlap_percentage
+                    CASE
+                        WHEN ST_Intersects(rs.geometry, ST_GeomFromText($1, 4326)) THEN
+                            -- Exact intersection - calculate actual overlap
+                            ST_Length(ST_Intersection(rs.geometry, ST_GeomFromText($1, 4326))::geography) /
+                            ST_Length(rs.geometry::geography) * 100
+                        ELSE
+                            -- Within 2m buffer but not intersecting - estimate overlap based on distance
+                            -- Closer = higher percentage (2m away = 0%, touching = 100%)
+                            (1.0 - ST_Distance(rs.geometry::geography, ST_GeomFromText($1, 4326)::geography) / 2.0) *
+                            ST_Length(rs.geometry::geography) / ST_Length(rs.geometry::geography) * 100
+                    END as overlap_percentage
                 FROM road_segments rs
-                WHERE ST_Intersects(rs.geometry, ST_GeomFromText($1, 4326))
+                WHERE ST_DWithin(rs.geometry::geography, ST_GeomFromText($1, 4326)::geography, 2)
             `, [polylineWKT]);
             
             if (segmentsResult.rows.length === 0) {
