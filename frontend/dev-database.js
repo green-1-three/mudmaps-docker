@@ -73,114 +73,170 @@ function createDatabaseTabHTML() {
     const tabContent = document.createElement('div');
     tabContent.className = 'dev-tab-content';
     tabContent.setAttribute('data-tab-content', 'database');
-    
+
     tabContent.innerHTML = `
-        <h3>Database Inspector</h3>
-        
-        <div class="db-actions" style="margin-bottom: 15px;">
-            <button id="db-refresh-btn" class="db-btn">🔄 Refresh All</button>
-            <button id="db-auto-refresh-btn" class="db-btn">Auto-Refresh: OFF</button>
+        <h3>Database</h3>
+
+        <!-- Sub-tabs for Database tab -->
+        <div class="db-sub-tabs" style="display: flex; gap: 5px; margin-bottom: 15px; border-bottom: 1px solid #ddd; padding-bottom: 5px;">
+            <button class="db-sub-tab active" data-db-subtab="inspector">Inspector</button>
+            <button class="db-sub-tab" data-db-subtab="operations">Operations</button>
         </div>
-        
-        <!-- Road Segments Table -->
-        <div class="db-table-section">
-            <h4>Road Segments</h4>
-            <div class="db-stats">
-                <span id="db-row-count-road_segments">Rows: 0</span>
-                <span id="db-last-updated-road_segments">Last Updated: Never</span>
+
+        <!-- Inspector Sub-tab -->
+        <div class="db-sub-tab-content active" data-db-subtab-content="inspector">
+            <div class="db-actions" style="margin-bottom: 15px;">
+                <button id="db-refresh-btn" class="db-btn">🔄 Refresh All</button>
+                <button id="db-auto-refresh-btn" class="db-btn">Auto-Refresh: OFF</button>
             </div>
-            <div class="db-table-container" data-table="road_segments">
-                <table class="db-table">
-                    <thead id="db-table-head-road_segments">
-                        <tr></tr>
-                    </thead>
-                    <tbody id="db-table-body-road_segments">
-                        <tr>
-                            <td colspan="100%" class="db-loading">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
+
+            <!-- Road Segments Table -->
+            <div class="db-table-section">
+                <h4>Road Segments</h4>
+                <div class="db-stats">
+                    <span id="db-row-count-road_segments">Rows: 0</span>
+                    <span id="db-last-updated-road_segments">Last Updated: Never</span>
+                </div>
+                <div class="db-table-container" data-table="road_segments">
+                    <table class="db-table">
+                        <thead id="db-table-head-road_segments">
+                            <tr></tr>
+                        </thead>
+                        <tbody id="db-table-body-road_segments">
+                            <tr>
+                                <td colspan="100%" class="db-loading">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="db-table-actions">
+                    <button id="db-copy-road_segments" class="db-action-btn">📋 Copy Visible Data</button>
+                </div>
             </div>
-            <div class="db-table-actions">
-                <button id="db-copy-road_segments" class="db-action-btn">📋 Copy Visible Data</button>
+
+            <!-- Cached Polylines Table -->
+            <div class="db-table-section">
+                <h4>Cached Polylines</h4>
+                <div class="db-stats">
+                    <span id="db-row-count-cached_polylines">Rows: 0</span>
+                    <span id="db-last-updated-cached_polylines">Last Updated: Never</span>
+                </div>
+                <div class="db-table-container" data-table="cached_polylines">
+                    <table class="db-table">
+                        <thead id="db-table-head-cached_polylines">
+                            <tr></tr>
+                        </thead>
+                        <tbody id="db-table-body-cached_polylines">
+                            <tr>
+                                <td colspan="100%" class="db-loading">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="db-table-actions">
+                    <button id="db-view-gps-from-polyline" class="db-action-btn" disabled>🔍 View GPS Points</button>
+                    <button id="db-copy-cached_polylines" class="db-action-btn">📋 Copy Visible Data</button>
+                </div>
+            </div>
+
+            <!-- GPS Raw Data Table -->
+            <div class="db-table-section">
+                <h4>GPS Raw Data</h4>
+                <div class="db-stats">
+                    <span id="db-row-count-gps_raw_data">Rows: 0</span>
+                    <span id="db-last-updated-gps_raw_data">Last Updated: Never</span>
+                </div>
+                <div class="db-table-container" data-table="gps_raw_data">
+                    <table class="db-table">
+                        <thead id="db-table-head-gps_raw_data">
+                            <tr></tr>
+                        </thead>
+                        <tbody id="db-table-body-gps_raw_data">
+                            <tr>
+                                <td colspan="100%" class="db-loading">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="db-table-actions">
+                    <button id="db-view-polyline-from-gps" class="db-action-btn" disabled>🔍 View Polyline</button>
+                    <button id="db-copy-gps_raw_data" class="db-action-btn">📋 Copy Visible Data</button>
+                </div>
+            </div>
+
+            <!-- Segment Updates Table -->
+            <div class="db-table-section">
+                <h4>Segment Updates</h4>
+                <div class="db-stats">
+                    <span id="db-row-count-segment_updates">Rows: 0</span>
+                    <span id="db-last-updated-segment_updates">Last Updated: Never</span>
+                </div>
+                <div class="db-table-container" data-table="segment_updates">
+                    <table class="db-table">
+                        <thead id="db-table-head-segment_updates">
+                            <tr></tr>
+                        </thead>
+                        <tbody id="db-table-body-segment_updates">
+                            <tr>
+                                <td colspan="100%" class="db-loading">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="db-table-actions">
+                    <button id="db-copy-segment_updates" class="db-action-btn">📋 Copy Visible Data</button>
+                </div>
             </div>
         </div>
-        
-        <!-- Cached Polylines Table -->
-        <div class="db-table-section">
-            <h4>Cached Polylines</h4>
-            <div class="db-stats">
-                <span id="db-row-count-cached_polylines">Rows: 0</span>
-                <span id="db-last-updated-cached_polylines">Last Updated: Never</span>
+
+        <!-- Operations Sub-tab -->
+        <div class="db-sub-tab-content" data-db-subtab-content="operations">
+            <h4>Database Operations</h4>
+            <p style="color: #666; margin-bottom: 20px;">Perform maintenance and bulk operations on the database.</p>
+
+            <div class="operation-section" style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                <h5 style="margin-top: 0;">Reprocess Cached Polylines</h5>
+                <p style="color: #666; font-size: 13px; margin-bottom: 15px;">
+                    Re-run segment activation for all existing polylines. This will activate road segments
+                    that were missed due to strict intersection logic. Uses the updated 2m buffer detection.
+                </p>
+
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                    <label for="reprocess-limit" style="font-size: 13px;">Process:</label>
+                    <select id="reprocess-limit" style="padding: 5px;">
+                        <option value="">All polylines</option>
+                        <option value="100">100 polylines</option>
+                        <option value="500">500 polylines</option>
+                        <option value="1000">1000 polylines</option>
+                    </select>
+                    <button id="reprocess-polylines-btn" class="db-btn" style="background: #1976d2; color: white; padding: 8px 15px;">
+                        ▶ Start Reprocessing
+                    </button>
+                </div>
+
+                <div id="reprocess-stats" style="background: white; padding: 10px; border-radius: 3px; font-size: 13px; display: none;">
+                    <div><strong>Database Stats:</strong></div>
+                    <div id="reprocess-stats-content" style="margin-top: 5px; line-height: 1.6;"></div>
+                </div>
+
+                <div id="reprocess-progress" style="margin-top: 15px; display: none;">
+                    <div style="background: white; padding: 10px; border-radius: 3px; font-size: 13px;">
+                        <div><strong>Progress:</strong></div>
+                        <div id="reprocess-progress-content" style="margin-top: 5px; line-height: 1.6;"></div>
+                    </div>
+                </div>
             </div>
-            <div class="db-table-container" data-table="cached_polylines">
-                <table class="db-table">
-                    <thead id="db-table-head-cached_polylines">
-                        <tr></tr>
-                    </thead>
-                    <tbody id="db-table-body-cached_polylines">
-                        <tr>
-                            <td colspan="100%" class="db-loading">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="db-table-actions">
-                <button id="db-view-gps-from-polyline" class="db-action-btn" disabled>🔍 View GPS Points</button>
-                <button id="db-copy-cached_polylines" class="db-action-btn">📋 Copy Visible Data</button>
-            </div>
-        </div>
-        
-        <!-- GPS Raw Data Table -->
-        <div class="db-table-section">
-            <h4>GPS Raw Data</h4>
-            <div class="db-stats">
-                <span id="db-row-count-gps_raw_data">Rows: 0</span>
-                <span id="db-last-updated-gps_raw_data">Last Updated: Never</span>
-            </div>
-            <div class="db-table-container" data-table="gps_raw_data">
-                <table class="db-table">
-                    <thead id="db-table-head-gps_raw_data">
-                        <tr></tr>
-                    </thead>
-                    <tbody id="db-table-body-gps_raw_data">
-                        <tr>
-                            <td colspan="100%" class="db-loading">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="db-table-actions">
-                <button id="db-view-polyline-from-gps" class="db-action-btn" disabled>🔍 View Polyline</button>
-                <button id="db-copy-gps_raw_data" class="db-action-btn">📋 Copy Visible Data</button>
-            </div>
-        </div>
-        
-        <!-- Segment Updates Table -->
-        <div class="db-table-section">
-            <h4>Segment Updates</h4>
-            <div class="db-stats">
-                <span id="db-row-count-segment_updates">Rows: 0</span>
-                <span id="db-last-updated-segment_updates">Last Updated: Never</span>
-            </div>
-            <div class="db-table-container" data-table="segment_updates">
-                <table class="db-table">
-                    <thead id="db-table-head-segment_updates">
-                        <tr></tr>
-                    </thead>
-                    <tbody id="db-table-body-segment_updates">
-                        <tr>
-                            <td colspan="100%" class="db-loading">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="db-table-actions">
-                <button id="db-copy-segment_updates" class="db-action-btn">📋 Copy Visible Data</button>
+
+            <div class="operation-section" style="background: #fff3cd; padding: 15px; border-radius: 5px; border: 1px solid #ffc107;">
+                <h5 style="margin-top: 0; color: #856404;">⚠️ Warning</h5>
+                <p style="color: #856404; font-size: 13px; margin: 0;">
+                    These operations can take several minutes for large datasets and may impact system performance.
+                    Make sure no critical operations are running before proceeding.
+                </p>
             </div>
         </div>
     `;
-    
+
     // Add to the dev panel body
     const devPanelBody = document.querySelector('.dev-panel-body');
     if (devPanelBody) {
@@ -246,6 +302,86 @@ function setupDatabaseEventListeners() {
     // Navigation buttons - view related data
     setupViewGPSButton();
     setupViewPolylineButton();
+
+    // Sub-tab switching
+    const subTabs = document.querySelectorAll('.db-sub-tab');
+    subTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const subtabName = tab.dataset.dbSubtab;
+
+            // Update active sub-tab button
+            subTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            // Update active sub-tab content
+            document.querySelectorAll('.db-sub-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            const targetContent = document.querySelector(`[data-db-subtab-content="${subtabName}"]`);
+            if (targetContent) {
+                targetContent.classList.add('active');
+
+                // Load stats when Operations tab is opened
+                if (subtabName === 'operations') {
+                    loadReprocessStats();
+                }
+            }
+        });
+    });
+
+    // Reprocess polylines button
+    const reprocessBtn = document.getElementById('reprocess-polylines-btn');
+    if (reprocessBtn) {
+        reprocessBtn.addEventListener('click', async () => {
+            const limitSelect = document.getElementById('reprocess-limit');
+            const limit = limitSelect.value ? parseInt(limitSelect.value) : null;
+
+            if (!confirm(`Are you sure you want to reprocess ${limit ? limit + ' polylines' : 'ALL polylines'}? This may take several minutes.`)) {
+                return;
+            }
+
+            reprocessBtn.disabled = true;
+            reprocessBtn.textContent = '⏳ Processing...';
+
+            const progressDiv = document.getElementById('reprocess-progress');
+            const progressContent = document.getElementById('reprocess-progress-content');
+            progressDiv.style.display = 'block';
+            progressContent.innerHTML = 'Starting reprocessing...';
+
+            try {
+                const body = limit ? { limit } : {};
+                const response = await fetch(`${databaseState.API_BASE}/operations/reprocess-polylines`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    progressContent.innerHTML = `
+                        ✅ <strong>Success!</strong><br>
+                        • Processed: ${result.processed} polylines<br>
+                        • Segments Activated: ${result.segmentsActivated} updates<br>
+                        • Message: ${result.message}
+                        ${result.errors ? `<br>• Errors: ${result.errors.length}` : ''}
+                    `;
+
+                    // Reload stats
+                    loadReprocessStats();
+                } else {
+                    progressContent.innerHTML = `❌ <strong>Error:</strong> ${result.message}`;
+                }
+            } catch (error) {
+                progressContent.innerHTML = `❌ <strong>Error:</strong> ${error.message}`;
+            } finally {
+                reprocessBtn.disabled = false;
+                reprocessBtn.textContent = '▶ Start Reprocessing';
+            }
+        });
+    }
 }
 
 /**
@@ -827,6 +963,42 @@ function clearButtonError(buttonId) {
     const errorEl = document.getElementById(`${buttonId}-error`);
     if (errorEl) {
         errorEl.remove();
+    }
+}
+
+/**
+ * Load reprocess statistics
+ */
+async function loadReprocessStats() {
+    const statsDiv = document.getElementById('reprocess-stats');
+    const statsContent = document.getElementById('reprocess-stats-content');
+
+    if (!statsDiv || !statsContent) return;
+
+    statsDiv.style.display = 'block';
+    statsContent.innerHTML = 'Loading statistics...';
+
+    try {
+        const response = await fetchJSON(`${databaseState.API_BASE}/operations/reprocess-status`);
+
+        if (response) {
+            const { polylines, segments } = response;
+
+            statsContent.innerHTML = `
+                <strong>Polylines:</strong><br>
+                • Total: ${polylines.total_polylines}<br>
+                • With Geometry: ${polylines.polylines_with_geometry}<br>
+                • Unique Devices: ${polylines.unique_devices}<br>
+                • Date Range: ${polylines.oldest_polyline ? new Date(polylines.oldest_polyline).toLocaleDateString() : 'N/A'}
+                  to ${polylines.newest_polyline ? new Date(polylines.newest_polyline).toLocaleDateString() : 'N/A'}<br>
+                <br>
+                <strong>Road Segments:</strong><br>
+                • Total: ${segments.total_segments}<br>
+                • Activated: ${segments.activated_segments} (${((segments.activated_segments / segments.total_segments) * 100).toFixed(1)}%)
+            `;
+        }
+    } catch (error) {
+        statsContent.innerHTML = `❌ Error loading stats: ${error.message}`;
     }
 }
 

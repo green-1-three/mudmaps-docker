@@ -333,6 +333,45 @@ body:has(.dev-panel.collapsed) #map {
 }
 
 /* Database Tab Styles */
+.db-sub-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+}
+
+.db-sub-tab {
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #666;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.db-sub-tab:hover {
+    color: #333;
+    background: #f5f5f5;
+}
+
+.db-sub-tab.active {
+    color: #1976d2;
+    border-bottom-color: #1976d2;
+    font-weight: 600;
+}
+
+.db-sub-tab-content {
+    display: none;
+}
+
+.db-sub-tab-content.active {
+    display: block;
+}
+
 .db-table-section {
     margin-bottom: 30px;
 }
