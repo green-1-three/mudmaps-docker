@@ -1,8 +1,9 @@
 FROM node:20-alpine
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY tcp-listener/package.json tcp-listener/package-lock.json ./
 RUN npm ci --only=production
-COPY tcp-listener.js ./
+COPY tcp-listener/tcp-listener.js ./
+COPY shared/ ./shared/
 ENV NODE_ENV=production
 EXPOSE 5500
 CMD ["node", "tcp-listener.js"]

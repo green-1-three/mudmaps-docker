@@ -63,7 +63,8 @@ services:
 
   tcp-listener:
     build:
-      context: ./tcp-listener
+      context: .
+      dockerfile: ./tcp-listener/Dockerfile
     container_name: mudmaps-tcp-listener
     environment:
       LISTENER_PORT: ${LISTENER_PORT}
@@ -83,7 +84,8 @@ services:
 
   worker:
     build:
-      context: ./worker
+      context: .
+      dockerfile: ./worker/Dockerfile
     container_name: mudmaps-worker-1
     environment:
       PGHOST: postgres
@@ -103,7 +105,8 @@ services:
 
   worker-2:
     build:
-      context: ./worker
+      context: .
+      dockerfile: ./worker/Dockerfile
     container_name: mudmaps-worker-2
     environment:
       PGHOST: postgres
@@ -123,7 +126,8 @@ services:
 
   worker-3:
     build:
-      context: ./worker
+      context: .
+      dockerfile: ./worker/Dockerfile
     container_name: mudmaps-worker-3
     environment:
       PGHOST: postgres
@@ -143,7 +147,8 @@ services:
 
   worker-4:
     build:
-      context: ./worker
+      context: .
+      dockerfile: ./worker/Dockerfile
     container_name: mudmaps-worker-4
     environment:
       PGHOST: postgres
@@ -163,7 +168,8 @@ services:
 
   worker-5:
     build:
-      context: ./worker
+      context: .
+      dockerfile: ./worker/Dockerfile
     container_name: mudmaps-worker-5
     environment:
       PGHOST: postgres
@@ -183,7 +189,8 @@ services:
 
   worker-6:
     build:
-      context: ./worker
+      context: .
+      dockerfile: ./worker/Dockerfile
     container_name: mudmaps-worker-6
     environment:
       PGHOST: postgres
@@ -203,7 +210,8 @@ services:
 
   worker-7:
     build:
-      context: ./worker
+      context: .
+      dockerfile: ./worker/Dockerfile
     container_name: mudmaps-worker-7
     environment:
       PGHOST: postgres
@@ -223,7 +231,8 @@ services:
 
   worker-8:
     build:
-      context: ./worker
+      context: .
+      dockerfile: ./worker/Dockerfile
     container_name: mudmaps-worker-8
     environment:
       PGHOST: postgres
@@ -243,7 +252,8 @@ services:
 
   worker-9:
     build:
-      context: ./worker
+      context: .
+      dockerfile: ./worker/Dockerfile
     container_name: mudmaps-worker-9
     environment:
       PGHOST: postgres
@@ -263,7 +273,8 @@ services:
 
   worker-10:
     build:
-      context: ./worker
+      context: .
+      dockerfile: ./worker/Dockerfile
     container_name: mudmaps-worker-10
     environment:
       PGHOST: postgres

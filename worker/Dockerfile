@@ -2,9 +2,10 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY worker/package*.json ./
 RUN npm install --production
 
-COPY . .
+COPY worker/ ./
+COPY shared/ ./shared/
 
 CMD ["node", "index.js"]
