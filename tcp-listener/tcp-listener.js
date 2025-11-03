@@ -2,7 +2,7 @@ const net = require('net');
 const fs = require('fs');
 const { Pool } = require('pg');
 const { createClient } = require('redis');
-const RemoteLogger = require('./shared/remote-logger');
+const createLogger = require('./shared/logger');
 require('dotenv').config();
 
 // Config
@@ -12,8 +12,8 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://backend:3000/api';
 const logDecoded = (msg) => fs.appendFileSync('decoded_records.log', msg + '\n');
 const logError = (msg) => fs.appendFileSync('decode_errors.log', msg + '\n');
 
-// Initialize remote logger
-const logger = new RemoteLogger(BACKEND_URL, 'TCP-Listener');
+// Initialize Winston logger
+const logger = createLogger('TCP-Listener', BACKEND_URL);
 
 // Helper functions for logging with timestamp
 function timestamp() {

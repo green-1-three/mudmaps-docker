@@ -2,15 +2,17 @@
   "name": "mudmaps-worker",
   "version": "1.0.0",
   "description": "Background worker for processing GPS coordinates into cached polylines",
-  "main": "worker.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node worker.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "pg": "^8.11.3",
     "dotenv": "^16.3.1",
     "node-fetch": "^2.7.0",
     "@mapbox/polyline": "^1.2.1",
-    "redis": "^4.6.0"
+    "redis": "^4.6.0",
+    "winston": "^3.11.0",
+    "winston-transport": "^4.6.0"
   }
 }

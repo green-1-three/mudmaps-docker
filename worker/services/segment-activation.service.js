@@ -4,6 +4,13 @@
  */
 
 class SegmentActivationService {
+    constructor(logger = null) {
+        this.logger = logger;
+    }
+
+    setLogger(logger) {
+        this.logger = logger;
+    }
     /**
      * Activate road segments based on polyline intersection
      * @param {Object} client - PostgreSQL client
@@ -30,11 +37,15 @@ class SegmentActivationService {
             `, [polylineWKT]);
             
             if (segmentsResult.rows.length === 0) {
-                console.log(`   📍 No road segments found for polyline ${polylineId}`);
+                if (this.logger) {
+                    this.logger.info(`   📍 No road segments found for polyline ${polylineId}`);
+                }
                 return 0;
             }
-            
-            console.log(`   🛣️  Activating ${segmentsResult.rows.length} road segments`);
+
+            if (this.logger) {
+                this.logger.info(`   🛣️  Activating ${segmentsResult.rows.length} road segments`);
+            }
             
             // Process each intersecting segment
             for (const segment of segmentsResult.rows) {
@@ -74,11 +85,15 @@ class SegmentActivationService {
                 ]);
             }
             
-            console.log(`   ✅ Activated ${segmentsResult.rows.length} segments (polyline ${polylineId})`);
+            if (this.logger) {
+                this.logger.info(`   ✅ Activated ${segmentsResult.rows.length} segments (polyline ${polylineId})`);
+            }
             return segmentsResult.rows.length;
-            
+
         } catch (error) {
-            console.log(`   ❌ Error activating road segments: ${error.message}`);
+            if (this.logger) {
+                this.logger.error(`   ❌ Error activating road segments: ${error.message}`);
+            }
             // Don't throw - we want the polyline to still be saved even if segment activation fails
             return 0;
         }

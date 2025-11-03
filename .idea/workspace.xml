@@ -4,7 +4,19 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="781d814b-6897-4d0d-8f84-a8ad56d33b6b" name="Changes" comment="Ports blocked from public" />
+    <list default="true" id="781d814b-6897-4d0d-8f84-a8ad56d33b6b" name="Changes" comment="Ports blocked from public">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/backend/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/backend/index.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/backend/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tcp-listener/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/tcp-listener/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tcp-listener/tcp-listener.js" beforeDir="false" afterPath="$PROJECT_DIR$/tcp-listener/tcp-listener.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/worker/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/worker/index.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/worker/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/worker/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/worker/services/gps-processor.js" beforeDir="false" afterPath="$PROJECT_DIR$/worker/services/gps-processor.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/worker/services/segment-activation.service.js" beforeDir="false" afterPath="$PROJECT_DIR$/worker/services/segment-activation.service.js" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -94,7 +106,7 @@
       <workItem from="1755132931680" duration="6109000" />
       <workItem from="1755352945538" duration="13639000" />
       <workItem from="1761579154538" duration="11071000" />
-      <workItem from="1761597116465" duration="10843000" />
+      <workItem from="1761597116465" duration="11887000" />
     </task>
     <task id="LOCAL-00001" summary="First commit, reworked into Docker setup.">
       <option name="closed" value="true" />

@@ -24,6 +24,10 @@ class GPSProcessor {
      */
     setLogger(logger) {
         this.logger = logger;
+        // Pass logger to segment activator as well
+        if (this.segmentActivator) {
+            this.segmentActivator.setLogger(logger);
+        }
     }
 
     /**
@@ -54,7 +58,9 @@ class GPSProcessor {
      * @returns {Promise<void>}
      */
     async processDeviceData(client, deviceId) {
-        console.log(`📍 Processing device: ${deviceId}`);
+        if (this.logger) {
+            this.logger.info(`📍 Processing device: ${deviceId}`);
+        }
         
         // Get the last processed point for seamless connection
         const lastProcessed = await this.db.getLastProcessedPoint(deviceId);
@@ -71,24 +77,34 @@ class GPSProcessor {
             if (this.batchProcessor.shouldConnectPoints(lastProcessedTime, firstUnprocessedTime)) {
                 allPoints.push(lastProcessed);
                 const gapMinutes = (firstUnprocessedTime - lastProcessedTime) / 1000 / 60;
-                console.log(`   🔗 Including last processed point for seamless connection (gap: ${gapMinutes.toFixed(1)}min)`);
+                if (this.logger) {
+                    this.logger.info(`   🔗 Including last processed point for seamless connection (gap: ${gapMinutes.toFixed(1)}min)`);
+                }
             } else {
                 const gapMinutes = (firstUnprocessedTime - lastProcessedTime) / 1000 / 60;
-                console.log(`   ⚠️  Skipping last processed point - gap too large (${gapMinutes.toFixed(1)} minutes)`);
+                if (this.logger) {
+                    this.logger.warn(`   ⚠️  Skipping last processed point - gap too large (${gapMinutes.toFixed(1)} minutes)`);
+                }
             }
         }
         allPoints = allPoints.concat(unprocessedPoints);
         
         if (allPoints.length < 2) {
-            console.log(`   ⚠️  Not enough points (need at least 2, have ${allPoints.length})`);
+            if (this.logger) {
+                this.logger.warn(`   ⚠️  Not enough points (need at least 2, have ${allPoints.length})`);
+            }
             return;
         }
-        
-        console.log(`   📊 Found ${unprocessedPoints.length} unprocessed GPS points (${allPoints.length} total with overlap)`);
-        
+
+        if (this.logger) {
+            this.logger.info(`   📊 Found ${unprocessedPoints.length} unprocessed GPS points (${allPoints.length} total with overlap)`);
+        }
+
         // Group points into time windows
         const batches = this.batchProcessor.groupIntoTimeWindows(allPoints);
-        console.log(`   📦 Grouped into ${batches.length} time window(s)`);
+        if (this.logger) {
+            this.logger.info(`   📦 Grouped into ${batches.length} time window(s)`);
+        }
         
         for (const batch of batches) {
             // Only mark the NEW points as processed
@@ -115,8 +131,10 @@ class GPSProcessor {
         const startTime = batch[0].recorded_at;
         const endTime = batch[batch.length - 1].recorded_at;
         const pointIds = newPointsInBatch.map(p => p.id);
-        
-        console.log(`   🔄 Processing batch: ${batch.length} points (${newPointsInBatch.length} new) from ${startTime} to ${endTime}`);
+
+        if (this.logger) {
+            this.logger.info(`   🔄 Processing batch: ${batch.length} points (${newPointsInBatch.length} new) from ${startTime} to ${endTime}`);
+        }
         
         // Check if batch has significant movement
         if (!this.batchProcessor.shouldProcessBatch(batch)) {
@@ -124,7 +142,9 @@ class GPSProcessor {
                 batch[0].latitude, batch[0].longitude,
                 batch[batch.length - 1].latitude, batch[batch.length - 1].longitude
             );
-            console.log(`   ⏭️  Skipping stationary batch (movement: ${distance.toFixed(1)}m < ${this.config.processing.minMovementMeters}m)`);
+            if (this.logger) {
+                this.logger.info(`   ⏭️  Skipping stationary batch (movement: ${distance.toFixed(1)}m < ${this.config.processing.minMovementMeters}m)`);
+            }
             
             // Still mark points as processed
             await this.db.markPointsAsProcessed(pointIds, batchId);
@@ -197,18 +217,26 @@ class GPSProcessor {
                 osrmSuccessRate: 1.0
             });
             
-            console.log(`   ✅ Batch processed successfully (${osrmDuration}ms, bearing: ${polylineData.bearing ? polylineData.bearing.toFixed(1) : 'N/A'}°)`);
+            if (this.logger) {
+                this.logger.info(`   ✅ Batch processed successfully (${osrmDuration}ms, bearing: ${polylineData.bearing ? polylineData.bearing.toFixed(1) : 'N/A'}°)`);
+            }
             
         } catch (error) {
-            console.log(`   ❌ Error processing batch: ${error.message}`);
-            
+            if (this.logger) {
+                this.logger.error(`   ❌ Error processing batch: ${error.message}`);
+            }
+
             // Check failure count
             const failureCount = await this.db.getFailureCount(deviceId, startTime, endTime) + 1;
-            console.log(`   📊 Batch failure count: ${failureCount}`);
-            
+            if (this.logger) {
+                this.logger.info(`   📊 Batch failure count: ${failureCount}`);
+            }
+
             // After max retries, mark points as processed
             if (failureCount >= this.config.processing.maxRetries && pointIds.length > 0) {
-                console.log(`   🗑️  Permanently abandoning ${pointIds.length} points after ${failureCount} failures`);
+                if (this.logger) {
+                    this.logger.warn(`   🗑️  Permanently abandoning ${pointIds.length} points after ${failureCount} failures`);
+                }
                 await this.db.markPointsAsProcessed(pointIds, batchId);
             }
             

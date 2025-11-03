@@ -7,7 +7,7 @@ const { createClient } = require('redis');
 const config = require('./config/config');
 const DatabaseService = require('./services/database.service');
 const GPSProcessor = require('./services/gps-processor');
-const RemoteLogger = require('./shared/remote-logger');
+const createLogger = require('../shared/logger');
 
 class Worker {
     constructor() {
@@ -17,9 +17,9 @@ class Worker {
         this.redis = null;
         this.isShuttingDown = false;
 
-        // Initialize remote logger
+        // Initialize Winston logger
         const backendUrl = process.env.BACKEND_URL || 'http://backend:3000/api';
-        this.logger = new RemoteLogger(backendUrl, 'Worker');
+        this.logger = createLogger('Worker', backendUrl);
 
         // Pass logger to processor
         this.processor.setLogger(this.logger);

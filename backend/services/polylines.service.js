@@ -4,8 +4,9 @@
  */
 
 class PolylinesService {
-    constructor(database) {
+    constructor(database, logger = null) {
         this.db = database;
+        this.logger = logger;
     }
 
     /**
@@ -15,7 +16,9 @@ class PolylinesService {
      * @returns {Promise<Object>} Formatted polyline data
      */
     async getCachedPolylines(deviceId, hours) {
-        console.log(`\n🗺️ Fetching cached polylines for: ${deviceId || 'all devices'}, timeframe: ${hours}h`);
+        if (this.logger) {
+            this.logger.info(`🗺️ Fetching cached polylines for: ${deviceId || 'all devices'}, timeframe: ${hours}h`);
+        }
         
         const startTime = performance.now();
         
@@ -44,9 +47,11 @@ class PolylinesService {
         query += ' ORDER BY start_time DESC';
 
         const { rows } = await this.db.query(query, params);
-        
+
         const queryTime = performance.now() - startTime;
-        console.log(`✅ Query completed in ${queryTime.toFixed(0)}ms, found ${rows.length} cached polylines`);
+        if (this.logger) {
+            this.logger.info(`✅ Query completed in ${queryTime.toFixed(0)}ms, found ${rows.length} cached polylines`);
+        }
 
         if (rows.length === 0) {
             return { devices: [] };
@@ -95,7 +100,9 @@ class PolylinesService {
         });
 
         const totalTime = performance.now() - startTime;
-        console.log(`⚡ Total time: ${totalTime.toFixed(0)}ms for ${devices.length} device(s)\n`);
+        if (this.logger) {
+            this.logger.info(`⚡ Total time: ${totalTime.toFixed(0)}ms for ${devices.length} device(s)`);
+        }
         
         return { devices };
     }
@@ -106,7 +113,9 @@ class PolylinesService {
      * @returns {Promise<Object>} Polyline data
      */
     async getPolylineById(id) {
-        console.log(`🔍 Fetching polyline by ID: ${id}`);
+        if (this.logger) {
+            this.logger.info(`🔍 Fetching polyline by ID: ${id}`);
+        }
         
         const { rows } = await this.db.query(`
             SELECT 
@@ -125,8 +134,10 @@ class PolylinesService {
         if (rows.length === 0) {
             return null;
         }
-        
-        console.log(`✅ Found polyline ${id}`);
+
+        if (this.logger) {
+            this.logger.info(`✅ Found polyline ${id}`);
+        }
         return rows[0];
     }
 

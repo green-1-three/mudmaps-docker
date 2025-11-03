@@ -6,6 +6,7 @@
 const express = require('express');
 const cors = require('cors');
 const config = require('./config/config');
+const createLogger = require('../shared/logger');
 const DatabaseService = require('./services/database.service');
 const PolylinesService = require('./services/polylines.service');
 const SegmentsService = require('./services/segments.service');
@@ -29,11 +30,14 @@ function createApp() {
     }));
     app.use(express.json({ limit: '1mb' })); // Increased limit for log payloads
 
-    // Initialize services
+    // Create Winston logger for backend services
+    const logger = createLogger('Backend-Services', null);
+
+    // Initialize services with logger
     const database = new DatabaseService(config.postgres);
-    const polylinesService = new PolylinesService(database);
-    const segmentsService = new SegmentsService(database);
-    const databaseInspectionService = new DatabaseInspectionService(database);
+    const polylinesService = new PolylinesService(database, logger);
+    const segmentsService = new SegmentsService(database, logger);
+    const databaseInspectionService = new DatabaseInspectionService(database, logger);
 
     // Mount routes
     app.use(createPolylinesRoutes(polylinesService));

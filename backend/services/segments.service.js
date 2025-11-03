@@ -4,8 +4,9 @@
  */
 
 class SegmentsService {
-    constructor(database) {
+    constructor(database, logger = null) {
         this.db = database;
+        this.logger = logger;
     }
 
     /**
@@ -16,7 +17,9 @@ class SegmentsService {
      * @returns {Promise<Object>} GeoJSON FeatureCollection of segments
      */
     async getSegments(municipalityId, since, all) {
-        console.log(`🛣️  Fetching segments for ${municipalityId}${since ? ` since ${since}` : ''}${all ? ' (ALL segments)' : ''}`);
+        if (this.logger) {
+            this.logger.info(`🛣️  Fetching segments for ${municipalityId}${since ? ` since ${since}` : ''}${all ? ' (ALL segments)' : ''}`);
+        }
         
         let query = `
             SELECT 
@@ -39,7 +42,9 @@ class SegmentsService {
         
         // Optional time filter or all segments
         if (all) {
-            console.log('  📦 Returning ALL segments (including unactivated)');
+            if (this.logger) {
+                this.logger.info('  📦 Returning ALL segments (including unactivated)');
+            }
         } else if (since) {
             query += ` AND (last_plowed_forward > $2 OR last_plowed_reverse > $2)`;
             params.push(new Date(since));
@@ -51,8 +56,10 @@ class SegmentsService {
         query += ` ORDER BY GREATEST(last_plowed_forward, last_plowed_reverse) DESC`;
         
         const { rows } = await this.db.query(query, params);
-        
-        console.log(`✅ Returning ${rows.length} activated segments`);
+
+        if (this.logger) {
+            this.logger.info(`✅ Returning ${rows.length} activated segments`);
+        }
         
         // Transform to GeoJSON-friendly format
         const segments = rows.map(row => ({

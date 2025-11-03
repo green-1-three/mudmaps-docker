@@ -4,12 +4,13 @@
  */
 
 class DatabaseInspectionService {
-    constructor(database) {
+    constructor(database, logger = null) {
         this.db = database;
+        this.logger = logger;
         this.allowedTables = [
             'gps_raw_data',
             'cached_polylines',
-            'road_segments', 
+            'road_segments',
             'segment_updates',
             'municipalities',
             'processing_log'
@@ -84,7 +85,9 @@ class DatabaseInspectionService {
                 offset: parseInt(offset)
             };
         } catch (error) {
-            console.error(`Error querying ${tableName}:`, error);
+            if (this.logger) {
+                this.logger.error(`Error querying ${tableName}`, { error: error.message });
+            }
             throw new Error(`Database query failed: ${error.message}`);
         }
     }
@@ -110,7 +113,9 @@ class DatabaseInspectionService {
                 record: result.rows[0]
             };
         } catch (error) {
-            console.error(`Error fetching record from ${tableName}:`, error);
+            if (this.logger) {
+                this.logger.error(`Error fetching record from ${tableName}`, { error: error.message });
+            }
             throw new Error(`Database query failed: ${error.message}`);
         }
     }
@@ -134,7 +139,9 @@ class DatabaseInspectionService {
                 total: result.rows.length
             };
         } catch (error) {
-            console.error(`Error fetching GPS points by batch_id ${batchId}:`, error);
+            if (this.logger) {
+                this.logger.error(`Error fetching GPS points by batch_id ${batchId}`, { error: error.message });
+            }
             throw new Error(`Database query failed: ${error.message}`);
         }
     }
@@ -161,7 +168,9 @@ class DatabaseInspectionService {
                 record: result.rows[0]
             };
         } catch (error) {
-            console.error(`Error fetching polyline by batch_id ${batchId}:`, error);
+            if (this.logger) {
+                this.logger.error(`Error fetching polyline by batch_id ${batchId}`, { error: error.message });
+            }
             throw new Error(`Database query failed: ${error.message}`);
         }
     }
@@ -190,7 +199,9 @@ class DatabaseInspectionService {
                 stats: result.rows[0]
             };
         } catch (error) {
-            console.error(`Error getting stats for ${tableName}:`, error);
+            if (this.logger) {
+                this.logger.error(`Error getting stats for ${tableName}`, { error: error.message });
+            }
             throw new Error(`Stats query failed: ${error.message}`);
         }
     }
@@ -209,7 +220,9 @@ class DatabaseInspectionService {
 
             return result.rows;
         } catch (error) {
-            console.error(`Error fetching GPS points by batch_id ${batchId}:`, error);
+            if (this.logger) {
+                this.logger.error(`Error fetching GPS points by batch_id ${batchId}`, { error: error.message });
+            }
             throw new Error(`Database query failed: ${error.message}`);
         }
     }
@@ -232,7 +245,9 @@ class DatabaseInspectionService {
 
             return result.rows[0];
         } catch (error) {
-            console.error(`Error fetching polyline by batch_id ${batchId}:`, error);
+            if (this.logger) {
+                this.logger.error(`Error fetching polyline by batch_id ${batchId}`, { error: error.message });
+            }
             throw new Error(`Database query failed: ${error.message}`);
         }
     }

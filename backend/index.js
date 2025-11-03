@@ -5,41 +5,49 @@
 
 const createApp = require('./app');
 const config = require('./config/config');
+const createLogger = require('../shared/logger');
+
+// Create Winston logger for backend's own logs (console + file only, no HTTP)
+const logger = createLogger('Backend', null);
 
 // Create and start server
 const app = createApp();
 const PORT = config.server.port;
-const logger = app.locals.loggingService;
+const loggingService = app.locals.loggingService;
 
 const server = app.listen(PORT, () => {
-    console.log(`✅ MudMaps backend running on port ${PORT}`);
-    console.log(`📦 Using cached_polylines table (pre-processed)`);
-    console.log(`🛣️  Segments endpoint: /api/segments`);
-    console.log(`🗺️  OSRM: ${config.services.osrmBase}`);
+    // Log to Winston (console + file)
+    logger.info(`MudMaps backend running on port ${PORT}`);
+    logger.info(`Using cached_polylines table (pre-processed)`);
+    logger.info(`Segments endpoint: /api/segments`);
+    logger.info(`OSRM: ${config.services.osrmBase}`);
 
-    // Log to logging service
-    logger.info(`Server started on port ${PORT}`, 'Server');
-    logger.info('Using cached_polylines table (pre-processed)', 'Server');
-    logger.info(`OSRM endpoint: ${config.services.osrmBase}`, 'Server');
+    // Also log to centralized logging service for remote access
+    loggingService.info(`Server started on port ${PORT}`, 'Backend');
+    loggingService.info('Using cached_polylines table (pre-processed)', 'Backend');
+    loggingService.info(`OSRM endpoint: ${config.services.osrmBase}`, 'Backend');
 });
 
 // Graceful shutdown
 async function shutdown(signal) {
-    console.log(`\n📴 Received ${signal}, shutting down gracefully...`);
-    logger.warn(`Received ${signal}, initiating graceful shutdown`, 'Server');
+    logger.warn(`Received ${signal}, shutting down gracefully...`);
+    loggingService.warn(`Received ${signal}, initiating graceful shutdown`, 'Backend');
 
     // Close server
     server.close(() => {
-        console.log('✅ HTTP server closed');
-        logger.info('HTTP server closed', 'Server');
+        logger.info('HTTP server closed');
+        loggingService.info('HTTP server closed', 'Backend');
     });
 
     // Close database connections
     if (app.locals.database) {
         await app.locals.database.close();
-        console.log('✅ Database connections closed');
-        logger.info('Database connections closed', 'Database');
+        logger.info('Database connections closed');
+        loggingService.info('Database connections closed', 'Backend');
     }
+
+    // Flush Winston logs before exit
+    await logger.shutdown();
 
     process.exit(0);
 }
