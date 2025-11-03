@@ -5,7 +5,7 @@
 
 const createApp = require('./app');
 const config = require('./config/config');
-const createLogger = require('../shared/logger');
+const createLogger = require('./shared/logger');
 
 // Create Winston logger for backend's own logs (console + file only, no HTTP)
 const logger = createLogger('Backend', null);
