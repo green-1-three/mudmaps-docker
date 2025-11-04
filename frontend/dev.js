@@ -269,7 +269,7 @@ map.on('load', () => {
         }
     });
 
-    // Add segments layer with hover effect
+    // Add segments layer with hover and selection effects
     map.addLayer({
         id: 'segments',
         type: 'line',
@@ -279,15 +279,24 @@ map.on('load', () => {
             'line-join': 'round'
         },
         paint: {
-            'line-color': ['get', 'color'],
+            'line-color': [
+                'case',
+                ['boolean', ['feature-state', 'selected'], false],
+                '#00ffff',  // Cyan when selected
+                ['get', 'color']  // Normal color
+            ],
             'line-width': [
                 'case',
+                ['boolean', ['feature-state', 'selected'], false],
+                8,  // Extra wide when selected
                 ['boolean', ['feature-state', 'hover'], false],
                 7,  // Width when hovered
                 4   // Normal width
             ],
             'line-opacity': [
                 'case',
+                ['boolean', ['feature-state', 'selected'], false],
+                1,  // Fully opaque when selected
                 ['boolean', ['feature-state', 'hover'], false],
                 1,  // Fully opaque when hovered
                 ['coalesce', ['get', 'opacity'], 1]  // Normal opacity
@@ -407,15 +416,75 @@ map.on('zoom', () => {
     }
 });
 
+// Track selected segment for highlighting
+let selectedSegmentId = null;
+
+// Function to highlight features on map when clicked in database
+window.highlightMapFeature = function(tableName, rowData) {
+    console.log(`🗺️ Highlighting map feature from database: ${tableName}, ID: ${rowData.id}`);
+
+    if (tableName === 'road_segments') {
+        // Clear previous selection
+        if (selectedSegmentId !== null) {
+            map.setFeatureState(
+                { source: 'segments', id: selectedSegmentId },
+                { selected: false }
+            );
+        }
+
+        // Set new selection
+        selectedSegmentId = rowData.id;
+        map.setFeatureState(
+            { source: 'segments', id: selectedSegmentId },
+            { selected: true }
+        );
+
+        // Zoom to the segment if geometry exists
+        if (rowData.geometry && rowData.geometry.coordinates) {
+            const coords = rowData.geometry.coordinates;
+            const bounds = new mapboxgl.LngLatBounds();
+            coords.forEach(coord => bounds.extend(coord));
+            map.fitBounds(bounds, { padding: 100, maxZoom: 16, duration: 1000 });
+        }
+    } else if (tableName === 'cached_polylines') {
+        // Zoom to the polyline if geometry exists
+        if (rowData.geometry && rowData.geometry.coordinates) {
+            const coords = rowData.geometry.coordinates;
+            const bounds = new mapboxgl.LngLatBounds();
+            coords.forEach(coord => bounds.extend(coord));
+            map.fitBounds(bounds, { padding: 100, maxZoom: 16, duration: 1000 });
+        }
+    }
+};
+
 // Click handlers
 map.on('click', 'segments', (e) => {
     if (e.features.length > 0) {
         const feature = e.features[0];
         const props = feature.properties;
+        const segmentId = props.segment_id;
         const lastPlowed = props.last_plowed ? new Date(props.last_plowed).toLocaleString() : 'Unknown';
         const info = `SEGMENT: ${props.street_name || 'Unknown'} - Last plowed: ${lastPlowed} (Device: ${props.device_id || 'Unknown'}, Total: ${props.plow_count_total || 0}x)`;
         showStatus(info);
         console.log('📍 Segment clicked:', info);
+
+        // Clear previous selection
+        if (selectedSegmentId !== null) {
+            map.setFeatureState(
+                { source: 'segments', id: selectedSegmentId },
+                { selected: false }
+            );
+        }
+
+        // Set new selection
+        selectedSegmentId = segmentId;
+        map.setFeatureState(
+            { source: 'segments', id: selectedSegmentId },
+            { selected: true }
+        );
+
+        // Highlight in database inspector
+        highlightTableRow('road_segments', segmentId);
     }
 });
 
@@ -423,11 +492,15 @@ map.on('click', 'polylines', (e) => {
     if (e.features.length > 0) {
         const feature = e.features[0];
         const props = feature.properties;
+        const polylineId = props.polyline_id;
         const startText = props.start_time ? new Date(props.start_time).toLocaleString() : 'Unknown';
         const endText = props.end_time ? new Date(props.end_time).toLocaleString() : 'Unknown';
-        const info = `POLYLINE #${props.polyline_id || 'Unknown'} - Device: ${props.device || 'Unknown'}, Start: ${startText}, End: ${endText}`;
+        const info = `POLYLINE #${polylineId || 'Unknown'} - Device: ${props.device || 'Unknown'}, Start: ${startText}, End: ${endText}`;
         showStatus(info);
         console.log('📍 Polyline clicked:', info);
+
+        // Highlight in database inspector
+        highlightTableRow('cached_polylines', polylineId);
     }
 });
 
