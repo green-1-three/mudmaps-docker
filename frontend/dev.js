@@ -155,12 +155,12 @@ map.on('load', () => {
         type: 'line',
         source: 'segments',
         layout: {
-            'visibility': 'none', // Hidden by default
+            'visibility': 'visible', // TEMPORARILY VISIBLE FOR DEBUGGING
             'line-cap': 'round',
             'line-join': 'round'
         },
         paint: {
-            'line-color': '#ffffff',
+            'line-color': '#00ff00', // NEON GREEN FOR DEBUGGING
             'line-width': 2,
             'line-gap-width': 4, // Creates 4px gap, then 2px white border on each side
             'line-opacity': 1
