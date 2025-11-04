@@ -96,7 +96,8 @@ map.addControl(new mapboxgl.NavigationControl(), 'top-left');
 const geojsonData = {
     segments: { type: 'FeatureCollection', features: [] },
     forwardOffsets: { type: 'FeatureCollection', features: [] },
-    reverseOffsets: { type: 'FeatureCollection', features: [] }
+    reverseOffsets: { type: 'FeatureCollection', features: [] },
+    allSegmentsLabels: { type: 'FeatureCollection', features: [] } // For showing all road names
 };
 
 // Update zoom level display
@@ -122,6 +123,7 @@ map.on('load', () => {
     map.addSource('segments', { type: 'geojson', data: geojsonData.segments });
     map.addSource('forward-offsets', { type: 'geojson', data: geojsonData.forwardOffsets });
     map.addSource('reverse-offsets', { type: 'geojson', data: geojsonData.reverseOffsets });
+    map.addSource('all-segments-labels', { type: 'geojson', data: geojsonData.allSegmentsLabels });
 
     // Add forward offset layer
     map.addLayer({
@@ -156,11 +158,11 @@ map.on('load', () => {
         }
     });
 
-    // Add segment street name labels (offset to the side)
+    // Add segment street name labels (offset to the side) - uses all segments for complete road coverage
     map.addLayer({
         id: 'segment-labels',
         type: 'symbol',
-        source: 'segments',
+        source: 'all-segments-labels',
         layout: {
             'text-field': ['get', 'street_name'],
             'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
@@ -200,10 +202,22 @@ async function loadSegments() {
         const segmentFeatures = [];
         const forwardOffsetFeatures = [];
         const reverseOffsetFeatures = [];
+        const allSegmentsLabelFeatures = [];
 
         data.features.forEach(segment => {
             if (!segment.geometry || !segment.geometry.coordinates) {
                 return;
+            }
+
+            // Add ALL segments to labels collection (for showing all road names)
+            if (segment.properties.street_name) {
+                allSegmentsLabelFeatures.push({
+                    type: 'Feature',
+                    geometry: segment.geometry,
+                    properties: {
+                        street_name: segment.properties.street_name
+                    }
+                });
             }
 
             const forwardTime = segment.properties.last_plowed_forward
@@ -216,7 +230,7 @@ async function loadSegments() {
             const lastPlowedISO = lastPlowed > 0 ? new Date(lastPlowed).toISOString() : null;
             const isActivated = lastPlowed > 0;
 
-            // Skip inactive segments
+            // Skip inactive segments for display (but not for labels - already added above)
             if (!isActivated) {
                 return;
             }
@@ -275,6 +289,7 @@ async function loadSegments() {
         geojsonData.segments.features = segmentFeatures;
         geojsonData.forwardOffsets.features = forwardOffsetFeatures;
         geojsonData.reverseOffsets.features = reverseOffsetFeatures;
+        geojsonData.allSegmentsLabels.features = allSegmentsLabelFeatures;
 
         if (map.getSource('segments')) {
             map.getSource('segments').setData(geojsonData.segments);
@@ -285,8 +300,12 @@ async function loadSegments() {
         if (map.getSource('reverse-offsets')) {
             map.getSource('reverse-offsets').setData(geojsonData.reverseOffsets);
         }
+        if (map.getSource('all-segments-labels')) {
+            map.getSource('all-segments-labels').setData(geojsonData.allSegmentsLabels);
+        }
 
         console.log(`📊 Segments: ${segmentFeatures.length} total`);
+        console.log(`📊 Road labels: ${allSegmentsLabelFeatures.length} total`);
         console.log(`📊 Offset geometries: ${forwardOffsetFeatures.length} forward, ${reverseOffsetFeatures.length} reverse`);
     } catch (err) {
         console.error('Failed to load segments:', err);

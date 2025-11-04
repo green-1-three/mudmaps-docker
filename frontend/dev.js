@@ -182,7 +182,8 @@ const geojsonData = {
     searchResult: { type: 'FeatureCollection', features: [] },
     segmentEndpoints: { type: 'FeatureCollection', features: [] },
     polylineEndpoints: { type: 'FeatureCollection', features: [] },
-    snapIndicator: { type: 'FeatureCollection', features: [] }
+    snapIndicator: { type: 'FeatureCollection', features: [] },
+    allSegmentsLabels: { type: 'FeatureCollection', features: [] } // For showing all road names
 };
 
 // Layer references for module access
@@ -217,6 +218,7 @@ map.on('load', () => {
     map.addSource('segment-endpoints', { type: 'geojson', data: geojsonData.segmentEndpoints });
     map.addSource('polyline-endpoints', { type: 'geojson', data: geojsonData.polylineEndpoints });
     map.addSource('snap-indicator', { type: 'geojson', data: geojsonData.snapIndicator });
+    map.addSource('all-segments-labels', { type: 'geojson', data: geojsonData.allSegmentsLabels });
 
     // Add boundary layer
     map.addLayer({
@@ -312,11 +314,11 @@ map.on('load', () => {
         }
     });
 
-    // Add segment street name labels (offset to the side)
+    // Add segment street name labels (offset to the side) - uses all segments for complete road coverage
     map.addLayer({
         id: 'segment-labels',
         type: 'symbol',
-        source: 'segments',
+        source: 'all-segments-labels',
         layout: {
             'text-field': ['get', 'street_name'],
             'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
@@ -753,6 +755,7 @@ async function loadSegments() {
         const segmentFeatures = [];
         const forwardOffsetFeatures = [];
         const reverseOffsetFeatures = [];
+        const allSegmentsLabelFeatures = [];
 
         let totalSegments = 0;
         let activatedSegments = 0;
@@ -772,6 +775,17 @@ async function loadSegments() {
             if (!segment.geometry || !segment.geometry.coordinates) {
                 console.warn('⚠️ Segment missing geometry:', segment);
                 return;
+            }
+
+            // Add ALL segments to labels collection (for showing all road names)
+            if (segment.properties.street_name) {
+                allSegmentsLabelFeatures.push({
+                    type: 'Feature',
+                    geometry: segment.geometry,
+                    properties: {
+                        street_name: segment.properties.street_name
+                    }
+                });
             }
 
             const forwardTime = segment.properties.last_plowed_forward
@@ -944,6 +958,7 @@ async function loadSegments() {
         geojsonData.forwardOffsets.features = forwardOffsetFeatures;
         geojsonData.reverseOffsets.features = reverseOffsetFeatures;
         geojsonData.segmentEndpoints.features = segmentEndpointFeatures;
+        geojsonData.allSegmentsLabels.features = allSegmentsLabelFeatures;
 
         if (map.getSource('segments')) {
             map.getSource('segments').setData(geojsonData.segments);
@@ -957,10 +972,14 @@ async function loadSegments() {
         if (map.getSource('segment-endpoints')) {
             map.getSource('segment-endpoints').setData(geojsonData.segmentEndpoints);
         }
+        if (map.getSource('all-segments-labels')) {
+            map.getSource('all-segments-labels').setData(geojsonData.allSegmentsLabels);
+        }
 
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total segment load time: ${totalTime.toFixed(0)}ms`);
         console.log(`📊 Segments: ${totalSegments} total, ${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated`);
+        console.log(`📊 Road labels: ${allSegmentsLabelFeatures.length} total`);
         console.log(`📊 Offset geometries: ${forwardOffsetCount} forward, ${reverseOffsetCount} reverse`);
         console.log(`📊 Segment endpoint markers: ${segmentEndpointFeatures.length} total (${segmentFeatures.length * 2} expected)`);
 
