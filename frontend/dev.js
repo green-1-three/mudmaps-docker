@@ -119,6 +119,24 @@ map.on('load', () => {
         }
     });
 
+    // Polyline borders - using line-gap-width to create casing effect around each line
+    map.addLayer({
+        id: 'polyline-borders',
+        type: 'line',
+        source: 'polylines',
+        layout: {
+            'visibility': 'none', // Hidden by default
+            'line-cap': 'round',
+            'line-join': 'round'
+        },
+        paint: {
+            'line-color': '#ffffff',
+            'line-width': 2,
+            'line-gap-width': 2, // Creates 2px gap, then 2px white border = 4px total
+            'line-opacity': 1
+        }
+    });
+
     // Add polylines layer
     map.addLayer({
         id: 'polylines',
@@ -127,6 +145,36 @@ map.on('load', () => {
         paint: {
             'line-color': ['get', 'color'],
             'line-width': 2,
+            'line-opacity': ['coalesce', ['get', 'opacity'], 1]
+        }
+    });
+
+    // Segment borders - using line-gap-width to create casing effect around each segment
+    map.addLayer({
+        id: 'segment-borders',
+        type: 'line',
+        source: 'segments',
+        layout: {
+            'visibility': 'none', // Hidden by default
+            'line-cap': 'round',
+            'line-join': 'round'
+        },
+        paint: {
+            'line-color': '#ffffff',
+            'line-width': 2,
+            'line-gap-width': 4, // Creates 4px gap, then 2px white border on each side
+            'line-opacity': 1
+        }
+    });
+
+    // Add segments layer
+    map.addLayer({
+        id: 'segments',
+        type: 'line',
+        source: 'segments',
+        paint: {
+            'line-color': ['get', 'color'],
+            'line-width': 4,
             'line-opacity': ['coalesce', ['get', 'opacity'], 1]
         }
     });
@@ -155,18 +203,6 @@ map.on('load', () => {
         }
     });
 
-    // Add segments layer
-    map.addLayer({
-        id: 'segments',
-        type: 'line',
-        source: 'segments',
-        paint: {
-            'line-color': ['get', 'color'],
-            'line-width': 4,
-            'line-opacity': ['coalesce', ['get', 'opacity'], 1]
-        }
-    });
-
     // Add search result marker layer
     map.addLayer({
         id: 'search-result',
@@ -175,41 +211,6 @@ map.on('load', () => {
         paint: {
             'circle-radius': 8,
             'circle-color': '#4264fb'
-        }
-    });
-
-    // Border layers drawn LAST (on top of everything) for debugging
-    // Add polyline borders layer - drawn on top so they're visible
-    map.addLayer({
-        id: 'polyline-borders',
-        type: 'line',
-        source: 'polylines',
-        layout: {
-            'visibility': 'none', // Hidden by default
-            'line-cap': 'round',
-            'line-join': 'round'
-        },
-        paint: {
-            'line-color': '#ffffff',
-            'line-width': 8,
-            'line-opacity': 0.9
-        }
-    });
-
-    // Add segment borders layer - drawn on top so they're visible
-    map.addLayer({
-        id: 'segment-borders',
-        type: 'line',
-        source: 'segments',
-        layout: {
-            'visibility': 'none', // Hidden by default
-            'line-cap': 'round',
-            'line-join': 'round'
-        },
-        paint: {
-            'line-color': '#ffffff',
-            'line-width': 10,
-            'line-opacity': 0.9
         }
     });
 
