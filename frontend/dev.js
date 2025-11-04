@@ -349,7 +349,14 @@ map.on('load', () => {
                 14, 20   // At zoom 14+, restrict to 20 degrees
             ],
             'text-keep-upright': true, // Prevent upside-down labels
-            'symbol-spacing': 150, // Minimum distance between repeated labels (pixels)
+            'symbol-spacing': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                10, 100,  // At low zoom, 100px spacing (more labels)
+                13, 100,  // At zoom 13, still 100px
+                14, 150   // At zoom 14+, 150px spacing
+            ],
             'text-padding': 20 // Add padding around labels to prevent overlap
         },
         paint: {
