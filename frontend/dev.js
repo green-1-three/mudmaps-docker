@@ -322,7 +322,7 @@ map.on('load', () => {
         source: 'all-segments-labels',
         layout: {
             'text-field': ['get', 'street_name'],
-            'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+            'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular'],
             'text-size': [
                 'interpolate',
                 ['linear'],
