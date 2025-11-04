@@ -119,24 +119,6 @@ map.on('load', () => {
         }
     });
 
-    // Add polylines border layer (drawn first, underneath) - creates white glow effect
-    map.addLayer({
-        id: 'polyline-borders',
-        type: 'line',
-        source: 'polylines',
-        layout: {
-            'visibility': 'none', // Hidden by default
-            'line-cap': 'round',
-            'line-join': 'round'
-        },
-        paint: {
-            'line-color': '#ffffff',
-            'line-width': 6,
-            'line-opacity': 0.8,
-            'line-blur': 1
-        }
-    });
-
     // Add polylines layer
     map.addLayer({
         id: 'polylines',
@@ -173,25 +155,7 @@ map.on('load', () => {
         }
     });
 
-    // Add segment borders layer (drawn first, underneath) - creates white glow effect around EACH segment
-    map.addLayer({
-        id: 'segment-borders',
-        type: 'line',
-        source: 'segments',
-        layout: {
-            'visibility': 'none', // Hidden by default
-            'line-cap': 'round',
-            'line-join': 'round'
-        },
-        paint: {
-            'line-color': '#ffffff',
-            'line-width': 8,
-            'line-opacity': 0.8,
-            'line-blur': 1
-        }
-    });
-
-    // Add segments layer (on top)
+    // Add segments layer
     map.addLayer({
         id: 'segments',
         type: 'line',
@@ -211,6 +175,41 @@ map.on('load', () => {
         paint: {
             'circle-radius': 8,
             'circle-color': '#4264fb'
+        }
+    });
+
+    // Border layers drawn LAST (on top of everything) for debugging
+    // Add polyline borders layer - drawn on top so they're visible
+    map.addLayer({
+        id: 'polyline-borders',
+        type: 'line',
+        source: 'polylines',
+        layout: {
+            'visibility': 'none', // Hidden by default
+            'line-cap': 'round',
+            'line-join': 'round'
+        },
+        paint: {
+            'line-color': '#ffffff',
+            'line-width': 8,
+            'line-opacity': 0.9
+        }
+    });
+
+    // Add segment borders layer - drawn on top so they're visible
+    map.addLayer({
+        id: 'segment-borders',
+        type: 'line',
+        source: 'segments',
+        layout: {
+            'visibility': 'none', // Hidden by default
+            'line-cap': 'round',
+            'line-join': 'round'
+        },
+        paint: {
+            'line-color': '#ffffff',
+            'line-width': 10,
+            'line-opacity': 0.9
         }
     });
 
