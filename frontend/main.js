@@ -195,7 +195,7 @@ map.on('load', () => {
                 ['zoom'],
                 10, 8,   // At zoom 10, size is 8px
                 12, 9,   // At zoom 12, size is 9px
-                13, 9,   // At zoom 13, size is 9px
+                13, 8,   // At zoom 13, size is 8px
                 15, 12,  // At zoom 15, size is 12px
                 16, 14,  // At zoom 16, size is 14px
                 18, 16   // At zoom 18, size is 16px
@@ -210,7 +210,8 @@ map.on('load', () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                10, 25,  // At low zoom, allow 25 degrees (more permissive)
+                10, 25,  // At low zoom, allow 25 degrees
+                13, 30,  // At zoom 13, allow 30 degrees (most permissive)
                 14, 20   // At zoom 14+, restrict to 20 degrees
             ],
             'text-keep-upright': true, // Prevent upside-down labels
