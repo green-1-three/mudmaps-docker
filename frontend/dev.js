@@ -290,9 +290,9 @@ map.on('load', () => {
 });
 
 // Track zoom state for endpoint regeneration
-let lastZoomAbove14 = map.getZoom() >= 14;
+let lastZoomRange = map.getZoom() >= 14 ? 'high' : (map.getZoom() >= 12 ? 'mid' : 'low');
 
-// Update zoom level display and regenerate endpoints if crossing zoom 14 threshold
+// Update zoom level display and regenerate endpoints if crossing zoom thresholds
 map.on('zoom', () => {
     const zoomLevel = map.getZoom();
     const zoomDisplay = document.getElementById('zoom-display');
@@ -300,12 +300,12 @@ map.on('zoom', () => {
         zoomDisplay.textContent = `Zoom: ${zoomLevel.toFixed(1)}`;
     }
 
-    // Check if we crossed the zoom 14 threshold
-    const currentZoomAbove14 = zoomLevel >= 14;
-    if (currentZoomAbove14 !== lastZoomAbove14) {
-        lastZoomAbove14 = currentZoomAbove14;
+    // Check if we crossed zoom 12 or 14 thresholds
+    const currentZoomRange = zoomLevel >= 14 ? 'high' : (zoomLevel >= 12 ? 'mid' : 'low');
+    if (currentZoomRange !== lastZoomRange) {
+        lastZoomRange = currentZoomRange;
         // Regenerate endpoints with new length
-        console.log(`🔄 Zoom crossed 14 threshold, regenerating endpoints...`);
+        console.log(`🔄 Zoom crossed threshold (now ${currentZoomRange}), regenerating endpoints...`);
 
         // Only regenerate if data is already loaded
         if (geojsonData.segments.features.length > 0) {
@@ -467,8 +467,13 @@ async function loadPolylines() {
         // Extract polyline endpoints for debugging borders - perpendicular lines
         const polylineEndpointFeatures = [];
         const currentZoom = map.getZoom();
-        const zoomMultiplier = currentZoom < 14 ? 2 : 1;
-        const polylineWidthMeters = 7.5 * zoomMultiplier; // Double length at zoom < 14
+        let zoomMultiplier = 1;
+        if (currentZoom < 12) {
+            zoomMultiplier = 4; // 4x at zoom < 12
+        } else if (currentZoom < 14) {
+            zoomMultiplier = 2; // 2x at zoom 12-14
+        }
+        const polylineWidthMeters = 7.5 * zoomMultiplier;
 
         features.forEach(feature => {
             if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length >= 2) {
@@ -689,8 +694,13 @@ async function loadSegments() {
         // Extract segment endpoints for debugging borders - perpendicular lines
         const segmentEndpointFeatures = [];
         const currentZoom = map.getZoom();
-        const zoomMultiplier = currentZoom < 14 ? 2 : 1;
-        const segmentWidthMeters = 15 * zoomMultiplier; // Double length at zoom < 14
+        let zoomMultiplier = 1;
+        if (currentZoom < 12) {
+            zoomMultiplier = 4; // 4x at zoom < 12
+        } else if (currentZoom < 14) {
+            zoomMultiplier = 2; // 2x at zoom 12-14
+        }
+        const segmentWidthMeters = 15 * zoomMultiplier;
 
         segmentFeatures.forEach(feature => {
             if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length >= 2) {
