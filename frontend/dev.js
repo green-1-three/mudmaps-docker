@@ -164,7 +164,7 @@ function findClosestSegment(mousePoint, features, snapRadius = 20) {
 // Initialize map
 const map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/mapbox/streets-v12',
+    style: 'mapbox://styles/mapbox/light-v11', // Light style without street labels
     center: [0, 0],
     zoom: 2
 });
@@ -301,6 +301,29 @@ map.on('load', () => {
                 1,  // Fully opaque when hovered
                 ['coalesce', ['get', 'opacity'], 1]  // Normal opacity
             ]
+        }
+    });
+
+    // Add segment street name labels (offset to the side)
+    map.addLayer({
+        id: 'segment-labels',
+        type: 'symbol',
+        source: 'segments',
+        layout: {
+            'text-field': ['get', 'street_name'],
+            'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+            'text-size': 12,
+            'symbol-placement': 'line',
+            'text-rotation-alignment': 'map',
+            'text-pitch-alignment': 'viewport',
+            'text-offset': [0, 1.5], // Offset 1.5 ems to the side
+            'text-allow-overlap': false,
+            'text-ignore-placement': false
+        },
+        paint: {
+            'text-color': '#333333',
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 2
         }
     });
 
