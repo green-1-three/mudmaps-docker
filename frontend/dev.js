@@ -431,12 +431,6 @@ map.on('click', 'polylines', (e) => {
     }
 });
 
-// Change cursor on hover
-map.on('mouseenter', 'segments', () => { map.getCanvas().style.cursor = 'pointer'; });
-map.on('mouseleave', 'segments', () => { map.getCanvas().style.cursor = ''; });
-map.on('mouseenter', 'polylines', () => { map.getCanvas().style.cursor = 'pointer'; });
-map.on('mouseleave', 'polylines', () => { map.getCanvas().style.cursor = ''; });
-
 // Load boundary
 async function loadBoundary() {
     try {
@@ -1480,7 +1474,6 @@ map.on('mousemove', (e) => {
         }
 
         // Show polyline if present
-        const polyline = features.find(f => f.layer.id === 'polylines');
         if (polyline) {
             const props = polyline.properties;
             const polylineId = props.polyline_id || 'Unknown';
