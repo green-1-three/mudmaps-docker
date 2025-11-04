@@ -55,7 +55,11 @@ class OffsetGeneratorService {
             }
 
             // Generate offset curves for the entire way
-            // Using geography for accurate meter-based offsets
+            // Note: ST_OffsetCurve works on geometry (not geography)
+            // For small areas, distortion is minimal. Distance is approximate degrees.
+            // ~2m at 44°N latitude ≈ 0.000025 degrees
+            const offsetDegrees = 0.000025; // Approximately 2 meters
+
             const offsetResult = await client.query(`
                 WITH way AS (
                     SELECT ST_LineMerge(ST_Union(geometry)) as geom
@@ -64,10 +68,10 @@ class OffsetGeneratorService {
                       AND geometry IS NOT NULL
                 )
                 SELECT
-                    ST_AsText(ST_OffsetCurve(geom::geography, $2)::geometry) as left_offset,
-                    ST_AsText(ST_OffsetCurve(geom::geography, $3)::geometry) as right_offset
+                    ST_AsText(ST_OffsetCurve(geom, $2)) as left_offset,
+                    ST_AsText(ST_OffsetCurve(geom, $3)) as right_offset
                 FROM way
-            `, [osmWayId, this.offsetDistance, -this.offsetDistance]);
+            `, [osmWayId, offsetDegrees, -offsetDegrees]);
 
             const { left_offset, right_offset } = offsetResult.rows[0];
 
