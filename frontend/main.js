@@ -22,41 +22,6 @@ const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
 // Global variable to store current time range
 let currentTimeHours = 24;
 
-// Polyline decoder with caching
-const polylineCache = {};
-
-function decodePolyline(str, precision = 5) {
-    if (polylineCache[str]) {
-        return polylineCache[str];
-    }
-
-    let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null;
-    const factor = Math.pow(10, precision);
-
-    while (index < str.length) {
-        byte = null; shift = 0; result = 0;
-        do {
-            byte = str.charCodeAt(index++) - 63;
-            result |= (byte & 0x1f) << shift;
-            shift += 5;
-        } while (byte >= 0x20);
-        lat += ((result & 1) ? ~(result >> 1) : (result >> 1));
-
-        byte = null; shift = 0; result = 0;
-        do {
-            byte = str.charCodeAt(index++) - 63;
-            result |= (byte & 0x1f) << shift;
-            shift += 5;
-        } while (byte >= 0x20);
-        lng += ((result & 1) ? ~(result >> 1) : (result >> 1));
-
-        coordinates.push([lng / factor, lat / factor]);
-    }
-
-    polylineCache[str] = coordinates;
-    return coordinates;
-}
-
 async function fetchJSON(url) {
     const r = await fetch(url);
     const ct = (r.headers.get('content-type') || '').toLowerCase();
@@ -128,56 +93,17 @@ map.addControl(new mapboxgl.NavigationControl(), 'top-left');
 
 // GeoJSON data stores
 const geojsonData = {
-    boundary: { type: 'FeatureCollection', features: [] },
-    polylines: { type: 'FeatureCollection', features: [] },
     segments: { type: 'FeatureCollection', features: [] },
     forwardOffsets: { type: 'FeatureCollection', features: [] },
-    reverseOffsets: { type: 'FeatureCollection', features: [] },
-    searchResult: { type: 'FeatureCollection', features: [] }
+    reverseOffsets: { type: 'FeatureCollection', features: [] }
 };
 
 // Map load event - add sources and layers
 map.on('load', () => {
     // Add sources
-    map.addSource('boundary', { type: 'geojson', data: geojsonData.boundary });
-    map.addSource('polylines', { type: 'geojson', data: geojsonData.polylines });
     map.addSource('segments', { type: 'geojson', data: geojsonData.segments });
     map.addSource('forward-offsets', { type: 'geojson', data: geojsonData.forwardOffsets });
     map.addSource('reverse-offsets', { type: 'geojson', data: geojsonData.reverseOffsets });
-    map.addSource('search-result', { type: 'geojson', data: geojsonData.searchResult });
-
-    // Add boundary layer
-    map.addLayer({
-        id: 'boundary-fill',
-        type: 'fill',
-        source: 'boundary',
-        paint: {
-            'fill-color': 'rgba(255, 255, 255, 0.02)',
-            'fill-opacity': 1
-        }
-    });
-
-    map.addLayer({
-        id: 'boundary-line',
-        type: 'line',
-        source: 'boundary',
-        paint: {
-            'line-color': 'rgba(255, 255, 255, 0.4)',
-            'line-width': 2,
-            'line-dasharray': [5, 5]
-        }
-    });
-
-    // Add polylines layer
-    map.addLayer({
-        id: 'polylines',
-        type: 'line',
-        source: 'polylines',
-        paint: {
-            'line-color': '#4444ff',
-            'line-width': 2
-        }
-    });
 
     // Add forward offset layer
     map.addLayer({
@@ -185,7 +111,7 @@ map.on('load', () => {
         type: 'line',
         source: 'forward-offsets',
         paint: {
-            'line-color': '#00ff00', // Will be updated dynamically
+            'line-color': ['get', 'color'],
             'line-width': 3
         }
     });
@@ -196,30 +122,19 @@ map.on('load', () => {
         type: 'line',
         source: 'reverse-offsets',
         paint: {
-            'line-color': '#00ff00', // Will be updated dynamically
+            'line-color': ['get', 'color'],
             'line-width': 3
         }
     });
 
-    // Add segments layer
+    // Add segments layer (on top)
     map.addLayer({
         id: 'segments',
         type: 'line',
         source: 'segments',
         paint: {
-            'line-color': '#00ff00', // Will be updated dynamically
+            'line-color': ['get', 'color'],
             'line-width': 4
-        }
-    });
-
-    // Add search result marker layer
-    map.addLayer({
-        id: 'search-result',
-        type: 'circle',
-        source: 'search-result',
-        paint: {
-            'circle-radius': 8,
-            'circle-color': '#4264fb'
         }
     });
 
@@ -227,175 +142,16 @@ map.on('load', () => {
     loadAllData();
 });
 
-// Click handlers
-map.on('click', 'segments', (e) => {
-    if (e.features.length > 0) {
-        const feature = e.features[0];
-        const props = feature.properties;
-        const lastPlowed = props.last_plowed ? new Date(props.last_plowed).toLocaleString() : 'Unknown';
-        const info = `SEGMENT: ${props.street_name} - Last plowed: ${lastPlowed} (Device: ${props.device_id || 'Unknown'}, Total: ${props.plow_count_total || 0}x)`;
-        showStatus(info);
-        console.log('📍 Segment clicked:', info);
-    }
-});
-
-map.on('click', 'polylines', (e) => {
-    if (e.features.length > 0) {
-        const feature = e.features[0];
-        const props = feature.properties;
-        const startText = props.start_time ? new Date(props.start_time).toLocaleString() : 'Unknown';
-        const endText = props.end_time ? new Date(props.end_time).toLocaleString() : 'Unknown';
-        const info = `POLYLINE #${props.polyline_id || 'Unknown'} - Device: ${props.device || 'Unknown'}, Start: ${startText}, End: ${endText}`;
-        showStatus(info);
-        console.log('📍 Polyline clicked:', info);
-    }
-});
-
-// Change cursor on hover
-map.on('mouseenter', 'segments', () => { map.getCanvas().style.cursor = 'pointer'; });
-map.on('mouseleave', 'segments', () => { map.getCanvas().style.cursor = ''; });
-map.on('mouseenter', 'polylines', () => { map.getCanvas().style.cursor = 'pointer'; });
-map.on('mouseleave', 'polylines', () => { map.getCanvas().style.cursor = ''; });
-
-// Load boundary
-async function loadBoundary() {
-    try {
-        showStatus('Loading boundary...');
-        const url = `${API_BASE}/boundary?municipality=pomfret-vt`;
-        console.log(`🗺️  Fetching boundary from: ${url}`);
-
-        const data = await fetchJSON(url);
-        console.log('✅ Boundary loaded:', data);
-
-        if (!data.geometry || !data.geometry.coordinates) {
-            console.warn('⚠️ Boundary missing geometry');
-            return;
-        }
-
-        geojsonData.boundary.features = [{
-            type: 'Feature',
-            geometry: data.geometry,
-            properties: data.properties
-        }];
-
-        if (map.getSource('boundary')) {
-            map.getSource('boundary').setData(geojsonData.boundary);
-        }
-
-        console.log(`🗺️  Boundary loaded for ${data.properties.name}, ${data.properties.state}`);
-    } catch (err) {
-        console.error('Failed to load boundary:', err);
-    }
-}
-
-// Load polylines
-async function loadPolylines() {
-    try {
-        showStatus('Loading polylines...');
-        const startTime = performance.now();
-
-        const url = `${API_BASE}/paths/encoded?hours=168`;
-        console.log(`🛣️  Fetching polylines from: ${url}`);
-
-        const data = await fetchJSON(url);
-        const fetchTime = performance.now() - startTime;
-        console.log(`✅ Polylines loaded in ${fetchTime.toFixed(0)}ms`);
-
-        if (!data.devices || data.devices.length === 0) {
-            console.log('⚠️ No devices/polylines in response');
-            return;
-        }
-
-        const features = [];
-
-        for (const device of data.devices) {
-            if (device.encoded_path) {
-                const coords = decodePolyline(device.encoded_path);
-                features.push({
-                    type: 'Feature',
-                    geometry: {
-                        type: 'LineString',
-                        coordinates: coords
-                    },
-                    properties: {
-                        device: device.device,
-                        start_time: device.start_time,
-                        end_time: device.end_time,
-                        type: 'polyline'
-                    }
-                });
-            }
-
-            if (device.batches && device.batches.length > 0) {
-                for (const batch of device.batches) {
-                    if (batch.success && batch.encoded_polyline) {
-                        const coords = decodePolyline(batch.encoded_polyline);
-                        features.push({
-                            type: 'Feature',
-                            geometry: {
-                                type: 'LineString',
-                                coordinates: coords
-                            },
-                            properties: {
-                                polyline_id: batch.id,
-                                device: device.device,
-                                start_time: batch.start_time,
-                                end_time: batch.end_time,
-                                bearing: batch.bearing,
-                                confidence: batch.confidence,
-                                type: 'polyline'
-                            }
-                        });
-                    }
-                }
-            }
-
-            if (device.raw_coordinates && device.raw_coordinates.length > 0) {
-                features.push({
-                    type: 'Feature',
-                    geometry: {
-                        type: 'LineString',
-                        coordinates: device.raw_coordinates
-                    },
-                    properties: {
-                        device: device.device,
-                        start_time: device.start_time,
-                        end_time: device.end_time,
-                        type: 'polyline',
-                        raw: true
-                    }
-                });
-            }
-        }
-
-        geojsonData.polylines.features = features;
-
-        if (map.getSource('polylines')) {
-            map.getSource('polylines').setData(geojsonData.polylines);
-        }
-
-        console.log(`📊 Loaded ${features.length} polylines`);
-        showStatus(`Loaded ${features.length} polylines`);
-    } catch (err) {
-        console.error('Failed to load polylines:', err);
-    }
-}
-
 // Load segments
 async function loadSegments() {
     try {
-        showStatus('Loading road segments...');
-        const startTime = performance.now();
-
         const url = `${API_BASE}/segments?municipality=pomfret-vt&all=true`;
         console.log(`🛣️  Fetching segments from: ${url}`);
 
         const data = await fetchJSON(url);
-        const fetchTime = performance.now() - startTime;
-        console.log(`✅ Segments loaded in ${fetchTime.toFixed(0)}ms`);
+        console.log(`✅ Segments loaded`);
 
         if (!data.features || data.features.length === 0) {
-            showStatus('No segments found');
             console.log('⚠️ No segments in response');
             return;
         }
@@ -406,7 +162,6 @@ async function loadSegments() {
 
         data.features.forEach(segment => {
             if (!segment.geometry || !segment.geometry.coordinates) {
-                console.warn('⚠️ Segment missing geometry:', segment);
                 return;
             }
 
@@ -425,60 +180,54 @@ async function loadSegments() {
                 return;
             }
 
+            // Filter by time range
+            if (lastPlowedISO) {
+                const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+                const plowTime = new Date(lastPlowedISO).getTime();
+                if (plowTime < cutoffTime) {
+                    return;
+                }
+            }
+
             // Add segment
             segmentFeatures.push({
                 type: 'Feature',
                 geometry: segment.geometry,
                 properties: {
-                    segment_id: segment.id,
-                    street_name: segment.properties.street_name,
-                    road_classification: segment.properties.road_classification,
-                    bearing: segment.properties.bearing,
-                    last_plowed: lastPlowedISO,
-                    last_plowed_forward: segment.properties.last_plowed_forward,
-                    last_plowed_reverse: segment.properties.last_plowed_reverse,
-                    device_id: segment.properties.device_id,
-                    plow_count_today: segment.properties.plow_count_today,
-                    plow_count_total: segment.properties.plow_count_total,
-                    segment_length: segment.properties.segment_length,
-                    is_activated: isActivated,
-                    type: 'segment',
                     color: getColorByAge(lastPlowedISO)
                 }
             });
 
             // Add forward offset
-            if (segment.vertices_forward && segment.vertices_forward.coordinates) {
-                forwardOffsetFeatures.push({
-                    type: 'Feature',
-                    geometry: segment.vertices_forward,
-                    properties: {
-                        segment_id: segment.id,
-                        street_name: segment.properties.street_name,
-                        last_plowed_forward: segment.properties.last_plowed_forward,
-                        type: 'offset_forward',
-                        color: segment.properties.last_plowed_forward
-                            ? getColorByAge(segment.properties.last_plowed_forward)
-                            : '#808080'
-                    }
-                });
+            if (segment.vertices_forward && segment.vertices_forward.coordinates && segment.properties.last_plowed_forward) {
+                const fwdCutoff = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+                const fwdTime = new Date(segment.properties.last_plowed_forward).getTime();
+
+                if (fwdTime >= fwdCutoff) {
+                    forwardOffsetFeatures.push({
+                        type: 'Feature',
+                        geometry: segment.vertices_forward,
+                        properties: {
+                            color: getColorByAge(segment.properties.last_plowed_forward)
+                        }
+                    });
+                }
             }
 
             // Add reverse offset
-            if (segment.vertices_reverse && segment.vertices_reverse.coordinates) {
-                reverseOffsetFeatures.push({
-                    type: 'Feature',
-                    geometry: segment.vertices_reverse,
-                    properties: {
-                        segment_id: segment.id,
-                        street_name: segment.properties.street_name,
-                        last_plowed_reverse: segment.properties.last_plowed_reverse,
-                        type: 'offset_reverse',
-                        color: segment.properties.last_plowed_reverse
-                            ? getColorByAge(segment.properties.last_plowed_reverse)
-                            : '#808080'
-                    }
-                });
+            if (segment.vertices_reverse && segment.vertices_reverse.coordinates && segment.properties.last_plowed_reverse) {
+                const revCutoff = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+                const revTime = new Date(segment.properties.last_plowed_reverse).getTime();
+
+                if (revTime >= revCutoff) {
+                    reverseOffsetFeatures.push({
+                        type: 'Feature',
+                        geometry: segment.vertices_reverse,
+                        properties: {
+                            color: getColorByAge(segment.properties.last_plowed_reverse)
+                        }
+                    });
+                }
             }
         });
 
@@ -496,49 +245,23 @@ async function loadSegments() {
             map.getSource('reverse-offsets').setData(geojsonData.reverseOffsets);
         }
 
-        // Update layer colors using data-driven styling
-        updateLayerColors();
-
-        const totalTime = performance.now() - startTime;
-        console.log(`⚡ Total segment load time: ${totalTime.toFixed(0)}ms`);
         console.log(`📊 Segments: ${segmentFeatures.length} total`);
         console.log(`📊 Offset geometries: ${forwardOffsetFeatures.length} forward, ${reverseOffsetFeatures.length} reverse`);
-
-        showStatus(`Loaded ${segmentFeatures.length} segments (${forwardOffsetFeatures.length} offset geometries)`);
     } catch (err) {
         console.error('Failed to load segments:', err);
-        showStatus(`Error: ${err.message}`);
     }
-}
-
-// Update layer colors with data-driven styling
-function updateLayerColors() {
-    // Segments color
-    map.setPaintProperty('segments', 'line-color', ['get', 'color']);
-
-    // Forward offsets color
-    map.setPaintProperty('forward-offsets', 'line-color', ['get', 'color']);
-
-    // Reverse offsets color
-    map.setPaintProperty('reverse-offsets', 'line-color', ['get', 'color']);
 }
 
 // Load all data
 async function loadAllData() {
     try {
-        showStatus('Loading map data...');
-
-        await Promise.all([
-            loadBoundary(),
-            loadPolylines(),
-            loadSegments()
-        ]);
+        await loadSegments();
 
         // Fit to bounds if we have features
-        if (geojsonData.segments.features.length > 0 || geojsonData.polylines.features.length > 0) {
+        if (geojsonData.segments.features.length > 0) {
             const bounds = new mapboxgl.LngLatBounds();
 
-            [...geojsonData.segments.features, ...geojsonData.polylines.features].forEach(feature => {
+            geojsonData.segments.features.forEach(feature => {
                 if (feature.geometry.type === 'LineString') {
                     feature.geometry.coordinates.forEach(coord => bounds.extend(coord));
                 }
@@ -546,31 +269,13 @@ async function loadAllData() {
 
             map.fitBounds(bounds, { padding: 50, maxZoom: 16 });
         }
-
-        const polylineCount = geojsonData.polylines.features.length;
-        const segmentCount = geojsonData.segments.features.length;
-        showStatus(`Loaded ${polylineCount} polylines, ${segmentCount} segments`);
     } catch (err) {
         console.error('Failed to load data:', err);
-        showStatus(`Error: ${err.message}`);
     }
 }
 
-// UI Functions
+// Create simple time slider UI
 function createUI() {
-    // Search bar (top-left)
-    const searchDiv = document.createElement('div');
-    searchDiv.id = 'search-bar';
-    searchDiv.innerHTML = `
-        <div class="search-input-wrapper">
-            <span class="search-icon">🔍</span>
-            <input type="text" id="addressSearch" placeholder="Search address...">
-        </div>
-        <div id="searchResults" class="search-results"></div>
-    `;
-    document.body.appendChild(searchDiv);
-
-    // Control panel (top-right)
     const controlsDiv = document.createElement('div');
     controlsDiv.id = 'controls';
     controlsDiv.innerHTML = `
@@ -599,7 +304,6 @@ function createUI() {
     document.body.appendChild(controlsDiv);
 
     setupTimeSlider();
-    setupAddressSearch();
 }
 
 function setupTimeSlider() {
@@ -614,115 +318,6 @@ function setupTimeSlider() {
         // Reload and update colors
         loadSegments();
     });
-}
-
-function setupAddressSearch() {
-    const searchInput = document.getElementById('addressSearch');
-    const searchResults = document.getElementById('searchResults');
-
-    searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            const query = searchInput.value.trim();
-            if (query) {
-                performAddressSearch(query);
-            }
-        }
-    });
-
-    let searchTimeout;
-    searchInput.addEventListener('input', (e) => {
-        clearTimeout(searchTimeout);
-        const query = e.target.value.trim();
-
-        if (query.length < 1) {
-            searchResults.innerHTML = '';
-            return;
-        }
-
-        searchTimeout = setTimeout(() => {
-            performAddressSearch(query);
-        }, 200);
-    });
-}
-
-async function performAddressSearch(query) {
-    const searchResults = document.getElementById('searchResults');
-    searchResults.innerHTML = '<div class="search-loading">Searching...</div>';
-
-    try {
-        const center = map.getCenter();
-
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?` +
-            `access_token=${MAPBOX_TOKEN}&` +
-            `proximity=${center.lng},${center.lat}&` +
-            `country=US&` +
-            `limit=5&` +
-            `autocomplete=true`;
-
-        const response = await fetch(url);
-
-        if (!response.ok) {
-            throw new Error('Search failed');
-        }
-
-        const data = await response.json();
-        const results = data.features || [];
-
-        if (results.length === 0) {
-            searchResults.innerHTML = '<div class="search-no-results">No results found</div>';
-            return;
-        }
-
-        searchResults.innerHTML = results.map((result, index) => `
-            <div class="search-result-item" data-index="${index}">
-                <div class="result-name">${result.place_name}</div>
-            </div>
-        `).join('');
-
-        searchResults.querySelectorAll('.search-result-item').forEach((item, index) => {
-            item.addEventListener('click', () => {
-                const result = results[index];
-                showSearchResult(result);
-                searchResults.innerHTML = '';
-            });
-        });
-
-    } catch (err) {
-        console.error('Address search failed:', err);
-        searchResults.innerHTML = '<div class="search-error">Search failed. Please try again.</div>';
-    }
-}
-
-function showSearchResult(result) {
-    const [lng, lat] = result.center;
-
-    geojsonData.searchResult.features = [{
-        type: 'Feature',
-        geometry: {
-            type: 'Point',
-            coordinates: [lng, lat]
-        },
-        properties: {
-            name: result.place_name
-        }
-    }];
-
-    if (map.getSource('search-result')) {
-        map.getSource('search-result').setData(geojsonData.searchResult);
-    }
-
-    const searchInput = document.getElementById('addressSearch');
-    if (searchInput) {
-        searchInput.value = result.place_name;
-    }
-
-    map.flyTo({
-        center: [lng, lat],
-        zoom: 16,
-        duration: 1000
-    });
-
-    console.log(`📍 Searched location: ${result.place_name}`);
 }
 
 function formatTimeLabel(minutes) {
@@ -771,10 +366,6 @@ function updateTimeDisplay(hours) {
     }
 
     updateGradientLabels(hours);
-}
-
-function showStatus(message) {
-    console.log(message);
 }
 
 // User geolocation
