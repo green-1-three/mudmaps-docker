@@ -289,12 +289,31 @@ map.on('load', () => {
     loadAllData();
 });
 
-// Update zoom level display
+// Track zoom state for endpoint regeneration
+let lastZoomAbove14 = map.getZoom() >= 14;
+
+// Update zoom level display and regenerate endpoints if crossing zoom 14 threshold
 map.on('zoom', () => {
-    const zoomLevel = map.getZoom().toFixed(1);
+    const zoomLevel = map.getZoom();
     const zoomDisplay = document.getElementById('zoom-display');
     if (zoomDisplay) {
-        zoomDisplay.textContent = `Zoom: ${zoomLevel}`;
+        zoomDisplay.textContent = `Zoom: ${zoomLevel.toFixed(1)}`;
+    }
+
+    // Check if we crossed the zoom 14 threshold
+    const currentZoomAbove14 = zoomLevel >= 14;
+    if (currentZoomAbove14 !== lastZoomAbove14) {
+        lastZoomAbove14 = currentZoomAbove14;
+        // Regenerate endpoints with new length
+        console.log(`🔄 Zoom crossed 14 threshold, regenerating endpoints...`);
+
+        // Only regenerate if data is already loaded
+        if (geojsonData.segments.features.length > 0) {
+            loadSegments();
+        }
+        if (geojsonData.polylines.features.length > 0) {
+            loadPolylines();
+        }
     }
 });
 
@@ -447,7 +466,9 @@ async function loadPolylines() {
 
         // Extract polyline endpoints for debugging borders - perpendicular lines
         const polylineEndpointFeatures = [];
-        const polylineWidthMeters = 7.5; // Proportional to polyline line width (2px)
+        const currentZoom = map.getZoom();
+        const zoomMultiplier = currentZoom < 14 ? 2 : 1;
+        const polylineWidthMeters = 7.5 * zoomMultiplier; // Double length at zoom < 14
 
         features.forEach(feature => {
             if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length >= 2) {
@@ -667,7 +688,9 @@ async function loadSegments() {
 
         // Extract segment endpoints for debugging borders - perpendicular lines
         const segmentEndpointFeatures = [];
-        const segmentWidthMeters = 15; // Proportional to segment line width (4px)
+        const currentZoom = map.getZoom();
+        const zoomMultiplier = currentZoom < 14 ? 2 : 1;
+        const segmentWidthMeters = 15 * zoomMultiplier; // Double length at zoom < 14
 
         segmentFeatures.forEach(feature => {
             if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length >= 2) {
