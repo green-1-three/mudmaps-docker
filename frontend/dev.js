@@ -125,7 +125,9 @@ map.on('load', () => {
         type: 'line',
         source: 'polylines',
         layout: {
-            'visibility': 'none' // Hidden by default
+            'visibility': 'none', // Hidden by default
+            'line-cap': 'round',
+            'line-join': 'round'
         },
         paint: {
             'line-color': '#ffffff',
@@ -171,13 +173,15 @@ map.on('load', () => {
         }
     });
 
-    // Add segment borders layer (drawn first, underneath) - creates white glow effect
+    // Add segment borders layer (drawn first, underneath) - creates white glow effect around EACH segment
     map.addLayer({
         id: 'segment-borders',
         type: 'line',
         source: 'segments',
         layout: {
-            'visibility': 'none' // Hidden by default
+            'visibility': 'none', // Hidden by default
+            'line-cap': 'round',
+            'line-join': 'round'
         },
         paint: {
             'line-color': '#ffffff',
