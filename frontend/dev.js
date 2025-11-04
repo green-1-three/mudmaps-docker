@@ -76,7 +76,9 @@ const geojsonData = {
     segments: { type: 'FeatureCollection', features: [] },
     forwardOffsets: { type: 'FeatureCollection', features: [] },
     reverseOffsets: { type: 'FeatureCollection', features: [] },
-    searchResult: { type: 'FeatureCollection', features: [] }
+    searchResult: { type: 'FeatureCollection', features: [] },
+    segmentEndpoints: { type: 'FeatureCollection', features: [] },
+    polylineEndpoints: { type: 'FeatureCollection', features: [] }
 };
 
 // Layer references for module access
@@ -96,6 +98,8 @@ map.on('load', () => {
     map.addSource('forward-offsets', { type: 'geojson', data: geojsonData.forwardOffsets });
     map.addSource('reverse-offsets', { type: 'geojson', data: geojsonData.reverseOffsets });
     map.addSource('search-result', { type: 'geojson', data: geojsonData.searchResult });
+    map.addSource('segment-endpoints', { type: 'geojson', data: geojsonData.segmentEndpoints });
+    map.addSource('polyline-endpoints', { type: 'geojson', data: geojsonData.polylineEndpoints });
 
     // Add boundary layer
     map.addLayer({
@@ -119,21 +123,20 @@ map.on('load', () => {
         }
     });
 
-    // Polyline borders - using line-gap-width to create casing effect around each line
+    // Polyline endpoint markers for debugging - shows start/end of each polyline
     map.addLayer({
         id: 'polyline-borders',
-        type: 'line',
-        source: 'polylines',
+        type: 'circle',
+        source: 'polyline-endpoints',
         layout: {
-            'visibility': 'none', // Hidden by default
-            'line-cap': 'round',
-            'line-join': 'round'
+            'visibility': 'none' // Hidden by default
         },
         paint: {
-            'line-color': '#ffffff',
-            'line-width': 2,
-            'line-gap-width': 2, // Creates 2px gap, then 2px white border = 4px total
-            'line-opacity': 1
+            'circle-radius': 5,
+            'circle-color': '#ffffff',
+            'circle-stroke-color': '#4444ff',
+            'circle-stroke-width': 2,
+            'circle-opacity': 0.9
         }
     });
 
@@ -149,29 +152,32 @@ map.on('load', () => {
         }
     });
 
-    // Segment borders - using line-gap-width to create casing effect around each segment
+    // Segment endpoint markers for debugging - shows start/end of each segment
     map.addLayer({
         id: 'segment-borders',
-        type: 'line',
-        source: 'segments',
+        type: 'circle',
+        source: 'segment-endpoints',
         layout: {
-            'visibility': 'visible', // TEMPORARILY VISIBLE FOR DEBUGGING
-            'line-cap': 'round',
-            'line-join': 'round'
+            'visibility': 'none' // Hidden by default
         },
         paint: {
-            'line-color': '#00ff00', // NEON GREEN FOR DEBUGGING
-            'line-width': 4, // Thick border for visibility
-            'line-gap-width': 6, // Gap wider than segment (6px vs 4px segment width)
-            'line-opacity': 1
+            'circle-radius': 5,
+            'circle-color': '#ffffff',
+            'circle-stroke-color': '#ff0000',
+            'circle-stroke-width': 2,
+            'circle-opacity': 0.9
         }
     });
 
-    // Add segments layer
+    // Add segments layer on top - must be thinner than border
     map.addLayer({
         id: 'segments',
         type: 'line',
         source: 'segments',
+        layout: {
+            'line-cap': 'round',
+            'line-join': 'round'
+        },
         paint: {
             'line-color': ['get', 'color'],
             'line-width': 4,
@@ -374,13 +380,54 @@ async function loadPolylines() {
             }
         }
 
+        // Extract polyline endpoints for debugging borders
+        const polylineEndpointFeatures = [];
+        features.forEach(feature => {
+            if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length > 0) {
+                const coords = feature.geometry.coordinates;
+
+                // Start point
+                polylineEndpointFeatures.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: coords[0]
+                    },
+                    properties: {
+                        polyline_id: feature.properties.polyline_id,
+                        device: feature.properties.device,
+                        endpoint_type: 'start'
+                    }
+                });
+
+                // End point
+                polylineEndpointFeatures.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: coords[coords.length - 1]
+                    },
+                    properties: {
+                        polyline_id: feature.properties.polyline_id,
+                        device: feature.properties.device,
+                        endpoint_type: 'end'
+                    }
+                });
+            }
+        });
+
         geojsonData.polylines.features = features;
+        geojsonData.polylineEndpoints.features = polylineEndpointFeatures;
 
         if (map.getSource('polylines')) {
             map.getSource('polylines').setData(geojsonData.polylines);
         }
+        if (map.getSource('polyline-endpoints')) {
+            map.getSource('polyline-endpoints').setData(geojsonData.polylineEndpoints);
+        }
 
         console.log(`📊 Loaded ${features.length} polylines`);
+        console.log(`📊 Polyline endpoint markers: ${polylineEndpointFeatures.length} total (${features.length * 2} expected)`);
         showStatus(`Loaded ${features.length} polylines`);
     } catch (err) {
         console.error('Failed to load polylines:', err);
@@ -535,9 +582,46 @@ async function loadSegments() {
             }
         });
 
+        // Extract segment endpoints for debugging borders
+        const segmentEndpointFeatures = [];
+        segmentFeatures.forEach(feature => {
+            if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length > 0) {
+                const coords = feature.geometry.coordinates;
+
+                // Start point
+                segmentEndpointFeatures.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: coords[0]
+                    },
+                    properties: {
+                        segment_id: feature.properties.segment_id,
+                        street_name: feature.properties.street_name,
+                        endpoint_type: 'start'
+                    }
+                });
+
+                // End point
+                segmentEndpointFeatures.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: coords[coords.length - 1]
+                    },
+                    properties: {
+                        segment_id: feature.properties.segment_id,
+                        street_name: feature.properties.street_name,
+                        endpoint_type: 'end'
+                    }
+                });
+            }
+        });
+
         geojsonData.segments.features = segmentFeatures;
         geojsonData.forwardOffsets.features = forwardOffsetFeatures;
         geojsonData.reverseOffsets.features = reverseOffsetFeatures;
+        geojsonData.segmentEndpoints.features = segmentEndpointFeatures;
 
         if (map.getSource('segments')) {
             map.getSource('segments').setData(geojsonData.segments);
@@ -548,11 +632,15 @@ async function loadSegments() {
         if (map.getSource('reverse-offsets')) {
             map.getSource('reverse-offsets').setData(geojsonData.reverseOffsets);
         }
+        if (map.getSource('segment-endpoints')) {
+            map.getSource('segment-endpoints').setData(geojsonData.segmentEndpoints);
+        }
 
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total segment load time: ${totalTime.toFixed(0)}ms`);
         console.log(`📊 Segments: ${totalSegments} total, ${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated`);
         console.log(`📊 Offset geometries: ${forwardOffsetCount} forward, ${reverseOffsetCount} reverse`);
+        console.log(`📊 Segment endpoint markers: ${segmentEndpointFeatures.length} total (${segmentFeatures.length * 2} expected)`);
 
         showStatus(`Loaded ${totalSegments} segments (${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated, ${forwardOffsetCount} offset geometries)`);
 
