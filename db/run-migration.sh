@@ -28,7 +28,7 @@ if [ -z "$1" ]; then
 fi
 
 MIGRATION_NUM="$1"
-MIGRATION_FILE="db/migrations/${MIGRATION_NUM}_*.sql"
+MIGRATION_FILE="migrations/${MIGRATION_NUM}_*.sql"
 
 # Find the migration file
 FOUND_FILE=$(ls $MIGRATION_FILE 2>/dev/null | head -1)
@@ -37,19 +37,19 @@ if [ -z "$FOUND_FILE" ]; then
     echo -e "${RED}❌ ERROR: Migration ${MIGRATION_NUM} not found${NC}"
     echo ""
     echo "Available migrations:"
-    ls -1 db/migrations/*.sql | sed 's/.*\//  - /'
+    ls -1 migrations/*.sql | sed 's/.*\//  - /'
     exit 1
 fi
 
 echo -e "${GREEN}✓ Found migration: ${FOUND_FILE}${NC}"
 echo ""
 
-# Load environment variables
-if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
+# Load environment variables (parent directory)
+if [ -f ../.env ]; then
+    export $(cat ../.env | grep -v '^#' | xargs)
     echo "✓ Loaded environment from .env"
-elif [ -f .env.production ]; then
-    export $(cat .env.production | grep -v '^#' | xargs)
+elif [ -f ../.env.production ]; then
+    export $(cat ../.env.production | grep -v '^#' | xargs)
     echo "✓ Loaded environment from .env.production"
 else
     echo -e "${YELLOW}⚠️  No .env file found, using defaults${NC}"
