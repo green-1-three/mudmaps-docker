@@ -603,18 +603,6 @@ function updateTimeDisplay(hours) {
     updateGradientLabels(hours);
 }
 
-function formatTimeLabel(minutes) {
-    if (minutes < 60) {
-        return `${minutes} min`;
-    } else if (minutes < 1440) {
-        const hours = Math.round(minutes / 60);
-        return hours === 1 ? '1 hour' : `${hours} hours`;
-    } else {
-        const days = Math.round(minutes / 1440);
-        return days === 1 ? '1 day' : `${days} days`;
-    }
-}
-
 function updateGradientLabels(hours) {
     const leftLabel = document.getElementById('gradientLeft');
     const centerLabel = document.getElementById('gradientCenter');
