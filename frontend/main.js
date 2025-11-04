@@ -84,7 +84,7 @@ function getColorByAge(timestamp, maxHours = currentTimeHours) {
 // Initialize map
 const map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/mapbox/light-v11', // Light style without street labels
+    style: 'mapbox://styles/mapbox/streets-v12',
     center: [0, 0],
     zoom: 2
 });
@@ -110,6 +110,14 @@ map.on('zoom', () => {
 
 // Map load event - add sources and layers
 map.on('load', () => {
+    // Hide all label layers from the base map
+    const style = map.getStyle();
+    style.layers.forEach(layer => {
+        if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
+            map.setLayoutProperty(layer.id, 'visibility', 'none');
+        }
+    });
+
     // Add sources
     map.addSource('segments', { type: 'geojson', data: geojsonData.segments });
     map.addSource('forward-offsets', { type: 'geojson', data: geojsonData.forwardOffsets });

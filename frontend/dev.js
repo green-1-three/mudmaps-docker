@@ -164,7 +164,7 @@ function findClosestSegment(mousePoint, features, snapRadius = 20) {
 // Initialize map
 const map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/mapbox/light-v11', // Light style without street labels
+    style: 'mapbox://styles/mapbox/streets-v12',
     center: [0, 0],
     zoom: 2
 });
@@ -195,6 +195,14 @@ const layers = {
 
 // Map load event - add sources and layers
 map.on('load', () => {
+    // Hide all label layers from the base map
+    const style = map.getStyle();
+    style.layers.forEach(layer => {
+        if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
+            map.setLayoutProperty(layer.id, 'visibility', 'none');
+        }
+    });
+
     // Add sources
     map.addSource('boundary', { type: 'geojson', data: geojsonData.boundary });
     map.addSource('polylines', { type: 'geojson', data: geojsonData.polylines });
