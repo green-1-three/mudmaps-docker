@@ -39,7 +39,7 @@ mapboxgl.accessToken = MAPBOX_TOKEN;
 const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
 
 // Global variable to store current time range
-let currentTimeHours = 168;
+let currentTimeHours = 24;
 
 // Helper function to convert hex color to rgba with opacity
 function hexToRgba(hex, opacity) {
@@ -614,7 +614,7 @@ function initializeModules() {
     const logsTab = initLogsTab(API_BASE);
 
     // Initialize frontend logger
-    initFrontendLogger();
+    initFrontendLogger(API_BASE);
 
     // Setup time slider
     setupTimeSlider();
