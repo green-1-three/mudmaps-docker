@@ -58,6 +58,52 @@ function hexToRgba(hex, opacity) {
     return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
+// Helper function to calculate bearing between two points
+function calculateBearing(lon1, lat1, lon2, lat2) {
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const lat1Rad = lat1 * Math.PI / 180;
+    const lat2Rad = lat2 * Math.PI / 180;
+
+    const y = Math.sin(dLon) * Math.cos(lat2Rad);
+    const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) -
+              Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+    const bearing = Math.atan2(y, x) * 180 / Math.PI;
+
+    return (bearing + 360) % 360;
+}
+
+// Helper function to calculate destination point given distance and bearing
+function calculateDestination(lon, lat, distanceMeters, bearing) {
+    const R = 6378137; // Earth's radius in meters
+    const bearingRad = bearing * Math.PI / 180;
+    const latRad = lat * Math.PI / 180;
+    const lonRad = lon * Math.PI / 180;
+
+    const lat2Rad = Math.asin(
+        Math.sin(latRad) * Math.cos(distanceMeters / R) +
+        Math.cos(latRad) * Math.sin(distanceMeters / R) * Math.cos(bearingRad)
+    );
+
+    const lon2Rad = lonRad + Math.atan2(
+        Math.sin(bearingRad) * Math.sin(distanceMeters / R) * Math.cos(latRad),
+        Math.cos(distanceMeters / R) - Math.sin(latRad) * Math.sin(lat2Rad)
+    );
+
+    return [lon2Rad * 180 / Math.PI, lat2Rad * 180 / Math.PI];
+}
+
+// Helper function to create perpendicular line at a point
+function createPerpendicularLine(point, bearing, widthMeters) {
+    const perpBearing1 = (bearing + 90) % 360;
+    const perpBearing2 = (bearing - 90 + 360) % 360;
+
+    const halfWidth = widthMeters / 2;
+    const point1 = calculateDestination(point[0], point[1], halfWidth, perpBearing1);
+    const point2 = calculateDestination(point[0], point[1], halfWidth, perpBearing2);
+
+    return [point1, point2];
+}
+
 // Initialize map
 const map = new mapboxgl.Map({
     container: 'map',
@@ -123,23 +169,6 @@ map.on('load', () => {
         }
     });
 
-    // Polyline endpoint markers for debugging - shows start/end of each polyline
-    map.addLayer({
-        id: 'polyline-borders',
-        type: 'circle',
-        source: 'polyline-endpoints',
-        layout: {
-            'visibility': 'none' // Hidden by default
-        },
-        paint: {
-            'circle-radius': 5,
-            'circle-color': '#ffffff',
-            'circle-stroke-color': '#4444ff',
-            'circle-stroke-width': 2,
-            'circle-opacity': 0.9
-        }
-    });
-
     // Add polylines layer
     map.addLayer({
         id: 'polylines',
@@ -152,24 +181,21 @@ map.on('load', () => {
         }
     });
 
-    // Segment endpoint markers for debugging - shows start/end of each segment
+    // Polyline endpoint markers for debugging - perpendicular lines at endpoints
     map.addLayer({
-        id: 'segment-borders',
-        type: 'circle',
-        source: 'segment-endpoints',
+        id: 'polyline-borders',
+        type: 'line',
+        source: 'polyline-endpoints',
         layout: {
             'visibility': 'none' // Hidden by default
         },
         paint: {
-            'circle-radius': 5,
-            'circle-color': '#ffffff',
-            'circle-stroke-color': '#ff0000',
-            'circle-stroke-width': 2,
-            'circle-opacity': 0.9
+            'line-color': '#000000',
+            'line-width': 2
         }
     });
 
-    // Add segments layer on top - must be thinner than border
+    // Add segments layer
     map.addLayer({
         id: 'segments',
         type: 'line',
@@ -206,6 +232,20 @@ map.on('load', () => {
             'line-color': ['get', 'color'],
             'line-width': 3,
             'line-opacity': ['coalesce', ['get', 'opacity'], 1]
+        }
+    });
+
+    // Segment endpoint markers for debugging - perpendicular lines at endpoints
+    map.addLayer({
+        id: 'segment-borders',
+        type: 'line',
+        source: 'segment-endpoints',
+        layout: {
+            'visibility': 'none' // Hidden by default
+        },
+        paint: {
+            'line-color': '#000000',
+            'line-width': 2
         }
     });
 
@@ -380,18 +420,28 @@ async function loadPolylines() {
             }
         }
 
-        // Extract polyline endpoints for debugging borders
+        // Extract polyline endpoints for debugging borders - perpendicular lines
         const polylineEndpointFeatures = [];
+        const polylineWidthMeters = 2; // Match the polyline line width
+
         features.forEach(feature => {
-            if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length > 0) {
+            if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length >= 2) {
                 const coords = feature.geometry.coordinates;
 
-                // Start point
+                // Start point - calculate bearing from first to second point
+                const startPoint = coords[0];
+                const secondPoint = coords[1];
+                const startBearing = calculateBearing(
+                    startPoint[0], startPoint[1],
+                    secondPoint[0], secondPoint[1]
+                );
+                const startLine = createPerpendicularLine(startPoint, startBearing, polylineWidthMeters);
+
                 polylineEndpointFeatures.push({
                     type: 'Feature',
                     geometry: {
-                        type: 'Point',
-                        coordinates: coords[0]
+                        type: 'LineString',
+                        coordinates: startLine
                     },
                     properties: {
                         polyline_id: feature.properties.polyline_id,
@@ -400,12 +450,20 @@ async function loadPolylines() {
                     }
                 });
 
-                // End point
+                // End point - calculate bearing from second-to-last to last point
+                const endPoint = coords[coords.length - 1];
+                const penultimatePoint = coords[coords.length - 2];
+                const endBearing = calculateBearing(
+                    penultimatePoint[0], penultimatePoint[1],
+                    endPoint[0], endPoint[1]
+                );
+                const endLine = createPerpendicularLine(endPoint, endBearing, polylineWidthMeters);
+
                 polylineEndpointFeatures.push({
                     type: 'Feature',
                     geometry: {
-                        type: 'Point',
-                        coordinates: coords[coords.length - 1]
+                        type: 'LineString',
+                        coordinates: endLine
                     },
                     properties: {
                         polyline_id: feature.properties.polyline_id,
@@ -582,18 +640,28 @@ async function loadSegments() {
             }
         });
 
-        // Extract segment endpoints for debugging borders
+        // Extract segment endpoints for debugging borders - perpendicular lines
         const segmentEndpointFeatures = [];
+        const segmentWidthMeters = 4; // Match the segment line width
+
         segmentFeatures.forEach(feature => {
-            if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length > 0) {
+            if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length >= 2) {
                 const coords = feature.geometry.coordinates;
 
-                // Start point
+                // Start point - calculate bearing from first to second point
+                const startPoint = coords[0];
+                const secondPoint = coords[1];
+                const startBearing = calculateBearing(
+                    startPoint[0], startPoint[1],
+                    secondPoint[0], secondPoint[1]
+                );
+                const startLine = createPerpendicularLine(startPoint, startBearing, segmentWidthMeters);
+
                 segmentEndpointFeatures.push({
                     type: 'Feature',
                     geometry: {
-                        type: 'Point',
-                        coordinates: coords[0]
+                        type: 'LineString',
+                        coordinates: startLine
                     },
                     properties: {
                         segment_id: feature.properties.segment_id,
@@ -602,12 +670,20 @@ async function loadSegments() {
                     }
                 });
 
-                // End point
+                // End point - calculate bearing from second-to-last to last point
+                const endPoint = coords[coords.length - 1];
+                const penultimatePoint = coords[coords.length - 2];
+                const endBearing = calculateBearing(
+                    penultimatePoint[0], penultimatePoint[1],
+                    endPoint[0], endPoint[1]
+                );
+                const endLine = createPerpendicularLine(endPoint, endBearing, segmentWidthMeters);
+
                 segmentEndpointFeatures.push({
                     type: 'Feature',
                     geometry: {
-                        type: 'Point',
-                        coordinates: coords[coords.length - 1]
+                        type: 'LineString',
+                        coordinates: endLine
                     },
                     properties: {
                         segment_id: feature.properties.segment_id,
