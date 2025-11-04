@@ -119,7 +119,7 @@ map.on('load', () => {
         }
     });
 
-    // Add polylines border layer (drawn first, underneath)
+    // Add polylines border layer (drawn first, underneath) - creates white glow effect
     map.addLayer({
         id: 'polyline-borders',
         type: 'line',
@@ -129,7 +129,9 @@ map.on('load', () => {
         },
         paint: {
             'line-color': '#ffffff',
-            'line-width': 4
+            'line-width': 6,
+            'line-opacity': 0.8,
+            'line-blur': 1
         }
     });
 
@@ -169,7 +171,7 @@ map.on('load', () => {
         }
     });
 
-    // Add segment borders layer (drawn first, underneath)
+    // Add segment borders layer (drawn first, underneath) - creates white glow effect
     map.addLayer({
         id: 'segment-borders',
         type: 'line',
@@ -179,7 +181,9 @@ map.on('load', () => {
         },
         paint: {
             'line-color': '#ffffff',
-            'line-width': 6
+            'line-width': 8,
+            'line-opacity': 0.8,
+            'line-blur': 1
         }
     });
 
@@ -773,9 +777,6 @@ function initializeModules() {
     );
     window.uiControls = uiControls;
 
-    // Set up dev panel tab switching
-    setupDevPanelTabs();
-
     // Set up layer visibility toggles for Mapbox
     setupMapboxLayerToggles();
 
@@ -790,6 +791,9 @@ function initializeModules() {
 
     // Initialize frontend logger
     initFrontendLogger(API_BASE);
+
+    // Set up dev panel tab switching (AFTER tabs are created)
+    setupDevPanelTabs();
 
     // Create UI overlay (time slider, search bar)
     createUI();
@@ -806,9 +810,12 @@ function setupDevPanelTabs() {
     const tabs = document.querySelectorAll('.dev-tab');
     const tabContents = document.querySelectorAll('.dev-tab-content');
 
+    console.log(`📑 Setting up ${tabs.length} tabs with ${tabContents.length} tab contents`);
+
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             const targetTab = tab.getAttribute('data-tab');
+            console.log(`🔄 Switching to tab: ${targetTab}`);
 
             // Remove active class from all tabs
             tabs.forEach(t => t.classList.remove('active'));
@@ -819,6 +826,9 @@ function setupDevPanelTabs() {
             const targetContent = document.querySelector(`[data-tab-content="${targetTab}"]`);
             if (targetContent) {
                 targetContent.classList.add('active');
+                console.log(`✅ Activated tab content: ${targetTab}`);
+            } else {
+                console.warn(`⚠️ Tab content not found for: ${targetTab}`);
             }
         });
     });
