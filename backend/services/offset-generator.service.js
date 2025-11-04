@@ -54,11 +54,9 @@ class OffsetGeneratorService {
                 return 0;
             }
 
-            // Generate offset curves for the entire way
-            // Note: ST_OffsetCurve works on geometry (not geography)
-            // For small areas, distortion is minimal. Distance is approximate degrees.
-            // ~2m at 44°N latitude ≈ 0.000025 degrees
-            const offsetDegrees = 0.000025; // Approximately 2 meters
+            // Generate offset curves for the entire way using geography for true meter-based offsets
+            // First convert to geography, offset in meters, then back to geometry
+            const offsetMeters = this.offsetDistance; // 2 meters
 
             const offsetResult = await client.query(`
                 WITH way AS (
@@ -66,12 +64,30 @@ class OffsetGeneratorService {
                     FROM road_segments
                     WHERE osm_way_id = $1
                       AND geometry IS NOT NULL
+                ),
+                projected AS (
+                    SELECT
+                        ST_Transform(
+                            ST_OffsetCurve(
+                                ST_Transform(geom, 3857),  -- Transform to Web Mercator for offset
+                                $2                          -- Offset in meters (3857 uses meters)
+                            ),
+                            4326                            -- Transform back to WGS84
+                        ) as left_offset,
+                        ST_Transform(
+                            ST_OffsetCurve(
+                                ST_Transform(geom, 3857),  -- Transform to Web Mercator for offset
+                                $3                          -- Negative offset for right side
+                            ),
+                            4326                            -- Transform back to WGS84
+                        ) as right_offset
+                    FROM way
                 )
                 SELECT
-                    ST_AsText(ST_OffsetCurve(geom, $2)) as left_offset,
-                    ST_AsText(ST_OffsetCurve(geom, $3)) as right_offset
-                FROM way
-            `, [osmWayId, offsetDegrees, -offsetDegrees]);
+                    ST_AsText(left_offset) as left_offset,
+                    ST_AsText(right_offset) as right_offset
+                FROM projected
+            `, [osmWayId, offsetMeters, -offsetMeters]);
 
             const { left_offset, right_offset } = offsetResult.rows[0];
 
