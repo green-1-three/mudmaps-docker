@@ -194,8 +194,10 @@ map.on('load', () => {
                 ['linear'],
                 ['zoom'],
                 10, 8,   // At zoom 10, size is 8px
-                13, 10,  // At zoom 13, size is 10px
-                16, 12   // At zoom 16, size is 12px
+                13, 11,  // At zoom 13, size is 11px
+                15, 12,  // At zoom 15, size is 12px
+                16, 14,  // At zoom 16, size is 14px
+                18, 16   // At zoom 18, size is 16px
             ],
             'symbol-placement': 'line',
             'text-rotation-alignment': 'map',
@@ -205,7 +207,7 @@ map.on('load', () => {
             'text-ignore-placement': false,
             'text-max-angle': 20, // Prevent labels on sharp curves (max angle between adjacent characters)
             'text-keep-upright': true, // Prevent upside-down labels
-            'symbol-spacing': 100, // Minimum distance between repeated labels (pixels)
+            'symbol-spacing': 150, // Minimum distance between repeated labels (pixels)
             'text-padding': 20 // Add padding around labels to prevent overlap
         },
         paint: {
