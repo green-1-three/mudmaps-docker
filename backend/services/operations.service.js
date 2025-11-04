@@ -308,16 +308,12 @@ class OperationsService {
      * @returns {Promise<Object>} Result with stats
      */
     async generateOffsets(jobId, limit = null) {
-        const client = await this.db.pool.connect();
-
         if (this.logger) {
             this.logger.info(`Starting offset generation - Limit: ${limit || 'ALL ways'}`);
         }
 
         try {
-            await client.query('BEGIN');
-
-            // Get distinct OSM way IDs
+            // Get distinct OSM way IDs (no transaction needed for SELECT)
             let query = `
                 SELECT DISTINCT osm_way_id
                 FROM road_segments
@@ -331,7 +327,7 @@ class OperationsService {
             }
 
             const params = limit ? [limit] : [];
-            const waysResult = await client.query(query, params);
+            const waysResult = await this.db.pool.query(query, params);
             const ways = waysResult.rows;
 
             if (this.logger) {
@@ -342,7 +338,6 @@ class OperationsService {
             jobTracker.updateProgress(jobId, 0, ways.length);
 
             if (ways.length === 0) {
-                await client.query('COMMIT');
                 if (this.logger) {
                     this.logger.info('No ways to process');
                 }
@@ -360,13 +355,18 @@ class OperationsService {
             let processedCount = 0;
             const errors = [];
 
-            // Process each way
+            // Process each way in its own transaction
             for (const way of ways) {
+                const client = await this.db.pool.connect();
                 try {
+                    await client.query('BEGIN');
+
                     const segmentsUpdated = await this.offsetGenerator.generateOffsetsForWay(
                         client,
                         way.osm_way_id
                     );
+
+                    await client.query('COMMIT');
 
                     totalSegmentsUpdated += segmentsUpdated;
                     processedCount++;
@@ -376,6 +376,7 @@ class OperationsService {
                         jobTracker.updateProgress(jobId, processedCount, ways.length);
                     }
                 } catch (error) {
+                    await client.query('ROLLBACK');
                     if (this.logger) {
                         this.logger.error(`Error processing way ${way.osm_way_id}: ${error.message}`);
                     }
@@ -383,10 +384,10 @@ class OperationsService {
                         wayId: way.osm_way_id,
                         error: error.message
                     });
+                } finally {
+                    client.release();
                 }
             }
-
-            await client.query('COMMIT');
 
             if (this.logger) {
                 this.logger.info(`Offset generation complete - Processed: ${processedCount} ways, Segments updated: ${totalSegmentsUpdated}, Errors: ${errors.length}`);
@@ -404,14 +405,11 @@ class OperationsService {
             return result;
 
         } catch (error) {
-            await client.query('ROLLBACK');
             if (this.logger) {
                 this.logger.error(`Offset generation failed: ${error.message}`);
             }
             jobTracker.failJob(jobId, error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 
