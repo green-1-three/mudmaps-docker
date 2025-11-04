@@ -8,9 +8,9 @@ let uiState = {
     showPolylineBorders: false,
     showSegmentBorders: false,
     showActiveSegments: true,
-    showInactiveSegments: true,
-    showPolylines: true,
-    segmentTransparent: false,
+    showInactiveSegments: false,
+    showPolylines: false,
+    segmentTransparent: true,
     offsetTransparent: false,
     layers: null,
     updateCallback: null

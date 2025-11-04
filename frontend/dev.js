@@ -174,6 +174,9 @@ map.on('load', () => {
         id: 'polylines',
         type: 'line',
         source: 'polylines',
+        layout: {
+            'visibility': 'none' // Hidden by default
+        },
         paint: {
             'line-color': ['get', 'color'],
             'line-width': 2,
