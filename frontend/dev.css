@@ -1,5 +1,3 @@
-@import "node_modules/ol/ol.css";
-
 /* SVG pattern for crosshatch on out-of-range segments */
 svg.crosshatch-pattern {
     position: absolute;
