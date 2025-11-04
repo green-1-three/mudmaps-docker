@@ -81,6 +81,29 @@ function getColorByAge(timestamp, maxHours = currentTimeHours) {
     return '#00ff00';
 }
 
+// Function to abbreviate street names for labels
+function abbreviateStreetName(name) {
+    if (!name) return name;
+
+    return name
+        .replace(/\bRoad\b/gi, 'Rd')
+        .replace(/\bStreet\b/gi, 'St')
+        .replace(/\bAvenue\b/gi, 'Ave')
+        .replace(/\bBoulevard\b/gi, 'Blvd')
+        .replace(/\bDrive\b/gi, 'Dr')
+        .replace(/\bLane\b/gi, 'Ln')
+        .replace(/\bCourt\b/gi, 'Ct')
+        .replace(/\bCircle\b/gi, 'Cir')
+        .replace(/\bPlace\b/gi, 'Pl')
+        .replace(/\bTerrace\b/gi, 'Ter')
+        .replace(/\bParkway\b/gi, 'Pkwy')
+        .replace(/\bHighway\b/gi, 'Hwy')
+        .replace(/\bNorth\b/gi, 'N')
+        .replace(/\bSouth\b/gi, 'S')
+        .replace(/\bEast\b/gi, 'E')
+        .replace(/\bWest\b/gi, 'W');
+}
+
 // Initialize map
 const map = new mapboxgl.Map({
     container: 'map',
@@ -166,7 +189,14 @@ map.on('load', () => {
         layout: {
             'text-field': ['get', 'street_name'],
             'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-            'text-size': 12,
+            'text-size': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                10, 8,   // At zoom 10, size is 8px
+                13, 10,  // At zoom 13, size is 10px
+                16, 12   // At zoom 16, size is 12px
+            ],
             'symbol-placement': 'line',
             'text-rotation-alignment': 'map',
             'text-pitch-alignment': 'viewport',
@@ -219,7 +249,7 @@ async function loadSegments() {
                     type: 'Feature',
                     geometry: segment.geometry,
                     properties: {
-                        street_name: segment.properties.street_name
+                        street_name: abbreviateStreetName(segment.properties.street_name)
                     }
                 });
             }

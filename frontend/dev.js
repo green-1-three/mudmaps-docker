@@ -13,7 +13,8 @@ import {
     updateGradientLabels,
     showStatus,
     formatTimestamp,
-    calculateDuration
+    calculateDuration,
+    abbreviateStreetName
 } from './dev-common.js';
 import { initStatistics, updateStatistics } from './dev-stats.js';
 import { initUIControls, setStyleCreators } from './dev-ui-controls.js';
@@ -322,7 +323,14 @@ map.on('load', () => {
         layout: {
             'text-field': ['get', 'street_name'],
             'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-            'text-size': 12,
+            'text-size': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                10, 8,   // At zoom 10, size is 8px
+                13, 10,  // At zoom 13, size is 10px
+                16, 12   // At zoom 16, size is 12px
+            ],
             'symbol-placement': 'line',
             'text-rotation-alignment': 'map',
             'text-pitch-alignment': 'viewport',
@@ -787,7 +795,7 @@ async function loadSegments() {
                     type: 'Feature',
                     geometry: segment.geometry,
                     properties: {
-                        street_name: segment.properties.street_name
+                        street_name: abbreviateStreetName(segment.properties.street_name)
                     }
                 });
             }

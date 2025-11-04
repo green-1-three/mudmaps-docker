@@ -185,3 +185,28 @@ export function calculateDuration(startTime, endTime) {
     if (!startTime || !endTime) return null;
     return ((new Date(endTime) - new Date(startTime)) / 60000).toFixed(1);
 }
+
+/**
+ * Abbreviate street names for labels
+ */
+export function abbreviateStreetName(name) {
+    if (!name) return name;
+
+    return name
+        .replace(/\bRoad\b/gi, 'Rd')
+        .replace(/\bStreet\b/gi, 'St')
+        .replace(/\bAvenue\b/gi, 'Ave')
+        .replace(/\bBoulevard\b/gi, 'Blvd')
+        .replace(/\bDrive\b/gi, 'Dr')
+        .replace(/\bLane\b/gi, 'Ln')
+        .replace(/\bCourt\b/gi, 'Ct')
+        .replace(/\bCircle\b/gi, 'Cir')
+        .replace(/\bPlace\b/gi, 'Pl')
+        .replace(/\bTerrace\b/gi, 'Ter')
+        .replace(/\bParkway\b/gi, 'Pkwy')
+        .replace(/\bHighway\b/gi, 'Hwy')
+        .replace(/\bNorth\b/gi, 'N')
+        .replace(/\bSouth\b/gi, 'S')
+        .replace(/\bEast\b/gi, 'E')
+        .replace(/\bWest\b/gi, 'W');
+}
