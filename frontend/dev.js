@@ -104,6 +104,63 @@ function createPerpendicularLine(point, bearing, widthMeters) {
     return [point1, point2];
 }
 
+// Helper function to find closest point on a line segment to a given point
+function closestPointOnSegment(px, py, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lengthSquared = dx * dx + dy * dy;
+
+    if (lengthSquared === 0) return [ax, ay]; // a and b are the same point
+
+    // Calculate projection parameter t
+    let t = ((px - ax) * dx + (py - ay) * dy) / lengthSquared;
+    t = Math.max(0, Math.min(1, t)); // Clamp to [0, 1]
+
+    // Calculate closest point
+    return [ax + t * dx, ay + t * dy];
+}
+
+// Helper function to calculate distance between two points in pixels
+function distanceInPixels(x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+// Helper function to find the closest segment and snap point
+function findClosestSegment(mousePoint, features, snapRadius = 20) {
+    let closestSegment = null;
+    let closestDistance = Infinity;
+    let snapPoint = null;
+
+    for (const feature of features) {
+        if (!feature.geometry || feature.geometry.type !== 'LineString') continue;
+
+        const coords = feature.geometry.coordinates;
+
+        for (let i = 0; i < coords.length - 1; i++) {
+            const p1 = map.project(coords[i]);
+            const p2 = map.project(coords[i + 1]);
+
+            const closest = closestPointOnSegment(
+                mousePoint.x, mousePoint.y,
+                p1.x, p1.y,
+                p2.x, p2.y
+            );
+
+            const dist = distanceInPixels(mousePoint.x, mousePoint.y, closest[0], closest[1]);
+
+            if (dist < closestDistance && dist <= snapRadius) {
+                closestDistance = dist;
+                closestSegment = feature;
+                snapPoint = map.unproject(closest);
+            }
+        }
+    }
+
+    return { segment: closestSegment, snapPoint, distance: closestDistance };
+}
+
 // Initialize map
 const map = new mapboxgl.Map({
     container: 'map',
@@ -124,7 +181,8 @@ const geojsonData = {
     reverseOffsets: { type: 'FeatureCollection', features: [] },
     searchResult: { type: 'FeatureCollection', features: [] },
     segmentEndpoints: { type: 'FeatureCollection', features: [] },
-    polylineEndpoints: { type: 'FeatureCollection', features: [] }
+    polylineEndpoints: { type: 'FeatureCollection', features: [] },
+    snapIndicator: { type: 'FeatureCollection', features: [] }
 };
 
 // Layer references for module access
@@ -150,6 +208,7 @@ map.on('load', () => {
     map.addSource('search-result', { type: 'geojson', data: geojsonData.searchResult });
     map.addSource('segment-endpoints', { type: 'geojson', data: geojsonData.segmentEndpoints });
     map.addSource('polyline-endpoints', { type: 'geojson', data: geojsonData.polylineEndpoints });
+    map.addSource('snap-indicator', { type: 'geojson', data: geojsonData.snapIndicator });
 
     // Add boundary layer
     map.addLayer({
@@ -290,6 +349,20 @@ map.on('load', () => {
         paint: {
             'circle-radius': 8,
             'circle-color': '#4264fb'
+        }
+    });
+
+    // Add snap indicator layer - shows where cursor snaps to segment
+    map.addLayer({
+        id: 'snap-indicator',
+        type: 'circle',
+        source: 'snap-indicator',
+        paint: {
+            'circle-radius': 6,
+            'circle-color': '#ffffff',
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#00ff00',
+            'circle-opacity': 0.9
         }
     });
 
@@ -1302,40 +1375,77 @@ function createHoverPopup() {
 
 hoverPopup = createHoverPopup();
 
-// Map hover handler - detects both segments and polylines
+// Map hover handler - detects segments with proximity snapping
 map.on('mousemove', (e) => {
-    const features = map.queryRenderedFeatures(e.point, {
-        layers: ['segments', 'polylines']
+    // Query features with a buffer for proximity detection
+    const snapRadius = 20; // pixels
+    const bbox = [
+        [e.point.x - snapRadius, e.point.y - snapRadius],
+        [e.point.x + snapRadius, e.point.y + snapRadius]
+    ];
+
+    const segmentFeatures = map.queryRenderedFeatures(bbox, {
+        layers: ['segments']
     });
 
-    if (features.length > 0) {
+    // Find closest segment and snap point
+    const { segment: closestSegment, snapPoint, distance } = findClosestSegment(e.point, segmentFeatures, snapRadius);
+
+    // Also check for direct polyline hits (no snapping for polylines)
+    const polylineFeatures = map.queryRenderedFeatures(e.point, {
+        layers: ['polylines']
+    });
+
+    if (closestSegment || polylineFeatures.length > 0) {
         map.getCanvas().style.cursor = 'pointer';
 
-        // Handle segment hover state
-        const segment = features.find(f => f.layer.id === 'segments');
-        if (segment) {
+        // Handle segment hover state with snapping
+        if (closestSegment) {
+            // Update snap indicator
+            geojsonData.snapIndicator.features = [{
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [snapPoint.lng, snapPoint.lat]
+                },
+                properties: {}
+            }];
+            if (map.getSource('snap-indicator')) {
+                map.getSource('snap-indicator').setData(geojsonData.snapIndicator);
+            }
+
             // If hovering a different segment, clear previous hover state
-            if (hoveredSegmentId !== null && hoveredSegmentId !== segment.id) {
+            if (hoveredSegmentId !== null && hoveredSegmentId !== closestSegment.id) {
                 map.setFeatureState(
                     { source: 'segments', id: hoveredSegmentId },
                     { hover: false }
                 );
             }
 
-            // Set hover state for current segment
-            hoveredSegmentId = segment.id;
+            // Set hover state for closest segment
+            hoveredSegmentId = closestSegment.id;
             map.setFeatureState(
                 { source: 'segments', id: hoveredSegmentId },
                 { hover: true }
             );
         } else if (hoveredSegmentId !== null) {
-            // Clear hover state if no longer hovering a segment
+            // Clear hover state if no longer near a segment
             map.setFeatureState(
                 { source: 'segments', id: hoveredSegmentId },
                 { hover: false }
             );
             hoveredSegmentId = null;
+
+            // Clear snap indicator
+            geojsonData.snapIndicator.features = [];
+            if (map.getSource('snap-indicator')) {
+                map.getSource('snap-indicator').setData(geojsonData.snapIndicator);
+            }
         }
+
+        // Use either segment or polyline for popup
+        const segment = closestSegment;
+        const polyline = polylineFeatures.find(f => f.layer.id === 'polylines');
 
         // Build popup content
         let popupHTML = '<div style="display: flex; flex-direction: column; gap: 10px;">';
@@ -1429,6 +1539,12 @@ map.on('mousemove', (e) => {
             );
             hoveredSegmentId = null;
         }
+
+        // Clear snap indicator
+        geojsonData.snapIndicator.features = [];
+        if (map.getSource('snap-indicator')) {
+            map.getSource('snap-indicator').setData(geojsonData.snapIndicator);
+        }
     }
 });
 
@@ -1442,6 +1558,12 @@ map.on('mouseleave', () => {
         hoveredSegmentId = null;
     }
     hoverPopup.style.display = 'none';
+
+    // Clear snap indicator
+    geojsonData.snapIndicator.features = [];
+    if (map.getSource('snap-indicator')) {
+        map.getSource('snap-indicator').setData(geojsonData.snapIndicator);
+    }
 });
 
 // User geolocation
