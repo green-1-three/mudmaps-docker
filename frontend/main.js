@@ -239,18 +239,13 @@ function createPolylineStyleWithFilter(feature) {
     });
 }
 
-// Style for segments - gradient colors for activated, red for unactivated, thicker, on top
+// Style for segments - gradient colors for activated, hide unactivated
 function createSegmentStyleWithFilter(feature) {
     const isActivated = feature.get('is_activated');
 
-    // Unactivated segments: always show in red
+    // Unactivated segments: hide them
     if (!isActivated) {
-        return new Style({
-            stroke: new Stroke({
-                color: '#ff0000',  // Red
-                width: 3
-            })
-        });
+        return null;
     }
 
     // Activated segments: apply time filter and gradient
