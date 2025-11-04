@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="781d814b-6897-4d0d-8f84-a8ad56d33b6b" name="Changes" comment="Ports blocked from public">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/dev-database.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/dev-database.js" afterDir="false" />
-    </list>
+    <list default="true" id="781d814b-6897-4d0d-8f84-a8ad56d33b6b" name="Changes" comment="Ports blocked from public" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -36,11 +33,6 @@
     &quot;accountId&quot;: &quot;b8f99b2c-10df-4430-afbb-15a8d57efb86&quot;
   }
 }</component>
-  <component name="PackageJsonUpdateNotifier">
-    <dismissed value="$PROJECT_DIR$/backend/package.json" />
-    <dismissed value="$PROJECT_DIR$/frontend/package.json" />
-    <dismissed value="$PROJECT_DIR$/tcp-listener/package.json" />
-  </component>
   <component name="ProblemsViewState">
     <option name="selectedTabId" value="CurrentFile" />
   </component>
@@ -97,7 +89,7 @@
       <workItem from="1755132931680" duration="6109000" />
       <workItem from="1755352945538" duration="13639000" />
       <workItem from="1761579154538" duration="11071000" />
-      <workItem from="1761597116465" duration="13939000" />
+      <workItem from="1761597116465" duration="14537000" />
     </task>
     <task id="LOCAL-00001" summary="First commit, reworked into Docker setup.">
       <option name="closed" value="true" />

@@ -140,7 +140,11 @@ map.on('load', () => {
     // Add sources
     map.addSource('boundary', { type: 'geojson', data: geojsonData.boundary });
     map.addSource('polylines', { type: 'geojson', data: geojsonData.polylines });
-    map.addSource('segments', { type: 'geojson', data: geojsonData.segments });
+    map.addSource('segments', {
+        type: 'geojson',
+        data: geojsonData.segments,
+        promoteId: 'segment_id'  // Use segment_id as feature ID for feature-state
+    });
     map.addSource('forward-offsets', { type: 'geojson', data: geojsonData.forwardOffsets });
     map.addSource('reverse-offsets', { type: 'geojson', data: geojsonData.reverseOffsets });
     map.addSource('search-result', { type: 'geojson', data: geojsonData.searchResult });
@@ -206,7 +210,7 @@ map.on('load', () => {
         }
     });
 
-    // Add segments layer
+    // Add segments layer with hover effect
     map.addLayer({
         id: 'segments',
         type: 'line',
@@ -217,8 +221,18 @@ map.on('load', () => {
         },
         paint: {
             'line-color': ['get', 'color'],
-            'line-width': 4,
-            'line-opacity': ['coalesce', ['get', 'opacity'], 1]
+            'line-width': [
+                'case',
+                ['boolean', ['feature-state', 'hover'], false],
+                7,  // Width when hovered
+                4   // Normal width
+            ],
+            'line-opacity': [
+                'case',
+                ['boolean', ['feature-state', 'hover'], false],
+                1,  // Fully opaque when hovered
+                ['coalesce', ['get', 'opacity'], 1]  // Normal opacity
+            ]
         }
     });
 
@@ -1269,6 +1283,7 @@ function showSearchResult(result) {
 
 // Hover functionality
 let hoverPopup = null;
+let hoveredSegmentId = null;
 
 // Create hover popup element
 function createHoverPopup() {
@@ -1295,6 +1310,32 @@ map.on('mousemove', (e) => {
 
     if (features.length > 0) {
         map.getCanvas().style.cursor = 'pointer';
+
+        // Handle segment hover state
+        const segment = features.find(f => f.layer.id === 'segments');
+        if (segment) {
+            // If hovering a different segment, clear previous hover state
+            if (hoveredSegmentId !== null && hoveredSegmentId !== segment.id) {
+                map.setFeatureState(
+                    { source: 'segments', id: hoveredSegmentId },
+                    { hover: false }
+                );
+            }
+
+            // Set hover state for current segment
+            hoveredSegmentId = segment.id;
+            map.setFeatureState(
+                { source: 'segments', id: hoveredSegmentId },
+                { hover: true }
+            );
+        } else if (hoveredSegmentId !== null) {
+            // Clear hover state if no longer hovering a segment
+            map.setFeatureState(
+                { source: 'segments', id: hoveredSegmentId },
+                { hover: false }
+            );
+            hoveredSegmentId = null;
+        }
 
         // Build popup content
         let popupHTML = '<div style="display: flex; flex-direction: column; gap: 10px;">';
@@ -1380,7 +1421,28 @@ map.on('mousemove', (e) => {
     } else {
         map.getCanvas().style.cursor = '';
         hoverPopup.style.display = 'none';
+
+        // Clear hover state when not hovering any features
+        if (hoveredSegmentId !== null) {
+            map.setFeatureState(
+                { source: 'segments', id: hoveredSegmentId },
+                { hover: false }
+            );
+            hoveredSegmentId = null;
+        }
     }
+});
+
+// Clear hover state when mouse leaves the map
+map.on('mouseleave', () => {
+    if (hoveredSegmentId !== null) {
+        map.setFeatureState(
+            { source: 'segments', id: hoveredSegmentId },
+            { hover: false }
+        );
+        hoveredSegmentId = null;
+    }
+    hoverPopup.style.display = 'none';
 });
 
 // User geolocation
