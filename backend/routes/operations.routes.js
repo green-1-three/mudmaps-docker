@@ -67,6 +67,41 @@ function createOperationsRoutes(operationsService) {
         }
     });
 
+    // Start offset generation job (returns immediately with job ID)
+    router.post('/api/operations/generate-offsets', async (req, res) => {
+        try {
+            const { limit } = req.body;
+
+            const jobId = operationsService.startOffsetGenerationJob(limit);
+
+            res.json({
+                success: true,
+                jobId,
+                message: 'Offset generation job started'
+            });
+        } catch (error) {
+            console.error('POST /api/operations/generate-offsets error:', error);
+            res.status(500).json({
+                error: 'operation_failed',
+                message: error.message
+            });
+        }
+    });
+
+    // Get offset generation stats
+    router.get('/api/operations/offset-status', async (req, res) => {
+        try {
+            const stats = await operationsService.getOffsetStats();
+            res.json(stats);
+        } catch (error) {
+            console.error('GET /api/operations/offset-status error:', error);
+            res.status(500).json({
+                error: 'operation_failed',
+                message: error.message
+            });
+        }
+    });
+
     return router;
 }
 

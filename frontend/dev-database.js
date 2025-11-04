@@ -227,6 +227,39 @@ function createDatabaseTabHTML() {
                 </div>
             </div>
 
+            <div class="operation-section" style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                <h5 style="margin-top: 0;">Generate Offset Geometries</h5>
+                <p style="color: #666; font-size: 13px; margin-bottom: 15px;">
+                    Generate offset geometries for road segments for directional plow visualization.
+                    Creates left/right offset lines 2m from centerline using full OSM way curves.
+                </p>
+
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                    <label for="offset-limit" style="font-size: 13px;">Process:</label>
+                    <select id="offset-limit" style="padding: 5px;">
+                        <option value="">All ways</option>
+                        <option value="10">10 ways</option>
+                        <option value="50">50 ways</option>
+                        <option value="100">100 ways</option>
+                    </select>
+                    <button id="generate-offsets-btn" class="db-btn" style="background: #6a1b9a; color: white; padding: 8px 15px;">
+                        ▶ Start Generation
+                    </button>
+                </div>
+
+                <div id="offset-stats" style="background: white; padding: 10px; border-radius: 3px; font-size: 13px; display: none;">
+                    <div><strong>Offset Stats:</strong></div>
+                    <div id="offset-stats-content" style="margin-top: 5px; line-height: 1.6;"></div>
+                </div>
+
+                <div id="offset-progress" style="margin-top: 15px; display: none;">
+                    <div style="background: white; padding: 10px; border-radius: 3px; font-size: 13px;">
+                        <div><strong>Progress:</strong></div>
+                        <div id="offset-progress-content" style="margin-top: 5px; line-height: 1.6;"></div>
+                    </div>
+                </div>
+            </div>
+
             <div class="operation-section" style="background: #fff3cd; padding: 15px; border-radius: 5px; border: 1px solid #ffc107;">
                 <h5 style="margin-top: 0; color: #856404;">⚠️ Warning</h5>
                 <p style="color: #856404; font-size: 13px; margin: 0;">
@@ -324,6 +357,7 @@ function setupDatabaseEventListeners() {
                 // Load stats when Operations tab is opened
                 if (subtabName === 'operations') {
                     loadReprocessStats();
+                    loadOffsetStats();
                 }
             }
         });
@@ -378,6 +412,59 @@ function setupDatabaseEventListeners() {
                 progressContent.innerHTML = `❌ <strong>Error:</strong> ${error.message}`;
                 reprocessBtn.disabled = false;
                 reprocessBtn.textContent = '▶ Start Reprocessing';
+            }
+        });
+    }
+
+    // Generate offsets button
+    const generateOffsetsBtn = document.getElementById('generate-offsets-btn');
+    if (generateOffsetsBtn) {
+        generateOffsetsBtn.addEventListener('click', async () => {
+            const limitSelect = document.getElementById('offset-limit');
+            const limit = limitSelect.value ? parseInt(limitSelect.value) : null;
+
+            if (!confirm(`Are you sure you want to generate offsets for ${limit ? limit + ' ways' : 'ALL ways'}? This may take several minutes.`)) {
+                return;
+            }
+
+            generateOffsetsBtn.disabled = true;
+            generateOffsetsBtn.textContent = '⏳ Starting...';
+
+            const progressDiv = document.getElementById('offset-progress');
+            const progressContent = document.getElementById('offset-progress-content');
+            progressDiv.style.display = 'block';
+            progressContent.innerHTML = 'Starting offset generation job...';
+
+            try {
+                // Start the job
+                const body = limit ? { limit } : {};
+                const response = await fetch(`${databaseState.API_BASE}/operations/generate-offsets`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                const startResult = await response.json();
+
+                if (!startResult.success || !startResult.jobId) {
+                    progressContent.innerHTML = `❌ <strong>Error:</strong> ${startResult.message || 'Failed to start job'}`;
+                    generateOffsetsBtn.disabled = false;
+                    generateOffsetsBtn.textContent = '▶ Start Generation';
+                    return;
+                }
+
+                // Poll for job status
+                const jobId = startResult.jobId;
+                progressContent.innerHTML = `Job started: ${jobId}<br>Checking status...`;
+
+                pollOffsetJobStatus(jobId, progressContent, generateOffsetsBtn);
+
+            } catch (error) {
+                progressContent.innerHTML = `❌ <strong>Error:</strong> ${error.message}`;
+                generateOffsetsBtn.disabled = false;
+                generateOffsetsBtn.textContent = '▶ Start Generation';
             }
         });
     }
@@ -1064,6 +1151,119 @@ async function pollJobStatus(jobId, progressContent, reprocessBtn) {
 
     // Start polling
     poll();
+}
+
+/**
+ * Poll offset generation job status
+ */
+async function pollOffsetJobStatus(jobId, progressContent, generateOffsetsBtn) {
+    const pollInterval = 1000; // Poll every second
+    let attempts = 0;
+    const maxAttempts = 600; // Max 10 minutes
+
+    const poll = async () => {
+        attempts++;
+
+        if (attempts > maxAttempts) {
+            progressContent.innerHTML = `❌ <strong>Timeout:</strong> Job took too long. Check backend logs for status.`;
+            generateOffsetsBtn.disabled = false;
+            generateOffsetsBtn.textContent = '▶ Start Generation';
+            return;
+        }
+
+        try {
+            const response = await fetchJSON(`${databaseState.API_BASE}/operations/jobs/${jobId}`);
+
+            if (!response) {
+                progressContent.innerHTML = `❌ <strong>Error:</strong> Job not found`;
+                generateOffsetsBtn.disabled = false;
+                generateOffsetsBtn.textContent = '▶ Start Generation';
+                return;
+            }
+
+            const { status, progress, result, error } = response;
+
+            // Update progress display
+            if (status === 'running') {
+                const percentage = progress.percentage || 0;
+                const current = progress.current || 0;
+                const total = progress.total || 0;
+
+                progressContent.innerHTML = `
+                    ⏳ <strong>Processing...</strong><br>
+                    • Progress: ${current} / ${total} ways (${percentage}%)<br>
+                    • Status: Running
+                `;
+
+                // Continue polling
+                setTimeout(poll, pollInterval);
+            } else if (status === 'completed') {
+                progressContent.innerHTML = `
+                    ✅ <strong>Success!</strong><br>
+                    • Processed: ${result.processed} ways<br>
+                    • Segments Updated: ${result.segmentsUpdated}<br>
+                    • Message: ${result.message}
+                    ${result.errors ? `<br>• Errors: ${result.errors.length}` : ''}
+                `;
+
+                generateOffsetsBtn.disabled = false;
+                generateOffsetsBtn.textContent = '▶ Start Generation';
+
+                // Reload stats
+                loadOffsetStats();
+            } else if (status === 'failed') {
+                progressContent.innerHTML = `❌ <strong>Error:</strong> ${error || 'Job failed'}`;
+                generateOffsetsBtn.disabled = false;
+                generateOffsetsBtn.textContent = '▶ Start Generation';
+            }
+        } catch (err) {
+            progressContent.innerHTML = `❌ <strong>Error:</strong> ${err.message}`;
+            generateOffsetsBtn.disabled = false;
+            generateOffsetsBtn.textContent = '▶ Start Generation';
+        }
+    };
+
+    // Start polling
+    poll();
+}
+
+/**
+ * Load offset generation statistics
+ */
+async function loadOffsetStats() {
+    const statsDiv = document.getElementById('offset-stats');
+    const statsContent = document.getElementById('offset-stats-content');
+
+    if (!statsDiv || !statsContent) return;
+
+    statsDiv.style.display = 'block';
+    statsContent.innerHTML = 'Loading stats...';
+
+    try {
+        const stats = await fetchJSON(`${databaseState.API_BASE}/operations/offset-status`);
+
+        if (stats) {
+            const totalSegments = parseInt(stats.total_segments) || 0;
+            const segmentsWithForward = parseInt(stats.segments_with_forward) || 0;
+            const segmentsWithReverse = parseInt(stats.segments_with_reverse) || 0;
+            const totalWays = parseInt(stats.total_ways) || 0;
+            const waysWithOffsets = parseInt(stats.ways_with_offsets) || 0;
+            const pendingWays = totalWays - waysWithOffsets;
+
+            statsContent.innerHTML = `
+                • Total Segments: ${totalSegments.toLocaleString()}<br>
+                • Segments with Forward Offset: ${segmentsWithForward.toLocaleString()}<br>
+                • Segments with Reverse Offset: ${segmentsWithReverse.toLocaleString()}<br>
+                • Total OSM Ways: ${totalWays.toLocaleString()}<br>
+                • Ways with Offsets: ${waysWithOffsets.toLocaleString()}<br>
+                • Pending: ${pendingWays.toLocaleString()} ways
+            `;
+        } else {
+            statsContent.innerHTML = 'Failed to load stats';
+        }
+    } catch (error) {
+        statsContent.innerHTML = `Error: ${error.message}`;
+    }
 }
 
 /**

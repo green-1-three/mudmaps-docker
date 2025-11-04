@@ -4,11 +4,13 @@
  */
 
 const jobTracker = require('./job-tracker.service');
+const OffsetGeneratorService = require('./offset-generator.service');
 
 class OperationsService {
     constructor(databaseService, logger) {
         this.db = databaseService;
         this.logger = logger;
+        this.offsetGenerator = new OffsetGeneratorService(databaseService, logger);
     }
 
     /**
@@ -279,6 +281,146 @@ class OperationsService {
             polylines: result.rows[0],
             segments: segmentStats.rows[0]
         };
+    }
+
+    /**
+     * Start offset generation job asynchronously
+     * @param {number} limit - Maximum number of ways to process (optional)
+     * @returns {string} Job ID
+     */
+    startOffsetGenerationJob(limit = null) {
+        const jobId = jobTracker.createJob('generate-offsets', { limit });
+
+        // Run in background
+        this.generateOffsets(jobId, limit).catch(error => {
+            if (this.logger) {
+                this.logger.error(`Background offset generation job ${jobId} failed: ${error.message}`);
+            }
+        });
+
+        return jobId;
+    }
+
+    /**
+     * Generate offset geometries for road segments
+     * @param {string} jobId - Job ID for tracking progress
+     * @param {number} limit - Maximum number of ways to process (optional)
+     * @returns {Promise<Object>} Result with stats
+     */
+    async generateOffsets(jobId, limit = null) {
+        const client = await this.db.pool.connect();
+
+        if (this.logger) {
+            this.logger.info(`Starting offset generation - Limit: ${limit || 'ALL ways'}`);
+        }
+
+        try {
+            await client.query('BEGIN');
+
+            // Get distinct OSM way IDs
+            let query = `
+                SELECT DISTINCT osm_way_id
+                FROM road_segments
+                WHERE osm_way_id IS NOT NULL
+                  AND geometry IS NOT NULL
+                ORDER BY osm_way_id
+            `;
+
+            if (limit) {
+                query += ` LIMIT $1`;
+            }
+
+            const params = limit ? [limit] : [];
+            const waysResult = await client.query(query, params);
+            const ways = waysResult.rows;
+
+            if (this.logger) {
+                this.logger.info(`Found ${ways.length} OSM ways to process`);
+            }
+
+            // Update job with total count
+            jobTracker.updateProgress(jobId, 0, ways.length);
+
+            if (ways.length === 0) {
+                await client.query('COMMIT');
+                if (this.logger) {
+                    this.logger.info('No ways to process');
+                }
+                const result = {
+                    success: true,
+                    processed: 0,
+                    segmentsUpdated: 0,
+                    message: 'No ways to process'
+                };
+                jobTracker.completeJob(jobId, result);
+                return result;
+            }
+
+            let totalSegmentsUpdated = 0;
+            let processedCount = 0;
+            const errors = [];
+
+            // Process each way
+            for (const way of ways) {
+                try {
+                    const segmentsUpdated = await this.offsetGenerator.generateOffsetsForWay(
+                        client,
+                        way.osm_way_id
+                    );
+
+                    totalSegmentsUpdated += segmentsUpdated;
+                    processedCount++;
+
+                    // Update progress every 10 ways
+                    if (processedCount % 10 === 0 || processedCount === ways.length) {
+                        jobTracker.updateProgress(jobId, processedCount, ways.length);
+                    }
+                } catch (error) {
+                    if (this.logger) {
+                        this.logger.error(`Error processing way ${way.osm_way_id}: ${error.message}`);
+                    }
+                    errors.push({
+                        wayId: way.osm_way_id,
+                        error: error.message
+                    });
+                }
+            }
+
+            await client.query('COMMIT');
+
+            if (this.logger) {
+                this.logger.info(`Offset generation complete - Processed: ${processedCount} ways, Segments updated: ${totalSegmentsUpdated}, Errors: ${errors.length}`);
+            }
+
+            const result = {
+                success: true,
+                processed: processedCount,
+                segmentsUpdated: totalSegmentsUpdated,
+                errors: errors.length > 0 ? errors : undefined,
+                message: `Processed ${processedCount} ways, updated ${totalSegmentsUpdated} segments`
+            };
+
+            jobTracker.completeJob(jobId, result);
+            return result;
+
+        } catch (error) {
+            await client.query('ROLLBACK');
+            if (this.logger) {
+                this.logger.error(`Offset generation failed: ${error.message}`);
+            }
+            jobTracker.failJob(jobId, error);
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Get statistics about offset generation
+     * @returns {Promise<Object>} Statistics
+     */
+    async getOffsetStats() {
+        return await this.offsetGenerator.getOffsetStats();
     }
 }
 
