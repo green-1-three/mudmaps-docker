@@ -203,7 +203,7 @@ map.on('load', () => {
             'symbol-placement': 'line',
             'text-rotation-alignment': 'map',
             'text-pitch-alignment': 'viewport',
-            'text-offset': [0, 1.5], // Offset 1.5 ems to the side
+            'text-offset': [0, 1], // Offset 1 em to the side
             'text-allow-overlap': false,
             'text-ignore-placement': false,
             'text-max-angle': [
@@ -223,7 +223,7 @@ map.on('load', () => {
                 13, 100,  // At zoom 13, still 100px
                 14, 150   // At zoom 14+, 150px spacing
             ],
-            'text-padding': 20 // Add padding around labels to prevent overlap
+            'text-padding': 10 // Add padding around labels to prevent overlap
         },
         paint: {
             'text-color': '#333333',
