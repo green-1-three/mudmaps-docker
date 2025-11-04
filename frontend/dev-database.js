@@ -14,17 +14,17 @@ let databaseState = {
             loading: false,
             columns: ['id', 'device_id', 'longitude', 'latitude', 'recorded_at', 'received_at', 'processed', 'batch_id', 'altitude', 'accuracy', 'speed', 'bearing']
         },
-        cached_polylines: { 
-            offset: 0, 
-            data: [], 
+        cached_polylines: {
+            offset: 0,
+            data: [],
             loading: false,
-            columns: ['id', 'device_id', 'start_time', 'end_time', 'osrm_confidence', 'point_count', 'osrm_duration_ms', 'batch_id', 'created_at', 'last_accessed', 'access_count', 'bearing']
+            columns: ['id', 'device_id', 'geometry', 'start_time', 'end_time', 'osrm_confidence', 'point_count', 'osrm_duration_ms', 'batch_id', 'created_at', 'last_accessed', 'access_count', 'bearing']
         },
-        road_segments: { 
-            offset: 0, 
-            data: [], 
+        road_segments: {
+            offset: 0,
+            data: [],
             loading: false,
-            columns: ['id', 'segment_length', 'bearing', 'municipality_id', 'street_name', 'road_classification', 'osm_way_id', 'last_plowed_forward', 'last_plowed_reverse', 'last_plowed_device_id', 'plow_count_today', 'plow_count_total', 'last_reset_date', 'created_at', 'updated_at']
+            columns: ['id', 'geometry', 'segment_length', 'bearing', 'municipality_id', 'street_name', 'road_classification', 'osm_way_id', 'osm_tags', 'last_plowed_forward', 'last_plowed_reverse', 'last_plowed_device_id', 'plow_count_today', 'plow_count_total', 'last_reset_date', 'created_at', 'updated_at']
         },
         segment_updates: { 
             offset: 0, 
@@ -477,7 +477,34 @@ function createTableRow(tableName, rowData, index) {
         let value = rowData[col];
         
         // Format special columns
-        if (col.includes('time') || col.includes('_at')) {
+        if (col === 'geometry') {
+            // Format geometry as "LINESTRING([lon1,lat1] ... [lonN,latN])"
+            if (value && typeof value === 'object' && value.coordinates) {
+                const coords = value.coordinates;
+                if (coords.length > 0) {
+                    const first = coords[0];
+                    const last = coords[coords.length - 1];
+                    const vertexCount = coords.length;
+                    value = `LINESTRING([${first[0].toFixed(5)},${first[1].toFixed(5)}] ... [${last[0].toFixed(5)},${last[1].toFixed(5)}]) (${vertexCount} vertices)`;
+                } else {
+                    value = 'LINESTRING (empty)';
+                }
+            } else if (value === null || value === undefined) {
+                value = 'null';
+            } else {
+                value = String(value);
+            }
+        } else if (col === 'osm_tags') {
+            // Format osm_tags as truncated JSON
+            if (value && typeof value === 'object') {
+                const json = JSON.stringify(value);
+                value = json.length > 50 ? json.substring(0, 50) + '...' : json;
+            } else if (value === null || value === undefined) {
+                value = 'null';
+            } else {
+                value = String(value);
+            }
+        } else if (col.includes('time') || col.includes('_at')) {
             value = value ? new Date(value).toLocaleString() : 'null';
         } else if (col === 'processed') {
             value = value ? '✅' : '❌';
@@ -486,7 +513,7 @@ function createTableRow(tableName, rowData, index) {
         } else if (value === null || value === undefined) {
             value = 'null';
         }
-        
+
         return `<td>${value}</td>`;
     }).join('');
     

@@ -28,27 +28,86 @@ class DatabaseInspectionService {
         try {
             // If targetId is provided, fetch surrounding rows
             if (targetId) {
-                const surroundingQuery = `
-                    (
-                        SELECT * FROM ${tableName}
-                        WHERE id <= $1
+                let surroundingQuery;
+                if (tableName === 'road_segments') {
+                    surroundingQuery = `
+                        (
+                            SELECT
+                                id, segment_length, bearing, municipality_id, street_name,
+                                road_classification, osm_way_id, osm_tags, last_plowed_forward,
+                                last_plowed_reverse, last_plowed_device_id, plow_count_today,
+                                plow_count_total, last_reset_date, created_at, updated_at,
+                                ST_AsGeoJSON(geometry)::json as geometry
+                            FROM ${tableName}
+                            WHERE id <= $1
+                            ORDER BY id DESC
+                            LIMIT $2
+                        )
+                        UNION ALL
+                        (
+                            SELECT
+                                id, segment_length, bearing, municipality_id, street_name,
+                                road_classification, osm_way_id, osm_tags, last_plowed_forward,
+                                last_plowed_reverse, last_plowed_device_id, plow_count_today,
+                                plow_count_total, last_reset_date, created_at, updated_at,
+                                ST_AsGeoJSON(geometry)::json as geometry
+                            FROM ${tableName}
+                            WHERE id > $1
+                            ORDER BY id ASC
+                            LIMIT $3
+                        )
                         ORDER BY id DESC
-                        LIMIT $2
-                    )
-                    UNION ALL
-                    (
-                        SELECT * FROM ${tableName}
-                        WHERE id > $1
-                        ORDER BY id ASC
-                        LIMIT $3
-                    )
-                    ORDER BY id DESC
-                `;
-                
+                    `;
+                } else if (tableName === 'cached_polylines') {
+                    surroundingQuery = `
+                        (
+                            SELECT
+                                id, device_id, start_time, end_time, encoded_polyline,
+                                osrm_confidence, point_count, osrm_duration_ms, batch_id,
+                                created_at, last_accessed, access_count, bearing,
+                                ST_AsGeoJSON(geometry)::json as geometry
+                            FROM ${tableName}
+                            WHERE id <= $1
+                            ORDER BY id DESC
+                            LIMIT $2
+                        )
+                        UNION ALL
+                        (
+                            SELECT
+                                id, device_id, start_time, end_time, encoded_polyline,
+                                osrm_confidence, point_count, osrm_duration_ms, batch_id,
+                                created_at, last_accessed, access_count, bearing,
+                                ST_AsGeoJSON(geometry)::json as geometry
+                            FROM ${tableName}
+                            WHERE id > $1
+                            ORDER BY id ASC
+                            LIMIT $3
+                        )
+                        ORDER BY id DESC
+                    `;
+                } else {
+                    surroundingQuery = `
+                        (
+                            SELECT * FROM ${tableName}
+                            WHERE id <= $1
+                            ORDER BY id DESC
+                            LIMIT $2
+                        )
+                        UNION ALL
+                        (
+                            SELECT * FROM ${tableName}
+                            WHERE id > $1
+                            ORDER BY id ASC
+                            LIMIT $3
+                        )
+                        ORDER BY id DESC
+                    `;
+                }
+
                 // Get 4 rows before, target row, and 4 rows after (total 9)
                 const beforeCount = Math.floor(limit / 2) + 1; // 5 rows (includes target)
                 const afterCount = Math.floor(limit / 2);      // 4 rows
-                
+
                 const dataResult = await this.db.query(surroundingQuery, [targetId, beforeCount, afterCount]);
                 
                 // Get total count
@@ -66,11 +125,38 @@ class DatabaseInspectionService {
             }
 
             // Default: Order by ID DESC
-            const dataQuery = `
-                SELECT * FROM ${tableName}
-                ORDER BY id DESC
-                LIMIT $1 OFFSET $2
-            `;
+            // Special handling for tables with geometry columns
+            let dataQuery;
+            if (tableName === 'road_segments') {
+                dataQuery = `
+                    SELECT
+                        id, segment_length, bearing, municipality_id, street_name,
+                        road_classification, osm_way_id, osm_tags, last_plowed_forward,
+                        last_plowed_reverse, last_plowed_device_id, plow_count_today,
+                        plow_count_total, last_reset_date, created_at, updated_at,
+                        ST_AsGeoJSON(geometry)::json as geometry
+                    FROM ${tableName}
+                    ORDER BY id DESC
+                    LIMIT $1 OFFSET $2
+                `;
+            } else if (tableName === 'cached_polylines') {
+                dataQuery = `
+                    SELECT
+                        id, device_id, start_time, end_time, encoded_polyline,
+                        osrm_confidence, point_count, osrm_duration_ms, batch_id,
+                        created_at, last_accessed, access_count, bearing,
+                        ST_AsGeoJSON(geometry)::json as geometry
+                    FROM ${tableName}
+                    ORDER BY id DESC
+                    LIMIT $1 OFFSET $2
+                `;
+            } else {
+                dataQuery = `
+                    SELECT * FROM ${tableName}
+                    ORDER BY id DESC
+                    LIMIT $1 OFFSET $2
+                `;
+            }
             const dataResult = await this.db.query(dataQuery, [limit, offset]);
 
             // Get total count
