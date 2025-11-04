@@ -9,6 +9,8 @@ let uiState = {
     showActiveSegments: true,
     showInactiveSegments: true,
     showPolylines: true,
+    segmentTransparent: false,
+    offsetTransparent: false,
     layers: null,
     updateCallback: null
 };
@@ -36,7 +38,7 @@ export function initUIControls(layers, updateCallback) {
  * Setup toggle listeners
  */
 function setupToggleListeners() {
-    const { polylinesLayer, segmentsLayer } = uiState.layers;
+    const { polylinesLayer, segmentsLayer, forwardOffsetLayer, reverseOffsetLayer } = uiState.layers;
     
     // Polyline visibility toggle
     const togglePolylines = document.getElementById('toggle-polylines');
@@ -83,6 +85,26 @@ function setupToggleListeners() {
         toggleInactiveSegments.addEventListener('change', (e) => {
             uiState.showInactiveSegments = e.target.checked;
             updateSegmentVisibility();
+        });
+    }
+
+    // Segment transparency toggle
+    const toggleSegmentTransparency = document.getElementById('toggle-segment-transparency');
+    if (toggleSegmentTransparency) {
+        toggleSegmentTransparency.addEventListener('change', (e) => {
+            uiState.segmentTransparent = e.target.checked;
+            updateSegmentVisibility();
+        });
+    }
+
+    // Offset transparency toggle
+    const toggleOffsetTransparency = document.getElementById('toggle-offset-transparency');
+    if (toggleOffsetTransparency) {
+        toggleOffsetTransparency.addEventListener('change', (e) => {
+            uiState.offsetTransparent = e.target.checked;
+            // Trigger re-render of offset layers
+            if (forwardOffsetLayer) forwardOffsetLayer.changed();
+            if (reverseOffsetLayer) reverseOffsetLayer.changed();
         });
     }
 }

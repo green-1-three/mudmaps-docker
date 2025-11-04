@@ -68,6 +68,24 @@ function createCrosshatchPattern() {
 // Create crosshatch pattern on load
 createCrosshatchPattern();
 
+// Helper function to convert hex color to rgba with opacity
+function hexToRgba(hex, opacity) {
+    // Handle both #RGB and #RRGGBB formats
+    let r, g, b;
+
+    if (hex.length === 4) {
+        r = parseInt(hex[1] + hex[1], 16);
+        g = parseInt(hex[2] + hex[2], 16);
+        b = parseInt(hex[3] + hex[3], 16);
+    } else {
+        r = parseInt(hex.slice(1, 3), 16);
+        g = parseInt(hex.slice(3, 5), 16);
+        b = parseInt(hex.slice(5, 7), 16);
+    }
+
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 // Map setup with OpenStreetMap
 const map = new Map({
     target: 'map',
@@ -203,8 +221,10 @@ function createPolylineStyleWithFilter(feature) {
 // Style for segments - gradient colors for activated, red for unactivated, gray crosshatch for out-of-range
 function createSegmentStyleWithFilter(feature) {
     const isActivated = feature.get('is_activated');
+    const uiState = window.uiControls?.getState();
+    const isTransparent = uiState?.segmentTransparent ?? false;
 
-    // Unactivated segments: always show in red
+    // Unactivated segments: always show in red (no transparency applied to inactive)
     if (!isActivated) {
         return new Style({
             stroke: new Stroke({
@@ -231,7 +251,8 @@ function createSegmentStyleWithFilter(feature) {
         }
     }
 
-    const color = lastPlowed ? getColorByAge(lastPlowed, currentTimeHours) : '#0066cc';
+    const baseColor = lastPlowed ? getColorByAge(lastPlowed, currentTimeHours) : '#0066cc';
+    const color = isTransparent ? hexToRgba(baseColor, 0.01) : baseColor;
 
     return new Style({
         stroke: new Stroke({
@@ -244,6 +265,8 @@ function createSegmentStyleWithFilter(feature) {
 // Style for forward offset geometries (left side, 2m offset)
 function createForwardOffsetStyle(feature) {
     const lastPlowedForward = feature.get('last_plowed_forward');
+    const uiState = window.uiControls?.getState();
+    const isTransparent = uiState?.offsetTransparent ?? false;
 
     // Hide if no forward plow time
     if (!lastPlowedForward) {
@@ -263,7 +286,8 @@ function createForwardOffsetStyle(feature) {
         });
     }
 
-    const color = getColorByAge(lastPlowedForward, currentTimeHours);
+    const baseColor = getColorByAge(lastPlowedForward, currentTimeHours);
+    const color = isTransparent ? hexToRgba(baseColor, 0.01) : baseColor;
 
     return new Style({
         stroke: new Stroke({
@@ -276,6 +300,8 @@ function createForwardOffsetStyle(feature) {
 // Style for reverse offset geometries (right side, 2m offset)
 function createReverseOffsetStyle(feature) {
     const lastPlowedReverse = feature.get('last_plowed_reverse');
+    const uiState = window.uiControls?.getState();
+    const isTransparent = uiState?.offsetTransparent ?? false;
 
     // Hide if no reverse plow time
     if (!lastPlowedReverse) {
@@ -295,7 +321,8 @@ function createReverseOffsetStyle(feature) {
         });
     }
 
-    const color = getColorByAge(lastPlowedReverse, currentTimeHours);
+    const baseColor = getColorByAge(lastPlowedReverse, currentTimeHours);
+    const color = isTransparent ? hexToRgba(baseColor, 0.01) : baseColor;
 
     return new Style({
         stroke: new Stroke({
@@ -332,17 +359,19 @@ function createPolylineStyleWithBorders(feature) {
 function createSegmentStyleWithBorders(feature) {
     const baseStyle = createSegmentStyleWithFilter(feature);
     const uiState = window.uiControls?.getState();
-    
+
     if (!baseStyle || !uiState?.showSegmentBorders) {
         return baseStyle;
     }
-    
+
     // Add a white border around segments when borders are enabled
     const isActivated = feature.get('is_activated');
-    const baseColor = isActivated 
-        ? (feature.get('last_plowed') ? getColorByAge(feature.get('last_plowed'), currentTimeHours) : '#0066cc')
+    const isTransparent = uiState?.segmentTransparent ?? false;
+    const lastPlowed = feature.get('last_plowed');
+    const baseColor = isActivated
+        ? (lastPlowed ? getColorByAge(lastPlowed, currentTimeHours) : '#0066cc')
         : '#ff0000';
-    
+
     return [
         // White border (drawn first, underneath)
         new Style({
@@ -1404,7 +1433,7 @@ window.updateStatsWithTimeRange = (hours) => {
 // Initialize UI controls module with style creators
 setStyleCreators(createPolylineStyleWithBorders, createSegmentStyleWithBorders);
 const uiControls = initUIControls(
-    { polylinesLayer, segmentsLayer },
+    { polylinesLayer, segmentsLayer, forwardOffsetLayer, reverseOffsetLayer },
     updateStatistics
 );
 window.uiControls = uiControls;
