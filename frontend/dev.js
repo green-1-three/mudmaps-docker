@@ -1340,8 +1340,7 @@ map.on('mousemove', (e) => {
         // Build popup content
         let popupHTML = '<div style="display: flex; flex-direction: column; gap: 10px;">';
 
-        // Show segment if present
-        const segment = features.find(f => f.layer.id === 'segments');
+        // Show segment if present (already declared above at line 1315)
         if (segment) {
             const props = segment.properties;
             const lastPlowed = props.last_plowed ? new Date(props.last_plowed).toLocaleString() : 'Never';
