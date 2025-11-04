@@ -161,8 +161,8 @@ map.on('load', () => {
         },
         paint: {
             'line-color': '#00ff00', // NEON GREEN FOR DEBUGGING
-            'line-width': 2,
-            'line-gap-width': 4, // Creates 4px gap, then 2px white border on each side
+            'line-width': 4, // Thick border for visibility
+            'line-gap-width': 6, // Gap wider than segment (6px vs 4px segment width)
             'line-opacity': 1
         }
     });
