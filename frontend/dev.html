@@ -29,24 +29,8 @@
         </div>
         <div class="dev-panel-body">
             <div class="dev-tab-content active" data-tab-content="ui">
-                <h3>Layer Visibility</h3>
-                
-                <div class="control-item">
-                    <label class="toggle-label">
-                        <input type="checkbox" id="toggle-polylines" checked>
-                        <span class="toggle-slider"></span>
-                        <span class="toggle-text">Show Polylines (blue)</span>
-                    </label>
-                </div>
-                
-                <div class="control-item">
-                    <label class="toggle-label">
-                        <input type="checkbox" id="toggle-polyline-borders">
-                        <span class="toggle-slider"></span>
-                        <span class="toggle-text">Show Polyline Borders (debug)</span>
-                    </label>
-                </div>
-                
+                <h3>Segments</h3>
+
                 <div class="control-item">
                     <label class="toggle-label">
                         <input type="checkbox" id="toggle-active-segments" checked>
@@ -54,7 +38,7 @@
                         <span class="toggle-text">Show Active Segments (gradient)</span>
                     </label>
                 </div>
-                
+
                 <div class="control-item">
                     <label class="toggle-label">
                         <input type="checkbox" id="toggle-inactive-segments" checked>
@@ -62,7 +46,7 @@
                         <span class="toggle-text">Show Inactive Segments (red)</span>
                     </label>
                 </div>
-                
+
                 <div class="control-item">
                     <label class="toggle-label">
                         <input type="checkbox" id="toggle-segment-borders">
@@ -71,21 +55,39 @@
                     </label>
                 </div>
 
-                <h3 style="margin-top: 30px;">Transparency Controls</h3>
+                <h4 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px; color: #666;">Visibility</h4>
 
-                <div class="control-item">
+                <div class="control-item" style="margin-left: 15px;">
                     <label class="toggle-label">
                         <input type="checkbox" id="toggle-segment-transparency">
                         <span class="toggle-slider"></span>
-                        <span class="toggle-text">Make Active Segments Transparent</span>
+                        <span class="toggle-text">Hide Active Segments</span>
+                    </label>
+                </div>
+
+                <div class="control-item" style="margin-left: 15px;">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="toggle-offset-transparency">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Hide Offset Lines</span>
+                    </label>
+                </div>
+
+                <h3 style="margin-top: 30px;">Polylines</h3>
+
+                <div class="control-item">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="toggle-polylines" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Show Polylines (blue)</span>
                     </label>
                 </div>
 
                 <div class="control-item">
                     <label class="toggle-label">
-                        <input type="checkbox" id="toggle-offset-transparency">
+                        <input type="checkbox" id="toggle-polyline-borders">
                         <span class="toggle-slider"></span>
-                        <span class="toggle-text">Make Offset Lines Transparent</span>
+                        <span class="toggle-text">Show Polyline Borders (debug)</span>
                     </label>
                 </div>
 
