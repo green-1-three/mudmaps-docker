@@ -195,9 +195,10 @@ map.on('load', () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                8, 12,   // At zoom 8 (far out), width is 12
-                12, 6,   // At zoom 12 (medium), width is 6
-                16, 4    // At zoom 16 (close in), width is 4 (minimum)
+                13, 1,   // At zoom 13, width is 1px
+                14, 2,   // At zoom 14, width is 2px
+                16, 3,   // At zoom 16, width is 3px
+                18, 4    // At zoom 18, width is 4px
             ]
         }
     });
@@ -256,9 +257,10 @@ map.on('load', () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                8, 12,   // At zoom 8 (far out), width is 12
-                12, 6,   // At zoom 12 (medium), width is 6
-                16, 4    // At zoom 16 (close in), width is 4 (minimum)
+                13, 1,   // At zoom 13, width is 1px
+                14, 2,   // At zoom 14, width is 2px
+                16, 3,   // At zoom 16, width is 3px
+                18, 4    // At zoom 18, width is 4px
             ]
         }
     });
