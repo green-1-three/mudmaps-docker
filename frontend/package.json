@@ -8,6 +8,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "mapbox-gl": "^3.7.0",
     "ol": "^10.6.1"
   },
   "devDependencies": {

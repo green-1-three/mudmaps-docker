@@ -1,13 +1,6 @@
 import './style.css';
-import { Map, View } from 'ol';
-import TileLayer from 'ol/layer/Tile';
-import XYZ from 'ol/source/XYZ';
-import { fromLonLat, toLonLat } from 'ol/proj';
-import { Feature } from 'ol';
-import { Point, LineString, Polygon } from 'ol/geom';
-import { Vector as VectorLayer } from 'ol/layer';
-import { Vector as VectorSource } from 'ol/source';
-import { Style, Icon, Stroke, Fill, Text } from 'ol/style';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 
 // Configuration
 let API_BASE = import.meta.env.VITE_API_BASE;
@@ -21,8 +14,13 @@ if (!API_BASE) {
 
 console.log('Using API_BASE:', API_BASE);
 
+mapboxgl.accessToken = MAPBOX_TOKEN;
+
 // Discrete time intervals mapping: index -> hours
 const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
+
+// Global variable to store current time range
+let currentTimeHours = 24;
 
 // Polyline decoder with caching
 const polylineCache = {};
@@ -69,120 +67,20 @@ async function fetchJSON(url) {
     return r.json();
 }
 
-// Map setup with OpenStreetMap (clean, readable basemap similar to Google Maps)
-const map = new Map({
-    target: 'map',
-    layers: [new TileLayer({ 
-        source: new XYZ({
-            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            attributions: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        })
-    })],
-    view: new View({ center: fromLonLat([0, 0]), zoom: 2 })
-});
-
-// Vector sources for different layers
-const boundarySource = new VectorSource();
-const polylinesSource = new VectorSource();
-const segmentsSource = new VectorSource();
-const forwardOffsetSource = new VectorSource();
-const reverseOffsetSource = new VectorSource();
-const userLocationSource = new VectorSource();
-const searchResultSource = new VectorSource();
-
-// Add layers to map (order matters for display)
-// Boundary at bottom (zIndex: 0.1)
-map.addLayer(new VectorLayer({
-    source: boundarySource,
-    zIndex: 0.1,
-    style: new Style({
-        stroke: new Stroke({
-            color: 'rgba(255, 255, 255, 0.4)',
-            width: 2,
-            lineDash: [5, 5]
-        }),
-        fill: new Fill({
-            color: 'rgba(255, 255, 255, 0.02)'
-        })
-    })
-}));
-
-// Polylines behind (zIndex: 0.5)
-map.addLayer(new VectorLayer({
-    source: polylinesSource,
-    zIndex: 0.5,
-    style: createPolylineStyleWithFilter
-}));
-
-// Forward offset geometries (zIndex: 0.6)
-map.addLayer(new VectorLayer({
-    source: forwardOffsetSource,
-    zIndex: 0.6,
-    style: createForwardOffsetStyle
-}));
-
-// Reverse offset geometries (zIndex: 0.7)
-map.addLayer(new VectorLayer({
-    source: reverseOffsetSource,
-    zIndex: 0.7,
-    style: createReverseOffsetStyle
-}));
-
-// Segments on top (zIndex: 1)
-map.addLayer(new VectorLayer({
-    source: segmentsSource,
-    zIndex: 1,
-    style: createSegmentStyleWithFilter
-}));
-
-map.addLayer(new VectorLayer({
-    source: userLocationSource,
-    zIndex: 3,
-    style: new Style({
-        image: new Icon({
-            anchor: [0.5, 1],
-            src: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
-            scale: 1.2
-        })
-    })
-}));
-
-map.addLayer(new VectorLayer({
-    source: searchResultSource,
-    zIndex: 4,
-    style: (feature) => {
-        const name = feature.get('name') || 'Search Result';
-        return new Style({
-            image: new Icon({
-                anchor: [0.5, 1],
-                src: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
-                scale: 1.5
-            }),
-            text: new Text({
-                text: name,
-                offsetY: -60,
-                fill: new Fill({ color: '#000' }),
-                stroke: new Stroke({ color: '#fff', width: 3 }),
-                font: 'bold 13px Arial'
-            })
-        });
-    }
-}));
-
 // Helper function to interpolate between two colors
 function interpolateColor(color1, color2, factor) {
     const r1 = parseInt(color1.slice(1, 3), 16);
     const g1 = parseInt(color1.slice(3, 5), 16);
     const b1 = parseInt(color1.slice(5, 7), 16);
-    
+
     const r2 = parseInt(color2.slice(1, 3), 16);
     const g2 = parseInt(color2.slice(3, 5), 16);
     const b2 = parseInt(color2.slice(5, 7), 16);
-    
+
     const r = Math.round(r1 + (r2 - r1) * factor);
     const g = Math.round(g1 + (g2 - g1) * factor);
     const b = Math.round(b1 + (b2 - b1) * factor);
-    
+
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
@@ -192,232 +90,180 @@ function getColorByAge(timestamp, maxHours = currentTimeHours) {
     const recordTime = new Date(timestamp).getTime();
     const ageMinutes = (now - recordTime) / (1000 * 60);
     const maxMinutes = maxHours * 60;
-    
+
     if (ageMinutes >= maxMinutes) return '#808080';
-    
+
     const position = ageMinutes / maxMinutes;
-    
+
     const stops = [
         { position: 0.00, color: '#00ff00' },
         { position: 0.50, color: '#ffff00' },
         { position: 0.75, color: '#ff8800' },
         { position: 1.00, color: '#808080' }
     ];
-    
+
     for (let i = 0; i < stops.length - 1; i++) {
         if (position >= stops[i].position && position <= stops[i + 1].position) {
             const rangeDuration = stops[i + 1].position - stops[i].position;
             const positionInRange = position - stops[i].position;
             const factor = positionInRange / rangeDuration;
-            
+
             return interpolateColor(stops[i].color, stops[i + 1].color, factor);
         }
     }
-    
+
     return '#00ff00';
 }
 
-// Global variable to store current time range
-let currentTimeHours = 24;
+// Initialize map
+const map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/streets-v12',
+    center: [0, 0],
+    zoom: 2
+});
 
-// Style for polylines - blue, thin, behind segments
-function createPolylineStyleWithFilter(feature) {
-    const endTime = feature.get('end_time');
-    if (endTime) {
-        const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-        const polylineTime = new Date(endTime).getTime();
-        if (polylineTime < cutoffTime) {
-            return null;
+// Add navigation controls
+map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+
+// GeoJSON data stores
+const geojsonData = {
+    boundary: { type: 'FeatureCollection', features: [] },
+    polylines: { type: 'FeatureCollection', features: [] },
+    segments: { type: 'FeatureCollection', features: [] },
+    forwardOffsets: { type: 'FeatureCollection', features: [] },
+    reverseOffsets: { type: 'FeatureCollection', features: [] },
+    searchResult: { type: 'FeatureCollection', features: [] }
+};
+
+// Map load event - add sources and layers
+map.on('load', () => {
+    // Add sources
+    map.addSource('boundary', { type: 'geojson', data: geojsonData.boundary });
+    map.addSource('polylines', { type: 'geojson', data: geojsonData.polylines });
+    map.addSource('segments', { type: 'geojson', data: geojsonData.segments });
+    map.addSource('forward-offsets', { type: 'geojson', data: geojsonData.forwardOffsets });
+    map.addSource('reverse-offsets', { type: 'geojson', data: geojsonData.reverseOffsets });
+    map.addSource('search-result', { type: 'geojson', data: geojsonData.searchResult });
+
+    // Add boundary layer
+    map.addLayer({
+        id: 'boundary-fill',
+        type: 'fill',
+        source: 'boundary',
+        paint: {
+            'fill-color': 'rgba(255, 255, 255, 0.02)',
+            'fill-opacity': 1
         }
-    }
-    
-    return new Style({
-        stroke: new Stroke({
-            color: '#4444ff',  // Blue
-            width: 2
-        })
     });
-}
 
-// Style for segments - gradient colors for activated, hide unactivated
-function createSegmentStyleWithFilter(feature) {
-    const isActivated = feature.get('is_activated');
-
-    // Unactivated segments: hide them
-    if (!isActivated) {
-        return null;
-    }
-
-    // Activated segments: apply time filter and gradient
-    const lastPlowed = feature.get('last_plowed');
-    if (lastPlowed) {
-        const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-        const plowTime = new Date(lastPlowed).getTime();
-        if (plowTime < cutoffTime) {
-            return null;  // Hide segments older than the time range
+    map.addLayer({
+        id: 'boundary-line',
+        type: 'line',
+        source: 'boundary',
+        paint: {
+            'line-color': 'rgba(255, 255, 255, 0.4)',
+            'line-width': 2,
+            'line-dasharray': [5, 5]
         }
-    }
-
-    const color = lastPlowed ? getColorByAge(lastPlowed) : '#0066cc';
-
-    return new Style({
-        stroke: new Stroke({
-            color: color,
-            width: 4
-        })
     });
-}
 
-// Style for forward offset geometries (left side, 2m offset)
-function createForwardOffsetStyle(feature) {
-    const lastPlowedForward = feature.get('last_plowed_forward');
-
-    // Hide if no forward plow time
-    if (!lastPlowedForward) {
-        return null;
-    }
-
-    // Apply time filter
-    const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-    const plowTime = new Date(lastPlowedForward).getTime();
-    if (plowTime < cutoffTime) {
-        return null;
-    }
-
-    const color = getColorByAge(lastPlowedForward);
-
-    return new Style({
-        stroke: new Stroke({
-            color: color,
-            width: 3
-        })
-    });
-}
-
-// Style for reverse offset geometries (right side, 2m offset)
-function createReverseOffsetStyle(feature) {
-    const lastPlowedReverse = feature.get('last_plowed_reverse');
-
-    // Hide if no reverse plow time
-    if (!lastPlowedReverse) {
-        return null;
-    }
-
-    // Apply time filter
-    const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-    const plowTime = new Date(lastPlowedReverse).getTime();
-    if (plowTime < cutoffTime) {
-        return null;
-    }
-
-    const color = getColorByAge(lastPlowedReverse);
-
-    return new Style({
-        stroke: new Stroke({
-            color: color,
-            width: 3
-        })
-    });
-}
-
-// Load polylines from backend
-async function loadPolylines() {
-    try {
-        showStatus('Loading polylines...');
-        const startTime = performance.now();
-
-        const url = `${API_BASE}/paths/encoded?hours=168`;
-        console.log(`🛣️  Fetching polylines from: ${url}`);
-        
-        const data = await fetchJSON(url);
-        const fetchTime = performance.now() - startTime;
-        console.log(`✅ Polylines loaded in ${fetchTime.toFixed(0)}ms`);
-        console.log('📦 Polyline response:', data);
-
-        if (!data.devices || data.devices.length === 0) {
-            console.log('⚠️ No devices/polylines in response');
-            return;
+    // Add polylines layer
+    map.addLayer({
+        id: 'polylines',
+        type: 'line',
+        source: 'polylines',
+        paint: {
+            'line-color': '#4444ff',
+            'line-width': 2
         }
+    });
 
-        polylinesSource.clear();
-
-        let totalPolylines = 0;
-
-        for (const device of data.devices) {
-            // Handle single encoded path
-            if (device.encoded_path) {
-                const coords = decodePolyline(device.encoded_path);
-                const projectedCoords = coords.map(coord => fromLonLat(coord));
-                
-                const feature = new Feature({
-                    geometry: new LineString(projectedCoords),
-                    device: device.device,
-                    start_time: device.start_time,
-                    end_time: device.end_time,
-                    type: 'polyline'
-                });
-                
-                polylinesSource.addFeature(feature);
-                totalPolylines++;
-            }
-            
-            // Handle batched paths
-            if (device.batches && device.batches.length > 0) {
-                for (const batch of device.batches) {
-                    if (batch.success && batch.encoded_polyline) {
-                        const coords = decodePolyline(batch.encoded_polyline);
-                        const projectedCoords = coords.map(coord => fromLonLat(coord));
-                        
-                        const feature = new Feature({
-                            geometry: new LineString(projectedCoords),
-                            polyline_id: batch.id,
-                            device: device.device,
-                            start_time: batch.start_time,
-                            end_time: batch.end_time,
-                            bearing: batch.bearing,
-                            confidence: batch.confidence,
-                            type: 'polyline'
-                        });
-                        
-                        polylinesSource.addFeature(feature);
-                        totalPolylines++;
-                    }
-                }
-            }
-            
-            // Handle raw coordinates fallback (when OSRM fails)
-            if (device.raw_coordinates && device.raw_coordinates.length > 0) {
-                const projectedCoords = device.raw_coordinates.map(coord => fromLonLat(coord));
-                
-                const feature = new Feature({
-                    geometry: new LineString(projectedCoords),
-                    device: device.device,
-                    start_time: device.start_time,
-                    end_time: device.end_time,
-                    type: 'polyline',
-                    raw: true  // Mark as unmatched
-                });
-                
-                polylinesSource.addFeature(feature);
-                totalPolylines++;
-            }
+    // Add forward offset layer
+    map.addLayer({
+        id: 'forward-offsets',
+        type: 'line',
+        source: 'forward-offsets',
+        paint: {
+            'line-color': '#00ff00', // Will be updated dynamically
+            'line-width': 3
         }
+    });
 
-        console.log(`📊 Loaded ${totalPolylines} polylines`);
-        showStatus(`Loaded ${totalPolylines} polylines`);
+    // Add reverse offset layer
+    map.addLayer({
+        id: 'reverse-offsets',
+        type: 'line',
+        source: 'reverse-offsets',
+        paint: {
+            'line-color': '#00ff00', // Will be updated dynamically
+            'line-width': 3
+        }
+    });
 
-    } catch (err) {
-        console.error('Failed to load polylines:', err);
+    // Add segments layer
+    map.addLayer({
+        id: 'segments',
+        type: 'line',
+        source: 'segments',
+        paint: {
+            'line-color': '#00ff00', // Will be updated dynamically
+            'line-width': 4
+        }
+    });
+
+    // Add search result marker layer
+    map.addLayer({
+        id: 'search-result',
+        type: 'circle',
+        source: 'search-result',
+        paint: {
+            'circle-radius': 8,
+            'circle-color': '#4264fb'
+        }
+    });
+
+    // Load data after map is ready
+    loadAllData();
+});
+
+// Click handlers
+map.on('click', 'segments', (e) => {
+    if (e.features.length > 0) {
+        const feature = e.features[0];
+        const props = feature.properties;
+        const lastPlowed = props.last_plowed ? new Date(props.last_plowed).toLocaleString() : 'Unknown';
+        const info = `SEGMENT: ${props.street_name} - Last plowed: ${lastPlowed} (Device: ${props.device_id || 'Unknown'}, Total: ${props.plow_count_total || 0}x)`;
+        showStatus(info);
+        console.log('📍 Segment clicked:', info);
     }
-}
+});
 
-// Load municipality boundary
+map.on('click', 'polylines', (e) => {
+    if (e.features.length > 0) {
+        const feature = e.features[0];
+        const props = feature.properties;
+        const startText = props.start_time ? new Date(props.start_time).toLocaleString() : 'Unknown';
+        const endText = props.end_time ? new Date(props.end_time).toLocaleString() : 'Unknown';
+        const info = `POLYLINE #${props.polyline_id || 'Unknown'} - Device: ${props.device || 'Unknown'}, Start: ${startText}, End: ${endText}`;
+        showStatus(info);
+        console.log('📍 Polyline clicked:', info);
+    }
+});
+
+// Change cursor on hover
+map.on('mouseenter', 'segments', () => { map.getCanvas().style.cursor = 'pointer'; });
+map.on('mouseleave', 'segments', () => { map.getCanvas().style.cursor = ''; });
+map.on('mouseenter', 'polylines', () => { map.getCanvas().style.cursor = 'pointer'; });
+map.on('mouseleave', 'polylines', () => { map.getCanvas().style.cursor = ''; });
+
+// Load boundary
 async function loadBoundary() {
     try {
         showStatus('Loading boundary...');
         const url = `${API_BASE}/boundary?municipality=pomfret-vt`;
         console.log(`🗺️  Fetching boundary from: ${url}`);
-        
+
         const data = await fetchJSON(url);
         console.log('✅ Boundary loaded:', data);
 
@@ -426,49 +272,116 @@ async function loadBoundary() {
             return;
         }
 
-        boundarySource.clear();
+        geojsonData.boundary.features = [{
+            type: 'Feature',
+            geometry: data.geometry,
+            properties: data.properties
+        }];
 
-        // Handle MultiPolygon geometry
-        if (data.geometry.type === 'MultiPolygon') {
-            data.geometry.coordinates.forEach(polygonCoords => {
-                // Each polygon is an array of rings (first is outer, rest are holes)
-                const rings = polygonCoords.map(ring => 
-                    ring.map(coord => fromLonLat(coord))
-                );
-                
-                const feature = new Feature({
-                    geometry: new Polygon(rings),
-                    name: data.properties.name,
-                    state: data.properties.state,
-                    type: 'boundary'
-                });
-                
-                boundarySource.addFeature(feature);
-            });
-        } else if (data.geometry.type === 'Polygon') {
-            const rings = data.geometry.coordinates.map(ring => 
-                ring.map(coord => fromLonLat(coord))
-            );
-            
-            const feature = new Feature({
-                geometry: new Polygon(rings),
-                name: data.properties.name,
-                state: data.properties.state,
-                type: 'boundary'
-            });
-            
-            boundarySource.addFeature(feature);
+        if (map.getSource('boundary')) {
+            map.getSource('boundary').setData(geojsonData.boundary);
         }
 
         console.log(`🗺️  Boundary loaded for ${data.properties.name}, ${data.properties.state}`);
-
     } catch (err) {
         console.error('Failed to load boundary:', err);
-        // Don't show error to user - boundary is optional
     }
 }
 
-// Load and display road segments
+// Load polylines
+async function loadPolylines() {
+    try {
+        showStatus('Loading polylines...');
+        const startTime = performance.now();
+
+        const url = `${API_BASE}/paths/encoded?hours=168`;
+        console.log(`🛣️  Fetching polylines from: ${url}`);
+
+        const data = await fetchJSON(url);
+        const fetchTime = performance.now() - startTime;
+        console.log(`✅ Polylines loaded in ${fetchTime.toFixed(0)}ms`);
+
+        if (!data.devices || data.devices.length === 0) {
+            console.log('⚠️ No devices/polylines in response');
+            return;
+        }
+
+        const features = [];
+
+        for (const device of data.devices) {
+            if (device.encoded_path) {
+                const coords = decodePolyline(device.encoded_path);
+                features.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: coords
+                    },
+                    properties: {
+                        device: device.device,
+                        start_time: device.start_time,
+                        end_time: device.end_time,
+                        type: 'polyline'
+                    }
+                });
+            }
+
+            if (device.batches && device.batches.length > 0) {
+                for (const batch of device.batches) {
+                    if (batch.success && batch.encoded_polyline) {
+                        const coords = decodePolyline(batch.encoded_polyline);
+                        features.push({
+                            type: 'Feature',
+                            geometry: {
+                                type: 'LineString',
+                                coordinates: coords
+                            },
+                            properties: {
+                                polyline_id: batch.id,
+                                device: device.device,
+                                start_time: batch.start_time,
+                                end_time: batch.end_time,
+                                bearing: batch.bearing,
+                                confidence: batch.confidence,
+                                type: 'polyline'
+                            }
+                        });
+                    }
+                }
+            }
+
+            if (device.raw_coordinates && device.raw_coordinates.length > 0) {
+                features.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: device.raw_coordinates
+                    },
+                    properties: {
+                        device: device.device,
+                        start_time: device.start_time,
+                        end_time: device.end_time,
+                        type: 'polyline',
+                        raw: true
+                    }
+                });
+            }
+        }
+
+        geojsonData.polylines.features = features;
+
+        if (map.getSource('polylines')) {
+            map.getSource('polylines').setData(geojsonData.polylines);
+        }
+
+        console.log(`📊 Loaded ${features.length} polylines`);
+        showStatus(`Loaded ${features.length} polylines`);
+    } catch (err) {
+        console.error('Failed to load polylines:', err);
+    }
+}
+
+// Load segments
 async function loadSegments() {
     try {
         showStatus('Loading road segments...');
@@ -476,11 +389,10 @@ async function loadSegments() {
 
         const url = `${API_BASE}/segments?municipality=pomfret-vt&all=true`;
         console.log(`🛣️  Fetching segments from: ${url}`);
-        
+
         const data = await fetchJSON(url);
         const fetchTime = performance.now() - startTime;
         console.log(`✅ Segments loaded in ${fetchTime.toFixed(0)}ms`);
-        console.log('📦 Segment response:', data);
 
         if (!data.features || data.features.length === 0) {
             showStatus('No segments found');
@@ -488,17 +400,9 @@ async function loadSegments() {
             return;
         }
 
-        console.log(`🛣️  Processing ${data.features.length} segment(s)`);
-
-        segmentsSource.clear();
-        forwardOffsetSource.clear();
-        reverseOffsetSource.clear();
-
-        let totalSegments = 0;
-        let activatedSegments = 0;
-        let segmentsWithinTimeRange = 0;
-        let forwardOffsetCount = 0;
-        let reverseOffsetCount = 0;
+        const segmentFeatures = [];
+        const forwardOffsetFeatures = [];
+        const reverseOffsetFeatures = [];
 
         data.features.forEach(segment => {
             if (!segment.geometry || !segment.geometry.coordinates) {
@@ -516,122 +420,143 @@ async function loadSegments() {
             const lastPlowedISO = lastPlowed > 0 ? new Date(lastPlowed).toISOString() : null;
             const isActivated = lastPlowed > 0;
 
-            if (isActivated) {
-                activatedSegments++;
-                const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-                if (lastPlowed >= cutoffTime) {
-                    segmentsWithinTimeRange++;
-                }
+            // Skip inactive segments
+            if (!isActivated) {
+                return;
             }
 
-            const coordinates = segment.geometry.coordinates.map(coord => fromLonLat(coord));
-
-            const feature = new Feature({
-                geometry: new LineString(coordinates),
-                segment_id: segment.id,
-                street_name: segment.properties.street_name,
-                road_classification: segment.properties.road_classification,
-                bearing: segment.properties.bearing,
-                last_plowed: lastPlowedISO,
-                last_plowed_forward: segment.properties.last_plowed_forward,
-                last_plowed_reverse: segment.properties.last_plowed_reverse,
-                device_id: segment.properties.device_id,
-                plow_count_today: segment.properties.plow_count_today,
-                plow_count_total: segment.properties.plow_count_total,
-                segment_length: segment.properties.segment_length,
-                is_activated: isActivated,
-                type: 'segment'
+            // Add segment
+            segmentFeatures.push({
+                type: 'Feature',
+                geometry: segment.geometry,
+                properties: {
+                    segment_id: segment.id,
+                    street_name: segment.properties.street_name,
+                    road_classification: segment.properties.road_classification,
+                    bearing: segment.properties.bearing,
+                    last_plowed: lastPlowedISO,
+                    last_plowed_forward: segment.properties.last_plowed_forward,
+                    last_plowed_reverse: segment.properties.last_plowed_reverse,
+                    device_id: segment.properties.device_id,
+                    plow_count_today: segment.properties.plow_count_today,
+                    plow_count_total: segment.properties.plow_count_total,
+                    segment_length: segment.properties.segment_length,
+                    is_activated: isActivated,
+                    type: 'segment',
+                    color: getColorByAge(lastPlowedISO)
+                }
             });
 
-            segmentsSource.addFeature(feature);
-            totalSegments++;
-
-            // Add forward offset geometry if it exists
+            // Add forward offset
             if (segment.vertices_forward && segment.vertices_forward.coordinates) {
-                const forwardCoords = segment.vertices_forward.coordinates.map(coord => fromLonLat(coord));
-                const forwardFeature = new Feature({
-                    geometry: new LineString(forwardCoords),
-                    segment_id: segment.id,
-                    street_name: segment.properties.street_name,
-                    last_plowed_forward: segment.properties.last_plowed_forward,
-                    type: 'offset_forward'
+                forwardOffsetFeatures.push({
+                    type: 'Feature',
+                    geometry: segment.vertices_forward,
+                    properties: {
+                        segment_id: segment.id,
+                        street_name: segment.properties.street_name,
+                        last_plowed_forward: segment.properties.last_plowed_forward,
+                        type: 'offset_forward',
+                        color: segment.properties.last_plowed_forward
+                            ? getColorByAge(segment.properties.last_plowed_forward)
+                            : '#808080'
+                    }
                 });
-                forwardOffsetSource.addFeature(forwardFeature);
-                forwardOffsetCount++;
             }
 
-            // Add reverse offset geometry if it exists
+            // Add reverse offset
             if (segment.vertices_reverse && segment.vertices_reverse.coordinates) {
-                const reverseCoords = segment.vertices_reverse.coordinates.map(coord => fromLonLat(coord));
-                const reverseFeature = new Feature({
-                    geometry: new LineString(reverseCoords),
-                    segment_id: segment.id,
-                    street_name: segment.properties.street_name,
-                    last_plowed_reverse: segment.properties.last_plowed_reverse,
-                    type: 'offset_reverse'
+                reverseOffsetFeatures.push({
+                    type: 'Feature',
+                    geometry: segment.vertices_reverse,
+                    properties: {
+                        segment_id: segment.id,
+                        street_name: segment.properties.street_name,
+                        last_plowed_reverse: segment.properties.last_plowed_reverse,
+                        type: 'offset_reverse',
+                        color: segment.properties.last_plowed_reverse
+                            ? getColorByAge(segment.properties.last_plowed_reverse)
+                            : '#808080'
+                    }
                 });
-                reverseOffsetSource.addFeature(reverseFeature);
-                reverseOffsetCount++;
             }
         });
 
+        geojsonData.segments.features = segmentFeatures;
+        geojsonData.forwardOffsets.features = forwardOffsetFeatures;
+        geojsonData.reverseOffsets.features = reverseOffsetFeatures;
+
+        if (map.getSource('segments')) {
+            map.getSource('segments').setData(geojsonData.segments);
+        }
+        if (map.getSource('forward-offsets')) {
+            map.getSource('forward-offsets').setData(geojsonData.forwardOffsets);
+        }
+        if (map.getSource('reverse-offsets')) {
+            map.getSource('reverse-offsets').setData(geojsonData.reverseOffsets);
+        }
+
+        // Update layer colors using data-driven styling
+        updateLayerColors();
+
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total segment load time: ${totalTime.toFixed(0)}ms`);
-        console.log(`📊 Segments: ${totalSegments} total, ${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated, ${segmentsWithinTimeRange} within ${currentTimeHours}h range`);
-        console.log(`📊 Offset geometries: ${forwardOffsetCount} forward, ${reverseOffsetCount} reverse`);
+        console.log(`📊 Segments: ${segmentFeatures.length} total`);
+        console.log(`📊 Offset geometries: ${forwardOffsetFeatures.length} forward, ${reverseOffsetFeatures.length} reverse`);
 
-        showStatus(`Loaded ${totalSegments} segments (${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated, ${forwardOffsetCount} offset geometries)`);
-
+        showStatus(`Loaded ${segmentFeatures.length} segments (${forwardOffsetFeatures.length} offset geometries)`);
     } catch (err) {
         console.error('Failed to load segments:', err);
         showStatus(`Error: ${err.message}`);
     }
 }
 
-// Load both polylines and segments
+// Update layer colors with data-driven styling
+function updateLayerColors() {
+    // Segments color
+    map.setPaintProperty('segments', 'line-color', ['get', 'color']);
+
+    // Forward offsets color
+    map.setPaintProperty('forward-offsets', 'line-color', ['get', 'color']);
+
+    // Reverse offsets color
+    map.setPaintProperty('reverse-offsets', 'line-color', ['get', 'color']);
+}
+
+// Load all data
 async function loadAllData() {
     try {
         showStatus('Loading map data...');
-        
-        // Load in parallel
+
         await Promise.all([
             loadBoundary(),
             loadPolylines(),
             loadSegments()
         ]);
 
-        // Fit map to show all features
-        polylinesSource.changed();
-        segmentsSource.changed();
+        // Fit to bounds if we have features
+        if (geojsonData.segments.features.length > 0 || geojsonData.polylines.features.length > 0) {
+            const bounds = new mapboxgl.LngLatBounds();
 
-        const allFeatures = [
-            ...polylinesSource.getFeatures(),
-            ...segmentsSource.getFeatures()
-        ];
-
-        if (allFeatures.length > 0) {
-            const extent = segmentsSource.getFeatures().length > 0 
-                ? segmentsSource.getExtent() 
-                : polylinesSource.getExtent();
-                
-            map.getView().fit(extent, {
-                padding: [50, 50, 50, 50],
-                maxZoom: 16,
-                duration: 1000
+            [...geojsonData.segments.features, ...geojsonData.polylines.features].forEach(feature => {
+                if (feature.geometry.type === 'LineString') {
+                    feature.geometry.coordinates.forEach(coord => bounds.extend(coord));
+                }
             });
+
+            map.fitBounds(bounds, { padding: 50, maxZoom: 16 });
         }
 
-        const polylineCount = polylinesSource.getFeatures().length;
-        const segmentCount = segmentsSource.getFeatures().length;
+        const polylineCount = geojsonData.polylines.features.length;
+        const segmentCount = geojsonData.segments.features.length;
         showStatus(`Loaded ${polylineCount} polylines, ${segmentCount} segments`);
-
     } catch (err) {
         console.error('Failed to load data:', err);
         showStatus(`Error: ${err.message}`);
     }
 }
 
-// Create simple UI
+// UI Functions
 function createUI() {
     // Search bar (top-left)
     const searchDiv = document.createElement('div');
@@ -651,7 +576,7 @@ function createUI() {
     controlsDiv.innerHTML = `
         <div class="control-panel">
             <h3>Latest Snowplow Activity</h3>
-            
+
             <div class="control-group">
                 <label for="timeRange">Time Range:</label>
                 <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
@@ -659,7 +584,7 @@ function createUI() {
                     <span id="timeValue">Last 1 day</span>
                 </div>
             </div>
-            
+
             <div class="legend">
                 <div class="legend-title">Segment Age:</div>
                 <div class="gradient-bar"></div>
@@ -673,16 +598,8 @@ function createUI() {
     `;
     document.body.appendChild(controlsDiv);
 
-    // Zoom level indicator (bottom-right)
-    const zoomDiv = document.createElement('div');
-    zoomDiv.id = 'zoom-indicator';
-    zoomDiv.style.cssText = 'position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.7); color: white; padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 14px; z-index: 1000;';
-    zoomDiv.innerHTML = 'Zoom: <span id="zoomLevel">--</span>';
-    document.body.appendChild(zoomDiv);
-
     setupTimeSlider();
     setupAddressSearch();
-    setupZoomIndicator();
 }
 
 function setupTimeSlider() {
@@ -694,52 +611,9 @@ function setupTimeSlider() {
         updateTimeDisplay(hours);
         currentTimeHours = hours;
 
-        // Trigger re-render of layers
-        polylinesSource.changed();
-        segmentsSource.changed();
-        forwardOffsetSource.changed();
-        reverseOffsetSource.changed();
+        // Reload and update colors
+        loadSegments();
     });
-
-    slider.addEventListener('change', (e) => {
-        const index = parseInt(e.target.value);
-        currentTimeHours = TIME_INTERVALS[index];
-
-        // Final re-render
-        polylinesSource.changed();
-        segmentsSource.changed();
-        forwardOffsetSource.changed();
-        reverseOffsetSource.changed();
-        
-        const visibleSegments = segmentsSource.getFeatures().filter(f => {
-            const lastPlowed = f.get('last_plowed');
-            if (!lastPlowed) return false;
-            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-            return new Date(lastPlowed).getTime() >= cutoffTime;
-        }).length;
-        
-        const visiblePolylines = polylinesSource.getFeatures().filter(f => {
-            const endTime = f.get('end_time');
-            if (!endTime) return false;
-            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-            return new Date(endTime).getTime() >= cutoffTime;
-        }).length;
-        
-        showStatus(`Showing ${visiblePolylines} polylines, ${visibleSegments} segments`);
-    });
-}
-
-function setupZoomIndicator() {
-    const updateZoom = () => {
-        const zoom = map.getView().getZoom();
-        const zoomLevel = document.getElementById('zoomLevel');
-        if (zoomLevel) {
-            zoomLevel.textContent = zoom.toFixed(2);
-        }
-    };
-    
-    map.getView().on('change:resolution', updateZoom);
-    updateZoom();
 }
 
 function setupAddressSearch() {
@@ -759,12 +633,12 @@ function setupAddressSearch() {
     searchInput.addEventListener('input', (e) => {
         clearTimeout(searchTimeout);
         const query = e.target.value.trim();
-        
+
         if (query.length < 1) {
             searchResults.innerHTML = '';
             return;
         }
-        
+
         searchTimeout = setTimeout(() => {
             performAddressSearch(query);
         }, 200);
@@ -776,13 +650,11 @@ async function performAddressSearch(query) {
     searchResults.innerHTML = '<div class="search-loading">Searching...</div>';
 
     try {
-        const view = map.getView();
-        const center = view.getCenter();
-        const centerLonLat = toLonLat(center);
-        
+        const center = map.getCenter();
+
         const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?` +
             `access_token=${MAPBOX_TOKEN}&` +
-            `proximity=${centerLonLat[0]},${centerLonLat[1]}&` +
+            `proximity=${center.lng},${center.lat}&` +
             `country=US&` +
             `limit=5&` +
             `autocomplete=true`;
@@ -822,34 +694,30 @@ async function performAddressSearch(query) {
 }
 
 function showSearchResult(result) {
-    const lon = result.center[0];
-    const lat = result.center[1];
+    const [lng, lat] = result.center;
 
-    const addressParts = result.place_name.split(',').map(s => s.trim());
-    let displayAddress = '';
-    
-    if (addressParts.length >= 3) {
-        displayAddress = `${addressParts[0]}, ${addressParts[1]}, ${addressParts[2]}`;
-    } else {
-        displayAddress = addressParts[0];
+    geojsonData.searchResult.features = [{
+        type: 'Feature',
+        geometry: {
+            type: 'Point',
+            coordinates: [lng, lat]
+        },
+        properties: {
+            name: result.place_name
+        }
+    }];
+
+    if (map.getSource('search-result')) {
+        map.getSource('search-result').setData(geojsonData.searchResult);
     }
-
-    searchResultSource.clear();
-
-    const feature = new Feature({
-        geometry: new Point(fromLonLat([lon, lat])),
-        name: displayAddress
-    });
-
-    searchResultSource.addFeature(feature);
 
     const searchInput = document.getElementById('addressSearch');
     if (searchInput) {
         searchInput.value = result.place_name;
     }
 
-    map.getView().animate({
-        center: fromLonLat([lon, lat]),
+    map.flyTo({
+        center: [lng, lat],
         zoom: 16,
         duration: 1000
     });
@@ -873,12 +741,12 @@ function updateGradientLabels(hours) {
     const leftLabel = document.getElementById('gradientLeft');
     const centerLabel = document.getElementById('gradientCenter');
     const rightLabel = document.getElementById('gradientRight');
-    
+
     if (leftLabel) leftLabel.textContent = 'Now';
-    
+
     const centerMinutes = (hours * 60) / 2;
     if (centerLabel) centerLabel.textContent = formatTimeLabel(centerMinutes);
-    
+
     const rightMinutes = hours * 60;
     if (rightLabel) rightLabel.textContent = formatTimeLabel(rightMinutes);
 }
@@ -901,7 +769,7 @@ function updateTimeDisplay(hours) {
     } else if (hours === 168) {
         timeValue.textContent = 'Last 7 days';
     }
-    
+
     updateGradientLabels(hours);
 }
 
@@ -914,55 +782,15 @@ if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition((pos) => {
         const coords = [pos.coords.longitude, pos.coords.latitude];
         console.log('User location:', coords);
-        
-        map.getView().setCenter(fromLonLat(coords));
-        map.getView().setZoom(13);
+
+        map.setCenter(coords);
+        map.setZoom(13);
     }, (error) => {
         console.warn('Geolocation error:', error.message);
     }, { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 });
 }
 
-// Map click handler
-map.on('click', (event) => {
-    const features = map.getFeaturesAtPixel(event.pixel);
-    if (features.length > 0) {
-        const feature = features[0];
-        const type = feature.get('type');
-        
-        if (type === 'segment') {
-            const streetName = feature.get('street_name');
-            const lastPlowed = feature.get('last_plowed');
-            const deviceId = feature.get('device_id');
-            const plowCount = feature.get('plow_count_total');
-            
-            const plowedText = lastPlowed 
-                ? new Date(lastPlowed).toLocaleString() 
-                : 'Unknown';
-            const info = `SEGMENT: ${streetName} - Last plowed: ${plowedText} (Device: ${deviceId || 'Unknown'}, Total: ${plowCount || 0}x)`;
-            showStatus(info);
-            console.log('📍 Segment clicked:', info);
-        } else if (type === 'polyline') {
-            const polylineId = feature.get('polyline_id');
-            const device = feature.get('device');
-            const bearing = feature.get('bearing');
-            const confidence = feature.get('confidence');
-            const startTime = feature.get('start_time');
-            const endTime = feature.get('end_time');
-            
-            const startText = startTime ? new Date(startTime).toLocaleString() : 'Unknown';
-            const endText = endTime ? new Date(endTime).toLocaleString() : 'Unknown';
-            const bearingText = bearing ? `${Math.round(bearing)}°` : 'Unknown';
-            const confidenceText = confidence ? `${(confidence * 100).toFixed(1)}%` : 'Unknown';
-            
-            const info = `POLYLINE #${polylineId || 'Unknown'} - Device: ${device || 'Unknown'}, Bearing: ${bearingText}, Confidence: ${confidenceText}, Start: ${startText}, End: ${endText}`;
-            showStatus(info);
-            console.log('📍 Polyline clicked:', info);
-        }
-    }
-});
-
 // Initialize
-console.log('🗺️ Initializing MudMaps (POLYLINES + SEGMENTS)...');
+console.log('🗺️ Initializing MudMaps with Mapbox GL...');
 createUI();
 updateGradientLabels(currentTimeHours);
-loadAllData();
