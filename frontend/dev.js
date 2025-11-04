@@ -287,6 +287,15 @@ map.on('load', () => {
     loadAllData();
 });
 
+// Update zoom level display
+map.on('zoom', () => {
+    const zoomLevel = map.getZoom().toFixed(1);
+    const zoomDisplay = document.getElementById('zoom-display');
+    if (zoomDisplay) {
+        zoomDisplay.textContent = `Zoom: ${zoomLevel}`;
+    }
+});
+
 // Click handlers
 map.on('click', 'segments', (e) => {
     if (e.features.length > 0) {

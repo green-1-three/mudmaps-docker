@@ -99,6 +99,15 @@ const geojsonData = {
     reverseOffsets: { type: 'FeatureCollection', features: [] }
 };
 
+// Update zoom level display
+map.on('zoom', () => {
+    const zoomLevel = map.getZoom().toFixed(1);
+    const zoomDisplay = document.getElementById('zoom-display');
+    if (zoomDisplay) {
+        zoomDisplay.textContent = `Zoom: ${zoomLevel}`;
+    }
+});
+
 // Map load event - add sources and layers
 map.on('load', () => {
     // Add sources
