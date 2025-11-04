@@ -329,7 +329,7 @@ map.on('load', () => {
                 ['zoom'],
                 10, 8,   // At zoom 10, size is 8px
                 12, 9,   // At zoom 12, size is 9px
-                13, 10,  // At zoom 13, size is 10px
+                13, 9,   // At zoom 13, size is 9px
                 15, 12,  // At zoom 15, size is 12px
                 16, 14,  // At zoom 16, size is 14px
                 18, 16   // At zoom 18, size is 16px
@@ -340,7 +340,13 @@ map.on('load', () => {
             'text-offset': [0, 1.5], // Offset 1.5 ems to the side
             'text-allow-overlap': false,
             'text-ignore-placement': false,
-            'text-max-angle': 20, // Prevent labels on sharp curves (max angle between adjacent characters)
+            'text-max-angle': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                10, 25,  // At low zoom, allow 25 degrees (more permissive)
+                14, 20   // At zoom 14+, restrict to 20 degrees
+            ],
             'text-keep-upright': true, // Prevent upside-down labels
             'symbol-spacing': 150, // Minimum distance between repeated labels (pixels)
             'text-padding': 20 // Add padding around labels to prevent overlap
