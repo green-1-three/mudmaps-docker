@@ -203,9 +203,9 @@ map.on('load', () => {
             'text-offset': [0, 1.5], // Offset 1.5 ems to the side
             'text-allow-overlap': false,
             'text-ignore-placement': false,
-            'text-max-angle': 15, // Prevent labels on sharp curves (max angle between adjacent characters)
+            'text-max-angle': 20, // Prevent labels on sharp curves (max angle between adjacent characters)
             'text-keep-upright': true, // Prevent upside-down labels
-            'symbol-spacing': 250, // Minimum distance between repeated labels (pixels)
+            'symbol-spacing': 100, // Minimum distance between repeated labels (pixels)
             'text-padding': 20 // Add padding around labels to prevent overlap
         },
         paint: {
