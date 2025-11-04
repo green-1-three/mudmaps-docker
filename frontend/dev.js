@@ -591,6 +591,52 @@ async function loadAllData() {
     }
 }
 
+// Create UI overlay on map (time slider, search)
+function createUI() {
+    // Search bar (top-left)
+    const searchDiv = document.createElement('div');
+    searchDiv.id = 'search-bar';
+    searchDiv.innerHTML = `
+        <div class="search-input-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="addressSearch" placeholder="Search address...">
+        </div>
+        <div id="searchResults" class="search-results"></div>
+    `;
+    document.body.appendChild(searchDiv);
+
+    // Control panel (top-right)
+    const controlsDiv = document.createElement('div');
+    controlsDiv.id = 'controls';
+    controlsDiv.innerHTML = `
+        <div class="control-panel">
+            <h3>Latest Snowplow Activity</h3>
+
+            <div class="control-group">
+                <label for="timeRange">Time Range:</label>
+                <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
+                <div class="time-display">
+                    <span id="timeValue">Last 1 day</span>
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-title">Segment Age:</div>
+                <div class="gradient-bar"></div>
+                <div class="gradient-labels">
+                    <span id="gradientLeft">Now</span>
+                    <span id="gradientCenter">12 hours</span>
+                    <span id="gradientRight">1 day</span>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(controlsDiv);
+
+    setupTimeSlider();
+    setupAddressSearch();
+}
+
 // Time slider setup
 function setupTimeSlider() {
     const slider = document.getElementById('timeRange');
@@ -607,6 +653,98 @@ function setupTimeSlider() {
         }
 
         loadSegments();
+    });
+}
+
+// Developer Panel Functionality
+function initDevPanel() {
+    const panel = document.getElementById('dev-panel');
+    const resizeHandle = document.querySelector('.dev-panel-resize-handle');
+    const collapseBtn = document.querySelector('.dev-panel-collapse');
+
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    // Resize functionality
+    resizeHandle.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = panel.offsetWidth;
+        resizeHandle.classList.add('dragging');
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        const deltaX = startX - e.clientX;
+        const newWidth = Math.max(200, Math.min(window.innerWidth - 50, startWidth + deltaX));
+        panel.style.width = newWidth + 'px';
+
+        // Update map right margin to match panel width
+        const mapElement = document.getElementById('map');
+        if (mapElement) {
+            mapElement.style.right = newWidth + 'px';
+        }
+
+        // Update controls position to match panel width
+        const controlsElement = document.getElementById('controls');
+        if (controlsElement) {
+            controlsElement.style.right = (newWidth + 10) + 'px';
+        }
+
+        // Update map size while dragging
+        map.resize();
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            resizeHandle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+
+            // Final map size update
+            map.resize();
+        }
+    });
+
+    // Collapse functionality
+    collapseBtn.addEventListener('click', () => {
+        panel.classList.toggle('collapsed');
+        const isCollapsed = panel.classList.contains('collapsed');
+
+        collapseBtn.innerHTML = isCollapsed ? '&larr;' : '&rarr;';
+        collapseBtn.title = isCollapsed ? 'Expand Panel' : 'Collapse Panel';
+
+        // When collapsed, move button outside panel so it's visible
+        if (isCollapsed) {
+            collapseBtn.classList.add('floating');
+            document.body.appendChild(collapseBtn);
+        } else {
+            collapseBtn.classList.remove('floating');
+            document.querySelector('.dev-panel-header').appendChild(collapseBtn);
+        }
+
+        // Update map right margin - when collapsed, map fills entire screen
+        const mapElement = document.getElementById('map');
+        if (mapElement) {
+            mapElement.style.right = isCollapsed ? '0px' : panel.offsetWidth + 'px';
+        }
+
+        // Update controls position
+        const controlsElement = document.getElementById('controls');
+        if (controlsElement) {
+            controlsElement.style.right = isCollapsed ? '10px' : (panel.offsetWidth + 10) + 'px';
+        }
+
+        // Update map size after collapse/expand animation
+        setTimeout(() => {
+            map.resize();
+        }, 300);
     });
 }
 
@@ -653,11 +791,11 @@ function initializeModules() {
     // Initialize frontend logger
     initFrontendLogger(API_BASE);
 
-    // Setup time slider
-    setupTimeSlider();
+    // Create UI overlay (time slider, search bar)
+    createUI();
 
-    // Setup address search
-    setupAddressSearch();
+    // Initialize dev panel (drag, collapse)
+    initDevPanel();
 
     // Update gradient labels
     updateGradientLabels(currentTimeHours);
@@ -889,6 +1027,122 @@ function showSearchResult(result) {
 
     console.log(`📍 Searched location: ${result.place_name}`);
 }
+
+// Hover functionality
+let hoverPopup = null;
+
+// Create hover popup element
+function createHoverPopup() {
+    const popup = document.createElement('div');
+    popup.id = 'feature-hover-popup';
+    popup.style.cssText = `
+        position: fixed;
+        display: none;
+        pointer-events: none;
+        z-index: 10000;
+        gap: 10px;
+    `;
+    document.body.appendChild(popup);
+    return popup;
+}
+
+hoverPopup = createHoverPopup();
+
+// Map hover handler - detects both segments and polylines
+map.on('mousemove', (e) => {
+    const features = map.queryRenderedFeatures(e.point, {
+        layers: ['segments', 'polylines']
+    });
+
+    if (features.length > 0) {
+        map.getCanvas().style.cursor = 'pointer';
+
+        // Build popup content
+        let popupHTML = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+
+        // Show segment if present
+        const segment = features.find(f => f.layer.id === 'segments');
+        if (segment) {
+            const props = segment.properties;
+            const lastPlowed = props.last_plowed ? new Date(props.last_plowed).toLocaleString() : 'Never';
+            const lastPlowedFwd = props.last_plowed_forward ? new Date(props.last_plowed_forward).toLocaleString() : 'Never';
+            const lastPlowedRev = props.last_plowed_reverse ? new Date(props.last_plowed_reverse).toLocaleString() : 'Never';
+
+            popupHTML += `
+                <div style="background: rgba(0, 0, 0, 0.9); color: white; padding: 12px; border-radius: 6px; font-size: 12px; font-family: monospace; line-height: 1.4; min-width: 300px;">
+                    <div style="color: #00ff88; font-weight: bold; margin-bottom: 6px;">🛣️ SEGMENT #${props.segment_id}</div>
+                    <div><span style="color: #888;">Street:</span> ${props.street_name || 'Unknown'}</div>
+                    <div><span style="color: #888;">Classification:</span> ${props.road_classification || 'Unknown'}</div>
+                    <div><span style="color: #888;">Bearing:</span> ${props.bearing !== null && props.bearing !== undefined ? props.bearing + '°' : 'Unknown'}</div>
+                    <div><span style="color: #888;">Length:</span> ${props.segment_length ? props.segment_length.toFixed(1) + 'm' : 'Unknown'}</div>
+                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                        <span style="color: #888;">Status:</span> ${props.is_activated ? '<span style="color: #00ff00;">✓ Activated</span>' : '<span style="color: #ff4444;">✗ Not Activated</span>'}
+                    </div>
+                    <div><span style="color: #888;">Last Plowed:</span> ${lastPlowed}</div>
+                    <div style="font-size: 10px; color: #666; margin-left: 12px;">Forward: ${lastPlowedFwd}</div>
+                    <div style="font-size: 10px; color: #666; margin-left: 12px;">Reverse: ${lastPlowedRev}</div>
+                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                        <span style="color: #888;">Device ID:</span> ${props.device_id || 'Unknown'}
+                    </div>
+                    <div><span style="color: #888;">Plow Count Today:</span> ${props.plow_count_today || 0}</div>
+                    <div><span style="color: #888;">Plow Count Total:</span> ${props.plow_count_total || 0}</div>
+                </div>
+            `;
+        }
+
+        // Show polyline if present
+        const polyline = features.find(f => f.layer.id === 'polylines');
+        if (polyline) {
+            const props = polyline.properties;
+            const polylineId = props.polyline_id || 'Unknown';
+            const device = props.device || 'Unknown';
+            const bearing = props.bearing ? `${Math.round(props.bearing)}°` : 'Unknown';
+            const confidence = props.confidence ? `${(props.confidence * 100).toFixed(1)}%` : 'Unknown';
+            const startTime = props.start_time ? new Date(props.start_time).toLocaleString() : 'Unknown';
+            const endTime = props.end_time ? new Date(props.end_time).toLocaleString() : 'Unknown';
+            const duration = calculateDuration(props.start_time, props.end_time) || 'Unknown';
+            const isRaw = props.raw ? ' (Unmatched GPS points)' : '';
+
+            popupHTML += `
+                <div style="background: rgba(0, 0, 0, 0.9); color: white; padding: 12px; border-radius: 6px; font-size: 12px; font-family: monospace; line-height: 1.4; min-width: 300px;">
+                    <div style="color: #6688ff; font-weight: bold; margin-bottom: 6px;">📍 POLYLINE #${polylineId}${isRaw}</div>
+                    <div><span style="color: #888;">Device:</span> ${device}</div>
+                    <div><span style="color: #888;">Bearing:</span> ${bearing}</div>
+                    <div><span style="color: #888;">Confidence:</span> ${confidence}</div>
+                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #444;">
+                        <span style="color: #888;">Start Time:</span><br>
+                        <span style="margin-left: 12px; font-size: 12px;">${startTime}</span>
+                    </div>
+                    <div style="margin-top: 6px;">
+                        <span style="color: #888;">End Time:</span><br>
+                        <span style="margin-left: 12px; font-size: 12px;">${endTime}</span>
+                    </div>
+                    <div style="margin-top: 6px;">
+                        <span style="color: #888;">Duration:</span> ${duration} minutes
+                    </div>
+                    ${isRaw ? '<div style="margin-top: 6px; color: #ff8844;">⚠️ OSRM matching failed for this path</div>' : ''}
+                </div>
+            `;
+        }
+
+        popupHTML += '</div>';
+        hoverPopup.innerHTML = popupHTML;
+
+        // Position popup near cursor
+        setTimeout(() => {
+            const popupHeight = hoverPopup.offsetHeight;
+            const verticalOffset = -popupHeight / 2;
+
+            hoverPopup.style.left = (e.point.x + 20) + 'px';
+            hoverPopup.style.top = (e.point.y + verticalOffset) + 'px';
+        }, 0);
+
+        hoverPopup.style.display = 'flex';
+    } else {
+        map.getCanvas().style.cursor = '';
+        hoverPopup.style.display = 'none';
+    }
+});
 
 // User geolocation
 if ('geolocation' in navigator) {
