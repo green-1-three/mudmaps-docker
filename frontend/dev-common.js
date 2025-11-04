@@ -119,6 +119,50 @@ export function formatTimeLabel(minutes) {
 }
 
 /**
+ * Update the gradient legend labels based on time range
+ */
+export function updateGradientLabels(hours) {
+    const leftLabel = document.getElementById('gradientLeft');
+    const centerLabel = document.getElementById('gradientCenter');
+    const rightLabel = document.getElementById('gradientRight');
+
+    if (leftLabel) leftLabel.textContent = 'Now';
+
+    const centerMinutes = (hours * 60) / 2;
+    if (centerLabel) centerLabel.textContent = formatTimeLabel(centerMinutes);
+
+    const rightMinutes = hours * 60;
+    if (rightLabel) rightLabel.textContent = formatTimeLabel(rightMinutes);
+}
+
+/**
+ * Update the time display text based on selected hours
+ */
+export function updateTimeDisplay(hours) {
+    const timeValue = document.getElementById('timeValue');
+
+    if (!timeValue) return;
+
+    if (hours === 1) {
+        timeValue.textContent = 'Last 1 hour';
+    } else if (hours === 2) {
+        timeValue.textContent = 'Last 2 hours';
+    } else if (hours === 4) {
+        timeValue.textContent = 'Last 4 hours';
+    } else if (hours === 8) {
+        timeValue.textContent = 'Last 8 hours';
+    } else if (hours === 24) {
+        timeValue.textContent = 'Last 1 day';
+    } else if (hours === 72) {
+        timeValue.textContent = 'Last 3 days';
+    } else if (hours === 168) {
+        timeValue.textContent = 'Last 7 days';
+    }
+
+    updateGradientLabels(hours);
+}
+
+/**
  * Show status message (console log for now)
  */
 export function showStatus(message) {
