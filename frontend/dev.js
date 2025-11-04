@@ -328,7 +328,8 @@ map.on('load', () => {
                 ['linear'],
                 ['zoom'],
                 10, 8,   // At zoom 10, size is 8px
-                13, 11,  // At zoom 13, size is 11px
+                12, 9,   // At zoom 12, size is 9px
+                13, 10,  // At zoom 13, size is 10px
                 15, 12,  // At zoom 15, size is 12px
                 16, 14,  // At zoom 16, size is 14px
                 18, 16   // At zoom 18, size is 16px
