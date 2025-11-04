@@ -445,7 +445,7 @@ async function loadPolylines() {
 
         // Extract polyline endpoints for debugging borders - perpendicular lines
         const polylineEndpointFeatures = [];
-        const polylineWidthMeters = 2; // Match the polyline line width
+        const polylineWidthMeters = 7.5; // Proportional to polyline line width (2px)
 
         features.forEach(feature => {
             if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length >= 2) {
@@ -665,7 +665,7 @@ async function loadSegments() {
 
         // Extract segment endpoints for debugging borders - perpendicular lines
         const segmentEndpointFeatures = [];
-        const segmentWidthMeters = 4; // Match the segment line width
+        const segmentWidthMeters = 15; // Proportional to segment line width (4px)
 
         segmentFeatures.forEach(feature => {
             if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length >= 2) {
