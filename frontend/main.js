@@ -193,8 +193,8 @@ map.on('load', () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                10, 8,   // At zoom 10, size is 8px
-                12, 9,   // At zoom 12, size is 9px
+                10, 7,   // At zoom 10, size is 7px
+                12, 7,   // At zoom 12, size is 7px
                 13, 8,   // At zoom 13, size is 8px
                 15, 12,  // At zoom 15, size is 12px
                 16, 14,  // At zoom 16, size is 14px
