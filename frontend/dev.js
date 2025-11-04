@@ -119,6 +119,20 @@ map.on('load', () => {
         }
     });
 
+    // Add polylines border layer (drawn first, underneath)
+    map.addLayer({
+        id: 'polyline-borders',
+        type: 'line',
+        source: 'polylines',
+        layout: {
+            'visibility': 'none' // Hidden by default
+        },
+        paint: {
+            'line-color': '#ffffff',
+            'line-width': 4
+        }
+    });
+
     // Add polylines layer
     map.addLayer({
         id: 'polylines',
@@ -152,6 +166,20 @@ map.on('load', () => {
             'line-color': ['get', 'color'],
             'line-width': 3,
             'line-opacity': ['coalesce', ['get', 'opacity'], 1]
+        }
+    });
+
+    // Add segment borders layer (drawn first, underneath)
+    map.addLayer({
+        id: 'segment-borders',
+        type: 'line',
+        source: 'segments',
+        layout: {
+            'visibility': 'none' // Hidden by default
+        },
+        paint: {
+            'line-color': '#ffffff',
+            'line-width': 6
         }
     });
 
@@ -379,10 +407,12 @@ async function loadSegments() {
         let forwardOffsetCount = 0;
         let reverseOffsetCount = 0;
 
-        // Get UI state for transparency
+        // Get UI state for transparency and filtering
         const uiState = window.uiControls?.getState();
         const segmentTransparent = uiState?.segmentTransparent ?? false;
         const offsetTransparent = uiState?.offsetTransparent ?? false;
+        const showActiveSegments = uiState?.showActiveSegments ?? true;
+        const showInactiveSegments = uiState?.showInactiveSegments ?? true;
         const segmentOpacity = segmentTransparent ? 0.01 : 1;
         const offsetOpacity = offsetTransparent ? 0.01 : 1;
 
@@ -407,6 +437,10 @@ async function loadSegments() {
             if (isActivated) {
                 activatedSegments++;
             }
+
+            // Filter based on toggle states
+            if (isActivated && !showActiveSegments) return;
+            if (!isActivated && !showInactiveSegments) return;
 
             // Check time filter
             const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
@@ -601,6 +635,9 @@ function initializeModules() {
     );
     window.uiControls = uiControls;
 
+    // Set up dev panel tab switching
+    setupDevPanelTabs();
+
     // Set up layer visibility toggles for Mapbox
     setupMapboxLayerToggles();
 
@@ -619,8 +656,34 @@ function initializeModules() {
     // Setup time slider
     setupTimeSlider();
 
+    // Setup address search
+    setupAddressSearch();
+
     // Update gradient labels
     updateGradientLabels(currentTimeHours);
+}
+
+// Setup dev panel tabs
+function setupDevPanelTabs() {
+    const tabs = document.querySelectorAll('.dev-tab');
+    const tabContents = document.querySelectorAll('.dev-tab-content');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const targetTab = tab.getAttribute('data-tab');
+
+            // Remove active class from all tabs
+            tabs.forEach(t => t.classList.remove('active'));
+            tabContents.forEach(tc => tc.classList.remove('active'));
+
+            // Add active class to clicked tab and corresponding content
+            tab.classList.add('active');
+            const targetContent = document.querySelector(`[data-tab-content="${targetTab}"]`);
+            if (targetContent) {
+                targetContent.classList.add('active');
+            }
+        });
+    });
 }
 
 // Setup Mapbox layer toggles
@@ -629,7 +692,23 @@ function setupMapboxLayerToggles() {
     const togglePolylines = document.getElementById('toggle-polylines');
     if (togglePolylines) {
         togglePolylines.addEventListener('change', (e) => {
+            // Update UI state
+            if (window.uiControls) {
+                window.uiControls.setState({ showPolylines: e.target.checked });
+            }
             map.setLayoutProperty('polylines', 'visibility', e.target.checked ? 'visible' : 'none');
+        });
+    }
+
+    // Polyline borders toggle (debug)
+    const togglePolylineBorders = document.getElementById('toggle-polyline-borders');
+    if (togglePolylineBorders) {
+        togglePolylineBorders.addEventListener('change', (e) => {
+            // Update UI state
+            if (window.uiControls) {
+                window.uiControls.setState({ showPolylineBorders: e.target.checked });
+            }
+            map.setLayoutProperty('polyline-borders', 'visibility', e.target.checked ? 'visible' : 'none');
         });
     }
 
@@ -637,7 +716,11 @@ function setupMapboxLayerToggles() {
     const toggleActiveSegments = document.getElementById('toggle-active-segments');
     if (toggleActiveSegments) {
         toggleActiveSegments.addEventListener('change', (e) => {
-            // For Mapbox, we need to reload with filtering
+            // Update UI state
+            if (window.uiControls) {
+                window.uiControls.setState({ showActiveSegments: e.target.checked });
+            }
+            // Reload with new filtering
             loadSegments();
         });
     }
@@ -646,23 +729,49 @@ function setupMapboxLayerToggles() {
     const toggleInactiveSegments = document.getElementById('toggle-inactive-segments');
     if (toggleInactiveSegments) {
         toggleInactiveSegments.addEventListener('change', (e) => {
-            // For Mapbox, we need to reload with filtering
+            // Update UI state
+            if (window.uiControls) {
+                window.uiControls.setState({ showInactiveSegments: e.target.checked });
+            }
+            // Reload with new filtering
             loadSegments();
+        });
+    }
+
+    // Segment borders toggle (debug)
+    const toggleSegmentBorders = document.getElementById('toggle-segment-borders');
+    if (toggleSegmentBorders) {
+        toggleSegmentBorders.addEventListener('change', (e) => {
+            // Update UI state
+            if (window.uiControls) {
+                window.uiControls.setState({ showSegmentBorders: e.target.checked });
+            }
+            map.setLayoutProperty('segment-borders', 'visibility', e.target.checked ? 'visible' : 'none');
         });
     }
 
     // Transparency toggles
     const toggleSegmentTransparency = document.getElementById('toggle-segment-transparency');
     if (toggleSegmentTransparency) {
-        toggleSegmentTransparency.addEventListener('change', () => {
-            loadSegments(); // Reload with new opacity
+        toggleSegmentTransparency.addEventListener('change', (e) => {
+            // Update UI state
+            if (window.uiControls) {
+                window.uiControls.setState({ segmentTransparent: e.target.checked });
+            }
+            // Reload with new opacity
+            loadSegments();
         });
     }
 
     const toggleOffsetTransparency = document.getElementById('toggle-offset-transparency');
     if (toggleOffsetTransparency) {
-        toggleOffsetTransparency.addEventListener('change', () => {
-            loadSegments(); // Reload with new opacity
+        toggleOffsetTransparency.addEventListener('change', (e) => {
+            // Update UI state
+            if (window.uiControls) {
+                window.uiControls.setState({ offsetTransparent: e.target.checked });
+            }
+            // Reload with new opacity
+            loadSegments();
         });
     }
 }
