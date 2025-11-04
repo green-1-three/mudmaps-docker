@@ -190,8 +190,15 @@ map.on('load', () => {
             'visibility': 'none' // Hidden by default
         },
         paint: {
-            'line-color': '#000000',
-            'line-width': 2
+            'line-color': '#ffffff',
+            'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                8, 12,   // At zoom 8 (far out), width is 12
+                12, 6,   // At zoom 12 (medium), width is 6
+                16, 4    // At zoom 16 (close in), width is 4 (minimum)
+            ]
         }
     });
 
@@ -244,8 +251,15 @@ map.on('load', () => {
             'visibility': 'none' // Hidden by default
         },
         paint: {
-            'line-color': '#000000',
-            'line-width': 2
+            'line-color': '#ffffff',
+            'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                8, 12,   // At zoom 8 (far out), width is 12
+                12, 6,   // At zoom 12 (medium), width is 6
+                16, 4    // At zoom 16 (close in), width is 4 (minimum)
+            ]
         }
     });
 
