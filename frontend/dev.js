@@ -84,12 +84,16 @@ const map = new Map({
 const boundarySource = new VectorSource();
 const polylinesSource = new VectorSource();
 const segmentsSource = new VectorSource();
+const forwardOffsetSource = new VectorSource();
+const reverseOffsetSource = new VectorSource();
 const userLocationSource = new VectorSource();
 const searchResultSource = new VectorSource();
 
 // Layer references for toggling
 let polylinesLayer;
 let segmentsLayer;
+let forwardOffsetLayer;
+let reverseOffsetLayer;
 
 // Global variable to store current time range
 let currentTimeHours = 168;
@@ -118,6 +122,22 @@ polylinesLayer = new VectorLayer({
     style: createPolylineStyleWithFilter
 });
 map.addLayer(polylinesLayer);
+
+// Forward offset geometries (zIndex: 0.6)
+forwardOffsetLayer = new VectorLayer({
+    source: forwardOffsetSource,
+    zIndex: 0.6,
+    style: createForwardOffsetStyle
+});
+map.addLayer(forwardOffsetLayer);
+
+// Reverse offset geometries (zIndex: 0.7)
+reverseOffsetLayer = new VectorLayer({
+    source: reverseOffsetSource,
+    zIndex: 0.7,
+    style: createReverseOffsetStyle
+});
+map.addLayer(reverseOffsetLayer);
 
 // Segments on top (zIndex: 1)
 segmentsLayer = new VectorLayer({
@@ -183,7 +203,7 @@ function createPolylineStyleWithFilter(feature) {
 // Style for segments - gradient colors for activated, red for unactivated, gray crosshatch for out-of-range
 function createSegmentStyleWithFilter(feature) {
     const isActivated = feature.get('is_activated');
-    
+
     // Unactivated segments: always show in red
     if (!isActivated) {
         return new Style({
@@ -193,13 +213,13 @@ function createSegmentStyleWithFilter(feature) {
             })
         });
     }
-    
+
     // Activated segments: check if within time range
     const lastPlowed = feature.get('last_plowed');
     if (lastPlowed) {
         const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
         const plowTime = new Date(lastPlowed).getTime();
-        
+
         // Out of range: show in gray with crosshatch pattern (reuse pre-created pattern)
         if (plowTime < cutoffTime) {
             return new Style({
@@ -210,13 +230,77 @@ function createSegmentStyleWithFilter(feature) {
             });
         }
     }
-    
+
     const color = lastPlowed ? getColorByAge(lastPlowed, currentTimeHours) : '#0066cc';
-    
+
     return new Style({
         stroke: new Stroke({
             color: color,
             width: 4
+        })
+    });
+}
+
+// Style for forward offset geometries (left side, 2m offset)
+function createForwardOffsetStyle(feature) {
+    const lastPlowedForward = feature.get('last_plowed_forward');
+
+    // Hide if no forward plow time
+    if (!lastPlowedForward) {
+        return null;
+    }
+
+    // Apply time filter
+    const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+    const plowTime = new Date(lastPlowedForward).getTime();
+    if (plowTime < cutoffTime) {
+        // Out of range: show in gray with crosshatch pattern
+        return new Style({
+            stroke: new Stroke({
+                color: crosshatchPattern,
+                width: 3
+            })
+        });
+    }
+
+    const color = getColorByAge(lastPlowedForward, currentTimeHours);
+
+    return new Style({
+        stroke: new Stroke({
+            color: color,
+            width: 3
+        })
+    });
+}
+
+// Style for reverse offset geometries (right side, 2m offset)
+function createReverseOffsetStyle(feature) {
+    const lastPlowedReverse = feature.get('last_plowed_reverse');
+
+    // Hide if no reverse plow time
+    if (!lastPlowedReverse) {
+        return null;
+    }
+
+    // Apply time filter
+    const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
+    const plowTime = new Date(lastPlowedReverse).getTime();
+    if (plowTime < cutoffTime) {
+        // Out of range: show in gray with crosshatch pattern
+        return new Style({
+            stroke: new Stroke({
+                color: crosshatchPattern,
+                width: 3
+            })
+        });
+    }
+
+    const color = getColorByAge(lastPlowedReverse, currentTimeHours);
+
+    return new Style({
+        stroke: new Stroke({
+            color: color,
+            width: 3
         })
     });
 }
@@ -446,10 +530,14 @@ async function loadSegments() {
         console.log(`🛣️  Processing ${data.features.length} segment(s)`);
 
         segmentsSource.clear();
+        forwardOffsetSource.clear();
+        reverseOffsetSource.clear();
 
         let totalSegments = 0;
         let activatedSegments = 0;
         let segmentsWithinTimeRange = 0;
+        let forwardOffsetCount = 0;
+        let reverseOffsetCount = 0;
 
         data.features.forEach(segment => {
             if (!segment.geometry || !segment.geometry.coordinates) {
@@ -457,11 +545,11 @@ async function loadSegments() {
                 return;
             }
 
-            const forwardTime = segment.properties.last_plowed_forward 
-                ? new Date(segment.properties.last_plowed_forward).getTime() 
+            const forwardTime = segment.properties.last_plowed_forward
+                ? new Date(segment.properties.last_plowed_forward).getTime()
                 : 0;
-            const reverseTime = segment.properties.last_plowed_reverse 
-                ? new Date(segment.properties.last_plowed_reverse).getTime() 
+            const reverseTime = segment.properties.last_plowed_reverse
+                ? new Date(segment.properties.last_plowed_reverse).getTime()
                 : 0;
             const lastPlowed = Math.max(forwardTime, reverseTime);
             const lastPlowedISO = lastPlowed > 0 ? new Date(lastPlowed).toISOString() : null;
@@ -496,13 +584,42 @@ async function loadSegments() {
 
             segmentsSource.addFeature(feature);
             totalSegments++;
+
+            // Add forward offset geometry if it exists
+            if (segment.vertices_forward && segment.vertices_forward.coordinates) {
+                const forwardCoords = segment.vertices_forward.coordinates.map(coord => fromLonLat(coord));
+                const forwardFeature = new Feature({
+                    geometry: new LineString(forwardCoords),
+                    segment_id: segment.id,
+                    street_name: segment.properties.street_name,
+                    last_plowed_forward: segment.properties.last_plowed_forward,
+                    type: 'offset_forward'
+                });
+                forwardOffsetSource.addFeature(forwardFeature);
+                forwardOffsetCount++;
+            }
+
+            // Add reverse offset geometry if it exists
+            if (segment.vertices_reverse && segment.vertices_reverse.coordinates) {
+                const reverseCoords = segment.vertices_reverse.coordinates.map(coord => fromLonLat(coord));
+                const reverseFeature = new Feature({
+                    geometry: new LineString(reverseCoords),
+                    segment_id: segment.id,
+                    street_name: segment.properties.street_name,
+                    last_plowed_reverse: segment.properties.last_plowed_reverse,
+                    type: 'offset_reverse'
+                });
+                reverseOffsetSource.addFeature(reverseFeature);
+                reverseOffsetCount++;
+            }
         });
 
         const totalTime = performance.now() - startTime;
         console.log(`⚡ Total segment load time: ${totalTime.toFixed(0)}ms`);
         console.log(`📊 Segments: ${totalSegments} total, ${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated, ${segmentsWithinTimeRange} within ${currentTimeHours}h range`);
+        console.log(`📊 Offset geometries: ${forwardOffsetCount} forward, ${reverseOffsetCount} reverse`);
 
-        showStatus(`Loaded ${totalSegments} segments (${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated)`);
+        showStatus(`Loaded ${totalSegments} segments (${activatedSegments} activated, ${totalSegments - activatedSegments} unactivated, ${forwardOffsetCount} offset geometries)`);
         
         // Update statistics
         updateStatistics();
@@ -528,6 +645,8 @@ async function loadAllData() {
         // Fit map to show all features
         polylinesSource.changed();
         segmentsSource.changed();
+        forwardOffsetSource.changed();
+        reverseOffsetSource.changed();
 
         const allFeatures = [
             ...polylinesSource.getFeatures(),
@@ -618,11 +737,13 @@ function setupTimeSlider() {
         const hours = TIME_INTERVALS[index];
         updateTimeDisplay(hours);
         currentTimeHours = hours;
-        
+
         // Trigger re-render of layers
         polylinesSource.changed();
         segmentsSource.changed();
-        
+        forwardOffsetSource.changed();
+        reverseOffsetSource.changed();
+
         // Update statistics when time range changes
         if (window.updateStatsWithTimeRange) {
             window.updateStatsWithTimeRange(hours);
@@ -632,10 +753,12 @@ function setupTimeSlider() {
     slider.addEventListener('change', (e) => {
         const index = parseInt(e.target.value);
         currentTimeHours = TIME_INTERVALS[index];
-        
+
         // Final re-render
         polylinesSource.changed();
         segmentsSource.changed();
+        forwardOffsetSource.changed();
+        reverseOffsetSource.changed();
         
         const visibleSegments = segmentsSource.getFeatures().filter(f => {
             const lastPlowed = f.get('last_plowed');
@@ -1326,14 +1449,16 @@ loadAllData().then(() => {
 // Export for debugging
 window.devState = {
     map,
-    sources: { 
-        polylinesSource, 
-        segmentsSource, 
+    sources: {
+        polylinesSource,
+        segmentsSource,
+        forwardOffsetSource,
+        reverseOffsetSource,
         boundarySource,
         userLocationSource,
         searchResultSource
     },
-    layers: { polylinesLayer, segmentsLayer },
+    layers: { polylinesLayer, segmentsLayer, forwardOffsetLayer, reverseOffsetLayer },
     modules: { statsModule, uiControls, databaseTab },
     currentTimeHours: () => currentTimeHours,
     reload: loadAllData

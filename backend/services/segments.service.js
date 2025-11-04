@@ -22,9 +22,11 @@ class SegmentsService {
         }
         
         let query = `
-            SELECT 
+            SELECT
                 id,
                 ST_AsGeoJSON(geometry) as geometry,
+                ST_AsGeoJSON(vertices_forward) as vertices_forward,
+                ST_AsGeoJSON(vertices_reverse) as vertices_reverse,
                 street_name,
                 road_classification,
                 bearing,
@@ -65,14 +67,16 @@ class SegmentsService {
         const segments = rows.map(row => ({
             id: row.id,
             geometry: JSON.parse(row.geometry),
+            vertices_forward: row.vertices_forward ? JSON.parse(row.vertices_forward) : null,
+            vertices_reverse: row.vertices_reverse ? JSON.parse(row.vertices_reverse) : null,
             properties: {
                 street_name: row.street_name,
                 road_classification: row.road_classification,
                 bearing: row.bearing,
                 last_plowed_forward: row.last_plowed_forward,
                 last_plowed_reverse: row.last_plowed_reverse,
-                last_plowed: row.last_plowed_forward > row.last_plowed_reverse 
-                    ? row.last_plowed_forward 
+                last_plowed: row.last_plowed_forward > row.last_plowed_reverse
+                    ? row.last_plowed_forward
                     : row.last_plowed_reverse,
                 device_id: row.last_plowed_device_id,
                 plow_count_today: row.plow_count_today,
