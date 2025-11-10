@@ -1530,17 +1530,17 @@ map.on('mousemove', (e) => {
         [e.point.x + snapRadius, e.point.y + snapRadius]
     ];
 
-    const segmentFeatures = map.queryRenderedFeatures(bbox, {
-        layers: ['segments']
-    });
+    const segmentFeatures = map.getLayer('segments')
+        ? map.queryRenderedFeatures(bbox, { layers: ['segments'] })
+        : [];
 
     // Find closest segment and snap point
     const { segment: closestSegment, snapPoint, distance } = findClosestSegment(e.point, segmentFeatures, snapRadius);
 
     // Also check for direct polyline hits (no snapping for polylines)
-    const polylineFeatures = map.queryRenderedFeatures(e.point, {
-        layers: ['polylines']
-    });
+    const polylineFeatures = map.getLayer('polylines')
+        ? map.queryRenderedFeatures(e.point, { layers: ['polylines'] })
+        : [];
 
     if (closestSegment || polylineFeatures.length > 0) {
         map.getCanvas().style.cursor = 'pointer';
