@@ -21,7 +21,7 @@ mapboxgl.accessToken = MAPBOX_TOKEN;
 const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
 
 // Global variable to store current time range
-let currentTimeHours = 24;
+let currentTimeHours = 168;
 
 async function fetchJSON(url) {
     const r = await fetch(url);
@@ -395,9 +395,9 @@ function createUI() {
 
             <div class="control-group">
                 <label for="timeRange">Time Range:</label>
-                <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
+                <input type="range" id="timeRange" min="0" max="6" value="6" step="1">
                 <div class="time-display">
-                    <span id="timeValue">Last 1 day</span>
+                    <span id="timeValue">Last 7 days</span>
                 </div>
             </div>
 

@@ -40,7 +40,7 @@ mapboxgl.accessToken = MAPBOX_TOKEN;
 const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
 
 // Global variable to store current time range
-let currentTimeHours = 24;
+let currentTimeHours = 168;
 
 // Helper function to convert hex color to rgba with opacity
 function hexToRgba(hex, opacity) {
@@ -1033,11 +1033,11 @@ async function loadAllData() {
             loadSegments()
         ]);
 
-        // Fit map to show all features
-        if (geojsonData.segments.features.length > 0 || geojsonData.polylines.features.length > 0) {
+        // Fit map to show all segments (not polylines)
+        if (geojsonData.segments.features.length > 0) {
             const bounds = new mapboxgl.LngLatBounds();
 
-            [...geojsonData.segments.features, ...geojsonData.polylines.features].forEach(feature => {
+            geojsonData.segments.features.forEach(feature => {
                 if (feature.geometry.type === 'LineString') {
                     feature.geometry.coordinates.forEach(coord => bounds.extend(coord));
                 }
@@ -1080,9 +1080,9 @@ function createUI() {
 
             <div class="control-group">
                 <label for="timeRange">Time Range:</label>
-                <input type="range" id="timeRange" min="0" max="6" value="4" step="1">
+                <input type="range" id="timeRange" min="0" max="6" value="6" step="1">
                 <div class="time-display">
-                    <span id="timeValue">Last 1 day</span>
+                    <span id="timeValue">Last 7 days</span>
                 </div>
             </div>
 

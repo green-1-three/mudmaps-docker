@@ -30,8 +30,6 @@ services:
     volumes:
       - ./osrm-data:/data:ro
     command: osrm-routed --algorithm mld /data/region.osrm --max-table-size 10000
-    ports:
-      - "5000:5000"
     restart: unless-stopped
     # Resource limits - OSRM needs memory
     deploy:
@@ -296,6 +294,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        NODE_ENV: production
     container_name: mudmaps-frontend
     ports:
       - "80:80"

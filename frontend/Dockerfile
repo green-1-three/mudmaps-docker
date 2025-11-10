@@ -5,6 +5,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
+
+# Accept NODE_ENV as build arg (defaults to production)
+ARG NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV}
+
 RUN npm run build
 
 # Stage 2: Serve with Nginx
