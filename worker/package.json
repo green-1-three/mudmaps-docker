@@ -4,7 +4,8 @@
   "description": "Background worker for processing GPS coordinates into cached polylines",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "dependencies": {
     "pg": "^8.11.3",
@@ -14,5 +15,8 @@
     "redis": "^4.6.0",
     "winston": "^3.11.0",
     "winston-transport": "^4.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
   }
 }

@@ -24,3 +24,10 @@ yarn-error.log*
 *.log
 *.bak
 compose_backups*/
+
+# Local development only (do not deploy to remote)
+docker-compose.override.yml
+Dockerfile.dev
+**/Dockerfile.dev
+osrm-data/
+scripts/sync-gps-data.sh
