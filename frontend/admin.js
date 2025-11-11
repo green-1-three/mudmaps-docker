@@ -16,6 +16,31 @@ import {
     calculateDuration,
     abbreviateStreetName
 } from './utils.js';
+import { TIME_INTERVALS, createTimeSliderHTML, setupTimeSlider } from './time-slider.js';
+import {
+    MUNICIPALITY,
+    SNAP_RADIUS,
+    POLYLINE_LINE_WIDTH,
+    COLOR_BOUNDARY_LINE,
+    COLOR_BOUNDARY_FILL,
+    createSegmentLabelsLayer,
+    createForwardOffsetsLayer,
+    createReverseOffsetsLayer,
+    createSegmentsLayer
+} from './map-config.js';
+import {
+    loadSegmentsFromAPI,
+    calculateSegmentTimes,
+    isWithinTimeRange,
+    createLabelFeature
+} from './map-data.js';
+import {
+    initializeMap,
+    hideBaseMapLabels,
+    setupBasicSources,
+    setupBasicLayers,
+    setupZoomDisplay
+} from './map-init.js';
 import { initStatistics, updateStatistics } from './admin-stats.js';
 import { initUIControls, setStyleCreators } from './admin-ui-controls.js';
 import { initDatabaseTab, highlightTableRow } from './admin-database.js';
@@ -33,11 +58,6 @@ if (!API_BASE) {
 }
 
 console.log('Using API_BASE:', API_BASE);
-
-mapboxgl.accessToken = MAPBOX_TOKEN;
-
-// Discrete time intervals mapping: index -> hours
-const TIME_INTERVALS = [1, 2, 4, 8, 24, 72, 168]; // 1h, 2h, 4h, 8h, 1d, 3d, 7d
 
 // Global variable to store current time range
 let currentTimeHours = 168;
@@ -129,7 +149,7 @@ function distanceInPixels(x1, y1, x2, y2) {
 }
 
 // Helper function to find the closest segment and snap point
-function findClosestSegment(mousePoint, features, snapRadius = 20) {
+function findClosestSegment(mousePoint, features, snapRadius = SNAP_RADIUS) {
     let closestSegment = null;
     let closestDistance = Infinity;
     let snapPoint = null;
@@ -163,15 +183,7 @@ function findClosestSegment(mousePoint, features, snapRadius = 20) {
 }
 
 // Initialize map
-const map = new mapboxgl.Map({
-    container: 'map',
-    style: 'mapbox://styles/mapbox/streets-v12',
-    center: [0, 0],
-    zoom: 2
-});
-
-// Add navigation controls
-map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+const map = initializeMap('map', MAPBOX_TOKEN);
 
 // GeoJSON data stores
 const geojsonData = {
@@ -184,7 +196,8 @@ const geojsonData = {
     segmentEndpoints: { type: 'FeatureCollection', features: [] },
     polylineEndpoints: { type: 'FeatureCollection', features: [] },
     snapIndicator: { type: 'FeatureCollection', features: [] },
-    allSegmentsLabels: { type: 'FeatureCollection', features: [] } // For showing all road names
+    allSegmentsLabels: { type: 'FeatureCollection', features: [] },
+    promoteId: 'segment_id' // For feature-state on segments
 };
 
 // Layer references for module access
@@ -195,31 +208,23 @@ const layers = {
     reverseOffsetLayer: null
 };
 
+// Setup zoom display
+setupZoomDisplay(map, 'zoom-display');
+
 // Map load event - add sources and layers
 map.on('load', () => {
-    // Hide all label layers from the base map
-    const style = map.getStyle();
-    style.layers.forEach(layer => {
-        if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
-            map.setLayoutProperty(layer.id, 'visibility', 'none');
-        }
-    });
+    hideBaseMapLabels(map);
 
-    // Add sources
+    // Add admin-specific sources
     map.addSource('boundary', { type: 'geojson', data: geojsonData.boundary });
     map.addSource('polylines', { type: 'geojson', data: geojsonData.polylines });
-    map.addSource('segments', {
-        type: 'geojson',
-        data: geojsonData.segments,
-        promoteId: 'segment_id'  // Use segment_id as feature ID for feature-state
-    });
-    map.addSource('forward-offsets', { type: 'geojson', data: geojsonData.forwardOffsets });
-    map.addSource('reverse-offsets', { type: 'geojson', data: geojsonData.reverseOffsets });
     map.addSource('search-result', { type: 'geojson', data: geojsonData.searchResult });
     map.addSource('segment-endpoints', { type: 'geojson', data: geojsonData.segmentEndpoints });
     map.addSource('polyline-endpoints', { type: 'geojson', data: geojsonData.polylineEndpoints });
     map.addSource('snap-indicator', { type: 'geojson', data: geojsonData.snapIndicator });
-    map.addSource('all-segments-labels', { type: 'geojson', data: geojsonData.allSegmentsLabels });
+
+    // Add basic sources (segments, offsets, labels) with promoteId
+    setupBasicSources(map, geojsonData);
 
     // Add boundary layer
     map.addLayer({
@@ -227,7 +232,7 @@ map.on('load', () => {
         type: 'fill',
         source: 'boundary',
         paint: {
-            'fill-color': 'rgba(255, 255, 255, 0.02)',
+            'fill-color': COLOR_BOUNDARY_FILL,
             'fill-opacity': 1
         }
     });
@@ -237,7 +242,7 @@ map.on('load', () => {
         type: 'line',
         source: 'boundary',
         paint: {
-            'line-color': 'rgba(255, 255, 255, 0.4)',
+            'line-color': COLOR_BOUNDARY_LINE,
             'line-width': 2,
             'line-dasharray': [5, 5]
         }
@@ -253,7 +258,7 @@ map.on('load', () => {
         },
         paint: {
             'line-color': ['get', 'color'],
-            'line-width': 2,
+            'line-width': POLYLINE_LINE_WIDTH,
             'line-opacity': ['coalesce', ['get', 'opacity'], 1]
         }
     });
@@ -280,115 +285,8 @@ map.on('load', () => {
         }
     });
 
-    // Add segments layer with hover and selection effects
-    map.addLayer({
-        id: 'segments',
-        type: 'line',
-        source: 'segments',
-        layout: {
-            'line-cap': 'round',
-            'line-join': 'round'
-        },
-        paint: {
-            'line-color': [
-                'case',
-                ['boolean', ['feature-state', 'selected'], false],
-                '#00ffff',  // Cyan when selected
-                ['get', 'color']  // Normal color
-            ],
-            'line-width': [
-                'case',
-                ['boolean', ['feature-state', 'selected'], false],
-                8,  // Extra wide when selected
-                ['boolean', ['feature-state', 'hover'], false],
-                7,  // Width when hovered
-                4   // Normal width
-            ],
-            'line-opacity': [
-                'case',
-                ['boolean', ['feature-state', 'selected'], false],
-                1,  // Fully opaque when selected
-                ['boolean', ['feature-state', 'hover'], false],
-                1,  // Fully opaque when hovered
-                ['coalesce', ['get', 'opacity'], 1]  // Normal opacity
-            ]
-        }
-    });
-
-    // Add segment street name labels (offset to the side) - uses all segments for complete road coverage
-    map.addLayer({
-        id: 'segment-labels',
-        type: 'symbol',
-        source: 'all-segments-labels',
-        layout: {
-            'text-field': ['get', 'street_name'],
-            'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular'],
-            'text-size': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                10, 7,   // At zoom 10, size is 7px
-                12, 7,   // At zoom 12, size is 7px
-                13, 8,   // At zoom 13, size is 8px
-                15, 12,  // At zoom 15, size is 12px
-                16, 14,  // At zoom 16, size is 14px
-                18, 16   // At zoom 18, size is 16px
-            ],
-            'symbol-placement': 'line',
-            'text-rotation-alignment': 'map',
-            'text-pitch-alignment': 'viewport',
-            'text-offset': [0, 1], // Offset 1 em to the side
-            'text-allow-overlap': false,
-            'text-ignore-placement': false,
-            'text-max-angle': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                10, 25,  // At low zoom, allow 25 degrees
-                13, 30,  // At zoom 13, allow 30 degrees (most permissive)
-                14, 20   // At zoom 14+, restrict to 20 degrees
-            ],
-            'text-keep-upright': true, // Prevent upside-down labels
-            'symbol-spacing': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                10, 100,  // At low zoom, 100px spacing (more labels)
-                13, 100,  // At zoom 13, still 100px
-                14, 150   // At zoom 14+, 150px spacing
-            ],
-            'text-padding': 10 // Add padding around labels to prevent overlap
-        },
-        paint: {
-            'text-color': '#333333',
-            'text-halo-color': '#ffffff',
-            'text-halo-width': 2
-        }
-    });
-
-    // Add forward offset layer
-    map.addLayer({
-        id: 'forward-offsets',
-        type: 'line',
-        source: 'forward-offsets',
-        paint: {
-            'line-color': ['get', 'color'],
-            'line-width': 3,
-            'line-opacity': ['coalesce', ['get', 'opacity'], 1]
-        }
-    });
-
-    // Add reverse offset layer
-    map.addLayer({
-        id: 'reverse-offsets',
-        type: 'line',
-        source: 'reverse-offsets',
-        paint: {
-            'line-color': ['get', 'color'],
-            'line-width': 3,
-            'line-opacity': ['coalesce', ['get', 'opacity'], 1]
-        }
-    });
+    // Add basic layers (offsets, segments with hover/selection, labels)
+    setupBasicLayers(map, { enableHoverAndSelection: true });
 
     // Segment endpoint markers for debugging - perpendicular lines at endpoints
     map.addLayer({
@@ -453,13 +351,9 @@ map.on('load', () => {
 // Track zoom state for endpoint regeneration
 let lastZoomRange = map.getZoom() >= 14 ? 'high' : (map.getZoom() >= 12 ? 'mid' : 'low');
 
-// Update zoom level display and regenerate endpoints if crossing zoom thresholds
+// Regenerate endpoints when crossing zoom thresholds
 map.on('zoom', () => {
     const zoomLevel = map.getZoom();
-    const zoomDisplay = document.getElementById('zoom-display');
-    if (zoomDisplay) {
-        zoomDisplay.textContent = `Zoom: ${zoomLevel.toFixed(1)}`;
-    }
 
     // Check if we crossed zoom 12 or 14 thresholds
     const currentZoomRange = zoomLevel >= 14 ? 'high' : (zoomLevel >= 12 ? 'mid' : 'low');
@@ -570,7 +464,7 @@ map.on('click', 'polylines', (e) => {
 async function loadBoundary() {
     try {
         showStatus('Loading boundary...');
-        const url = `${API_BASE}/boundary?municipality=pomfret-vt`;
+        const url = `${API_BASE}/boundary?municipality=${MUNICIPALITY}`;
         console.log(`🗺️  Fetching boundary from: ${url}`);
 
         const data = await fetchJSON(url);
@@ -768,16 +662,12 @@ async function loadSegments() {
         showStatus('Loading road segments...');
         const startTime = performance.now();
 
-        const url = `${API_BASE}/segments?municipality=pomfret-vt&all=true`;
-        console.log(`🛣️  Fetching segments from: ${url}`);
-
-        const data = await fetchJSON(url);
+        const segments = await loadSegmentsFromAPI(API_BASE);
         const fetchTime = performance.now() - startTime;
         console.log(`✅ Segments loaded in ${fetchTime.toFixed(0)}ms`);
 
-        if (!data.features || data.features.length === 0) {
+        if (!segments || segments.length === 0) {
             showStatus('No segments found');
-            console.log('⚠️ No segments in response');
             return;
         }
 
@@ -800,32 +690,20 @@ async function loadSegments() {
         const segmentOpacity = segmentTransparent ? 0.01 : 1;
         const offsetOpacity = offsetTransparent ? 0.01 : 1;
 
-        data.features.forEach(segment => {
-            if (!segment.geometry || !segment.geometry.coordinates) {
+        segments.forEach(segment => {
+            if (!segment.geometry?.coordinates) {
                 console.warn('⚠️ Segment missing geometry:', segment);
                 return;
             }
 
-            // Add ALL segments to labels collection (for showing all road names)
-            if (segment.properties.street_name) {
-                allSegmentsLabelFeatures.push({
-                    type: 'Feature',
-                    geometry: segment.geometry,
-                    properties: {
-                        street_name: abbreviateStreetName(segment.properties.street_name)
-                    }
-                });
+            // Add ALL segments to labels collection
+            const labelFeature = createLabelFeature(segment);
+            if (labelFeature) {
+                allSegmentsLabelFeatures.push(labelFeature);
             }
 
-            const forwardTime = segment.properties.last_plowed_forward
-                ? new Date(segment.properties.last_plowed_forward).getTime()
-                : 0;
-            const reverseTime = segment.properties.last_plowed_reverse
-                ? new Date(segment.properties.last_plowed_reverse).getTime()
-                : 0;
-            const lastPlowed = Math.max(forwardTime, reverseTime);
-            const lastPlowedISO = lastPlowed > 0 ? new Date(lastPlowed).toISOString() : null;
-            const isActivated = lastPlowed > 0;
+            // Calculate timing information
+            const { lastPlowedISO, isActivated } = calculateSegmentTimes(segment);
 
             totalSegments++;
 
@@ -838,8 +716,7 @@ async function loadSegments() {
             if (!isActivated && !showInactiveSegments) return;
 
             // Check time filter
-            const cutoffTime = Date.now() - (currentTimeHours * 60 * 60 * 1000);
-            const withinTimeRange = lastPlowed > 0 && lastPlowed >= cutoffTime;
+            const withinTimeRange = isWithinTimeRange(lastPlowedISO, currentTimeHours);
             const isInactive = !isActivated;
 
             // Determine color based on time range
@@ -876,9 +753,8 @@ async function loadSegments() {
             });
 
             // Add forward offset
-            if (segment.vertices_forward && segment.vertices_forward.coordinates && segment.properties.last_plowed_forward) {
-                const fwdTime = new Date(segment.properties.last_plowed_forward).getTime();
-                const fwdWithinRange = fwdTime >= cutoffTime;
+            if (segment.vertices_forward?.coordinates && segment.properties.last_plowed_forward) {
+                const fwdWithinRange = isWithinTimeRange(segment.properties.last_plowed_forward, currentTimeHours);
                 const fwdColor = fwdWithinRange
                     ? getColorByAge(segment.properties.last_plowed_forward, currentTimeHours)
                     : '#808080';
@@ -899,9 +775,8 @@ async function loadSegments() {
             }
 
             // Add reverse offset
-            if (segment.vertices_reverse && segment.vertices_reverse.coordinates && segment.properties.last_plowed_reverse) {
-                const revTime = new Date(segment.properties.last_plowed_reverse).getTime();
-                const revWithinRange = revTime >= cutoffTime;
+            if (segment.vertices_reverse?.coordinates && segment.properties.last_plowed_reverse) {
+                const revWithinRange = isWithinTimeRange(segment.properties.last_plowed_reverse, currentTimeHours);
                 const revColor = revWithinRange
                     ? getColorByAge(segment.properties.last_plowed_reverse, currentTimeHours)
                     : '#808080';
@@ -1074,43 +949,10 @@ function createUI() {
     // Control panel (top-right)
     const controlsDiv = document.createElement('div');
     controlsDiv.id = 'controls';
-    controlsDiv.innerHTML = `
-        <div class="control-panel">
-            <h3>Latest Snowplow Activity</h3>
-
-            <div class="control-group">
-                <label for="timeRange">Time Range:</label>
-                <input type="range" id="timeRange" min="0" max="6" value="6" step="1">
-                <div class="time-display">
-                    <span id="timeValue">Last 7 days</span>
-                </div>
-            </div>
-
-            <div class="legend">
-                <div class="legend-title">Segment Age:</div>
-                <div class="gradient-bar"></div>
-                <div class="gradient-labels">
-                    <span id="gradientLeft">Now</span>
-                    <span id="gradientCenter">12 hours</span>
-                    <span id="gradientRight">1 day</span>
-                </div>
-            </div>
-        </div>
-    `;
+    controlsDiv.innerHTML = createTimeSliderHTML();
     document.body.appendChild(controlsDiv);
 
-    setupTimeSlider();
-    setupAddressSearch();
-}
-
-// Time slider setup
-function setupTimeSlider() {
-    const slider = document.getElementById('timeRange');
-
-    slider.addEventListener('input', (e) => {
-        const index = parseInt(e.target.value);
-        const hours = TIME_INTERVALS[index];
-        updateTimeDisplay(hours);
+    setupTimeSlider((hours) => {
         currentTimeHours = hours;
 
         // Update time range and reload segments
@@ -1120,6 +962,8 @@ function setupTimeSlider() {
 
         loadSegments();
     });
+
+    setupAddressSearch();
 }
 
 // Admin Panel Functionality
@@ -1524,7 +1368,7 @@ hoverPopup = createHoverPopup();
 // Map hover handler - detects segments with proximity snapping
 map.on('mousemove', (e) => {
     // Query features with a buffer for proximity detection
-    const snapRadius = 20; // pixels
+    const snapRadius = SNAP_RADIUS; // pixels
     const bbox = [
         [e.point.x - snapRadius, e.point.y - snapRadius],
         [e.point.x + snapRadius, e.point.y + snapRadius]

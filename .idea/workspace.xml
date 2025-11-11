@@ -5,21 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="781d814b-6897-4d0d-8f84-a8ad56d33b6b" name="Changes" comment="Ports blocked from public">
-      <change beforePath="$PROJECT_DIR$/.claudeignore" beforeDir="false" afterPath="$PROJECT_DIR$/.claudeignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CLAUDE_INSTRUCTIONS.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/dev-common.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/dev-database.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/dev-frontend-logger.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/dev-logs.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/dev-stats.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/dev-ui-controls.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/dev.css" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/dev.html" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/dev.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/admin.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/admin.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/main.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/nginx.conf" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/nginx.conf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/vite.config.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/vite.config.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -106,7 +94,7 @@
       <workItem from="1755352945538" duration="13639000" />
       <workItem from="1761579154538" duration="11071000" />
       <workItem from="1761597116465" duration="15137000" />
-      <workItem from="1762815895568" duration="3048000" />
+      <workItem from="1762815895568" duration="6370000" />
     </task>
     <task id="LOCAL-00001" summary="First commit, reworked into Docker setup.">
       <option name="closed" value="true" />
@@ -178,7 +166,7 @@
       <breakpoints>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/frontend/main.js</url>
-          <line>61</line>
+          <line>37</line>
           <option name="timeStamp" value="1" />
         </line-breakpoint>
       </breakpoints>
