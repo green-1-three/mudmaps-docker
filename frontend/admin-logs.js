@@ -3,7 +3,7 @@
  * Provides real-time log viewing with filtering and auto-refresh
  */
 
-import { fetchJSON } from './dev-common.js';
+import { fetchJSON } from './utils.js';
 
 // Module state
 let logsState = {
@@ -51,7 +51,7 @@ export function initLogsTab(apiBase) {
  */
 function createLogsTabHTML() {
     const tabContent = document.createElement('div');
-    tabContent.className = 'dev-tab-content';
+    tabContent.className = 'admin-tab-content';
     tabContent.setAttribute('data-tab-content', 'logs');
 
     tabContent.innerHTML = `
@@ -129,7 +129,7 @@ function createLogsTabHTML() {
     `;
 
     // Add to the dev panel body
-    const devPanelBody = document.querySelector('.dev-panel-body');
+    const devPanelBody = document.querySelector('.admin-panel-body');
     if (devPanelBody) {
         devPanelBody.appendChild(tabContent);
     }

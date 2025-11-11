@@ -3,7 +3,7 @@
  * Provides real-time database table viewing with infinite scroll and map interaction
  */
 
-import { fetchJSON } from './dev-common.js';
+import { fetchJSON } from './utils.js';
 
 // Module state
 let databaseState = {
@@ -71,7 +71,7 @@ export function initDatabaseTab(apiBase, mapSources) {
  */
 function createDatabaseTabHTML() {
     const tabContent = document.createElement('div');
-    tabContent.className = 'dev-tab-content';
+    tabContent.className = 'admin-tab-content';
     tabContent.setAttribute('data-tab-content', 'database');
 
     tabContent.innerHTML = `
@@ -271,7 +271,7 @@ function createDatabaseTabHTML() {
     `;
 
     // Add to the dev panel body
-    const devPanelBody = document.querySelector('.dev-panel-body');
+    const devPanelBody = document.querySelector('.admin-panel-body');
     if (devPanelBody) {
         devPanelBody.appendChild(tabContent);
     }

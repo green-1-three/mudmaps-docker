@@ -1,4 +1,4 @@
-import './dev.css';
+import './admin.css';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
@@ -15,12 +15,12 @@ import {
     formatTimestamp,
     calculateDuration,
     abbreviateStreetName
-} from './dev-common.js';
-import { initStatistics, updateStatistics } from './dev-stats.js';
-import { initUIControls, setStyleCreators } from './dev-ui-controls.js';
-import { initDatabaseTab, highlightTableRow } from './dev-database.js';
-import { initLogsTab } from './dev-logs.js';
-import { initFrontendLogger } from './dev-frontend-logger.js';
+} from './utils.js';
+import { initStatistics, updateStatistics } from './admin-stats.js';
+import { initUIControls, setStyleCreators } from './admin-ui-controls.js';
+import { initDatabaseTab, highlightTableRow } from './admin-database.js';
+import { initLogsTab } from './admin-logs.js';
+import { initFrontendLogger } from './admin-frontend-logger.js';
 
 // Configuration
 let API_BASE = import.meta.env.VITE_API_BASE;
@@ -1122,11 +1122,11 @@ function setupTimeSlider() {
     });
 }
 
-// Developer Panel Functionality
-function initDevPanel() {
-    const panel = document.getElementById('dev-panel');
-    const resizeHandle = document.querySelector('.dev-panel-resize-handle');
-    const collapseBtn = document.querySelector('.dev-panel-collapse');
+// Admin Panel Functionality
+function initAdminPanel() {
+    const panel = document.getElementById('admin-panel');
+    const resizeHandle = document.querySelector('.admin-panel-resize-handle');
+    const collapseBtn = document.querySelector('.admin-panel-collapse');
 
     let isResizing = false;
     let startX = 0;
@@ -1192,7 +1192,7 @@ function initDevPanel() {
             document.body.appendChild(collapseBtn);
         } else {
             collapseBtn.classList.remove('floating');
-            document.querySelector('.dev-panel-header').appendChild(collapseBtn);
+            document.querySelector('.admin-panel-header').appendChild(collapseBtn);
         }
 
         // Update map right margin - when collapsed, map fills entire screen
@@ -1255,22 +1255,22 @@ function initializeModules() {
     initFrontendLogger(API_BASE);
 
     // Set up dev panel tab switching (AFTER tabs are created)
-    setupDevPanelTabs();
+    setupAdminPanelTabs();
 
     // Create UI overlay (time slider, search bar)
     createUI();
 
     // Initialize dev panel (drag, collapse)
-    initDevPanel();
+    initAdminPanel();
 
     // Update gradient labels
     updateGradientLabels(currentTimeHours);
 }
 
-// Setup dev panel tabs
-function setupDevPanelTabs() {
-    const tabs = document.querySelectorAll('.dev-tab');
-    const tabContents = document.querySelectorAll('.dev-tab-content');
+// Setup admin panel tabs
+function setupAdminPanelTabs() {
+    const tabs = document.querySelectorAll('.admin-tab');
+    const tabContents = document.querySelectorAll('.admin-tab-content');
 
     console.log(`📑 Setting up ${tabs.length} tabs with ${tabContents.length} tab contents`);
 
@@ -1725,7 +1725,7 @@ if ('geolocation' in navigator) {
 }
 
 // Export for debugging
-window.devState = {
+window.adminState = {
     map,
     sources: {
         polylinesSource: geojsonData.polylines,
@@ -1740,4 +1740,4 @@ window.devState = {
     reload: loadAllData
 };
 
-console.log('✅ Dev environment ready with Mapbox GL! Access state via window.devState');
+console.log('✅ Admin environment ready with Mapbox GL! Access state via window.adminState');

@@ -69,14 +69,14 @@ html, body {
 }
 
 /* Map expands when panel is collapsed */
-body:has(.dev-panel.collapsed) #map {
+body:has(.admin-panel.collapsed) #map {
     right: 40px;
 }
 
 /* No filter needed for light basemap */
 
 /* Developer Panel */
-.dev-panel {
+.admin-panel {
     position: fixed;
     top: 0;
     right: 0;
@@ -89,19 +89,19 @@ body:has(.dev-panel.collapsed) #map {
     transition: transform 0.3s ease;
 }
 
-.dev-panel.collapsed {
+.admin-panel.collapsed {
     transform: translateX(100%);
 }
 
-.dev-panel.collapsed .dev-panel-body {
+.admin-panel.collapsed .admin-panel-body {
     display: none;
 }
 
-.dev-panel.collapsed .dev-panel-tabs {
+.admin-panel.collapsed .admin-panel-tabs {
     display: none;
 }
 
-.dev-panel-resize-handle {
+.admin-panel-resize-handle {
     position: absolute;
     left: 0;
     top: 0;
@@ -112,15 +112,15 @@ body:has(.dev-panel.collapsed) #map {
     transition: background 0.2s;
 }
 
-.dev-panel-resize-handle:hover {
+.admin-panel-resize-handle:hover {
     background: rgba(0, 123, 255, 0.3);
 }
 
-.dev-panel-resize-handle.dragging {
+.admin-panel-resize-handle.dragging {
     background: rgba(0, 123, 255, 0.5);
 }
 
-.dev-panel-content {
+.admin-panel-content {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -128,7 +128,7 @@ body:has(.dev-panel.collapsed) #map {
     margin-left: 8px;
 }
 
-.dev-panel-header {
+.admin-panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -137,12 +137,12 @@ body:has(.dev-panel.collapsed) #map {
     background: #f8f9fa;
 }
 
-.dev-panel-tabs {
+.admin-panel-tabs {
     display: flex;
     gap: 5px;
 }
 
-.dev-tab {
+.admin-tab {
     padding: 8px 16px;
     background: transparent;
     border: none;
@@ -154,17 +154,17 @@ body:has(.dev-panel.collapsed) #map {
     transition: all 0.2s;
 }
 
-.dev-tab:hover {
+.admin-tab:hover {
     color: #333;
     background: rgba(0, 123, 255, 0.1);
 }
 
-.dev-tab.active {
+.admin-tab.active {
     color: #007bff;
     border-bottom-color: #007bff;
 }
 
-.dev-panel-collapse {
+.admin-panel-collapse {
     background: transparent;
     border: none;
     font-size: 24px;
@@ -181,12 +181,12 @@ body:has(.dev-panel.collapsed) #map {
     flex-shrink: 0;
 }
 
-.dev-panel-collapse:hover {
+.admin-panel-collapse:hover {
     background: rgba(0, 0, 0, 0.1);
     color: #333;
 }
 
-.dev-panel-collapse.floating {
+.admin-panel-collapse.floating {
     position: fixed;
     right: 10px;
     top: 50%;
@@ -201,33 +201,33 @@ body:has(.dev-panel.collapsed) #map {
     font-size: 20px;
 }
 
-.dev-panel-collapse.floating:hover {
+.admin-panel-collapse.floating:hover {
     background: rgba(255, 255, 255, 1);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
-.dev-panel-body {
+.admin-panel-body {
     flex: 1;
     overflow-y: auto;
     padding: 20px;
 }
 
-.dev-tab-content {
+.admin-tab-content {
     display: none;
 }
 
-.dev-tab-content.active {
+.admin-tab-content.active {
     display: block;
 }
 
-.dev-tab-content h3 {
+.admin-tab-content h3 {
     margin-top: 0;
     color: #333;
     font-size: 18px;
     margin-bottom: 20px;
 }
 
-.dev-tab-content p {
+.admin-tab-content p {
     color: #666;
     line-height: 1.5;
 }
@@ -725,7 +725,7 @@ body:has(.dev-panel.collapsed) #map {
 }
 
 /* Move controls when panel is collapsed */
-body:has(.dev-panel.collapsed) #controls {
+body:has(.admin-panel.collapsed) #controls {
     right: 50px;
 }
 

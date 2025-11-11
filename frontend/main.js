@@ -1,7 +1,7 @@
 import './style.css';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { updateTimeDisplay, updateGradientLabels } from './dev-common.js';
+import { updateTimeDisplay, updateGradientLabels } from './utils.js';
 
 // Configuration
 let API_BASE = import.meta.env.VITE_API_BASE;

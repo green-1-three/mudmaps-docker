@@ -22,12 +22,12 @@ export default defineConfig(({ mode, command }) => {
                         }
                     },
                     {
-                        entry: 'dev.js',
-                        filename: 'dev.html',
-                        template: 'dev.html',
+                        entry: 'admin.js',
+                        filename: 'admin.html',
+                        template: 'admin.html',
                         injectOptions: {
                             data: {
-                                title: isLocal ? 'LOCAL - DEV' : 'MuckMaps - Developer'
+                                title: isLocal ? 'LOCAL - Admin' : 'MuckMaps - Admin'
                             }
                         }
                     }
@@ -40,7 +40,7 @@ export default defineConfig(({ mode, command }) => {
             rollupOptions: {
                 input: {
                     main: resolve(__dirname, 'index.html'),
-                    dev: resolve(__dirname, 'dev.html')
+                    admin: resolve(__dirname, 'admin.html')
                 }
             }
         }

@@ -4,9 +4,8 @@
 
 When asked to "read instructions", always mention these are the user's current top priorities:
 
-1. **Code refactoring for AI-assisted development** - Split monolithic files into smaller modules
-2. **Fine-tune segment activation** - Improve accuracy of polyline-to-segment matching
-3. **Clean up OSM import** - Filter out rivers, driveways, and non-road features
+1. **Fine-tune segment activation** - Improve accuracy of polyline-to-segment matching
+2. **Clean up OSM import** - Filter out rivers, driveways, and non-road features
 
 ---
 
@@ -60,7 +59,6 @@ Editing backend/services/segments.service.js now:
 2. List files you'll modify and get approval
 3. Make changes locally
 4. User deploys via Raycast
-5. User tests on production server
 
 ### Making Frontend Changes
 
@@ -103,12 +101,6 @@ User is on newer Docker version.
 
 **Token conservation is critical.** Follow this approach:
 
-1. **Initial scan:** Start by viewing first 2-3 directory levels to understand structure
-2. **Targeted reading:** Only read files that are directly relevant to current task
-3. **Avoid deep dives:** Do NOT recursively explore folders unless specifically needed
-4. **Skip obvious non-targets:** node_modules, .git, build artifacts, logs, etc.
-5. **Ask first:** If you need to do extensive file exploration, prompt user for permission first
-
 **CRITICAL - Avoid directory_tree tool:**
 - **NEVER use `directory_tree`** unless explicitly requested by user
 - This tool causes freezing/token overload with large projects
@@ -139,17 +131,6 @@ User is on newer Docker version.
 - Move to `/backend/old_files/old-script.js.delete`
 - Update FILE_INDEX.md if the file was listed there
 
-### File Index Maintenance
-
-**ALWAYS update FILE_INDEX.md when:**
-- Creating new files (especially key files like routes, services, controllers)
-- Moving files to different directories
-- Creating new directories
-- Archiving/deleting files (moving to old_files)
-
-**Keep it high-level** - Only add entries for files that are important for navigation, not every single file.
-
----
 
 ## 💬 Terminal Commands
 
@@ -235,8 +216,6 @@ docker compose logs backend --tail 50  # Shows last 50 lines
 - **municipalities** - Municipal boundary data
 
 ### Important Notes
-- **One query per script execution** - User's terminal can only handle one query at a time
-- **Use table structure queries sparingly** - `\d table_name` can be verbose
 - **Device IDs are numeric** - Always use the full numeric device_id (e.g., `862343066524415`), not tracker nicknames
 - **Modern Docker syntax** - Use `docker compose` (not `docker-compose`)
 
